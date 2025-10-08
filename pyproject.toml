@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qoze-code"
+version = "0.1.0"
+description = "QozeCode Agent CLI"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "QozeCode" }]
+
+dependencies = [
+  "rich",
+  "inquirer",
+  "langchain-core",
+  "langgraph",
+  "typing_extensions",
+  "langchain-deepseek",
+  "langchain-google-vertexai",
+  "boto3",
+  "langchain-aws",
+  "httpx",
+  "tavily-python",
+  "langchain-openai",
+]
+
+[project.scripts]
+Qoze = "inquirer_launcher:main"
+
+[tool.setuptools]
+py-modules = ["inquirer_launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager"]
+packages = ["tools"]
+
+[project.optional-dependencies]
+browser = ["playwright", "langchain-community", "nest_asyncio"]

@@ -1,0 +1,15 @@
+[openai]
+api_key=
+
+[deepseek]
+api_key=
+
+[aws]
+access_key_id=
+secret_access_key=
+region_name=us-east-1
+
+[vertexai]
+project=
+location=us-central1
+credentials_path=
