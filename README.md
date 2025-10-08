@@ -18,4 +18,15 @@
 
 ## QuickStart
 
+### 快速安装
+
+```bash
+brew install qoze
+```
+
+### 命令行直接使用
+
+```bash
+Qoze
+```
 
