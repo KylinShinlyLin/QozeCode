@@ -11,13 +11,10 @@
 
 ### 使用演示
 
-<div style="padding: 50px; background-color: #fffff; border-radius: 12px; margin: 16px 0;">
-  <video width="100%" height="auto" controls>
-    <source src="./videos/demo.mp4" type="video/mp4">
-    <source src="./videos/demo.webm" type="video/webm">
-    您的浏览器不支持视频标签。
-  </video>
-</div>
+<video width="800" controls>
+  <source src="./assets/video.mp4" type="video/mp4">
+  您的浏览器不支持视频标签。
+</video>
 
 ## QuickStart
 
