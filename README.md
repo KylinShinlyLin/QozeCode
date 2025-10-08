@@ -11,10 +11,7 @@
 
 ### 使用演示
 
-<video width="800" controls>
-  <source src="./assets/video.mp4" type="video/mp4">
-  您的浏览器不支持视频标签。
-</video>
+https://storage.googleapis.com/manus_test/resourse/video.mp4
 
 ## QuickStart
 
