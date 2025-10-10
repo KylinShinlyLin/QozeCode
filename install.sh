@@ -262,27 +262,106 @@ EOF
 configure_env() {
     log_info "配置环境变量..."
     
-    # 检测 shell 类型
-    if [ -n "$ZSH_VERSION" ]; then
-        shell_rc="$HOME/.zshrc"
-    elif [ -n "$BASH_VERSION" ]; then
-        shell_rc="$HOME/.bashrc"
-    else
-        shell_rc="$HOME/.profile"
-    fi
+    # 定义所有可能的 shell 配置文件
+    declare -a shell_configs=(
+        "$HOME/.zshrc"
+        "$HOME/.bashrc"
+        "$HOME/.bash_profile"
+        "$HOME/.profile"
+    )
     
-    # 检查是否已经添加了 PATH
-    if ! grep -q "$BIN_DIR" "$shell_rc" 2>/dev/null; then
-        echo "" >> "$shell_rc"
-        echo "# QozeCode PATH" >> "$shell_rc"
-        echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$shell_rc"
-        log_success "已添加 $BIN_DIR 到 $shell_rc"
-    else
-        log_warning "PATH 已经配置过了"
+    # 检测当前使用的 shell
+    current_shell=$(basename "$SHELL" 2>/dev/null || echo "unknown")
+    log_info "检测到当前 shell: $current_shell"
+    
+    # 记录已配置的文件
+    configured_files=()
+    
+    # 遍历所有配置文件，如果存在就添加 PATH
+    for config_file in "${shell_configs[@]}"; do
+        if [ -f "$config_file" ]; then
+            # 检查是否已经添加了 PATH
+            if ! grep -q "# QozeCode PATH" "$config_file" 2>/dev/null; then
+                log_info "配置 $config_file..."
+                echo "" >> "$config_file"
+                echo "# QozeCode PATH" >> "$config_file"
+                echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$config_file"
+                configured_files+=("$config_file")
+                log_success "✅ 已添加 PATH 到 $config_file"
+            else
+                log_info "📝 $config_file 已经配置过 QozeCode PATH"
+            fi
+        fi
+    done
+    
+    # 如果没有找到任何现有的配置文件，创建适合当前 shell 的配置文件
+    if [ ${#configured_files[@]} -eq 0 ]; then
+        case "$current_shell" in
+            "zsh")
+                target_config="$HOME/.zshrc"
+                ;;
+            "bash")
+                target_config="$HOME/.bashrc"
+                ;;
+            "fish")
+                target_config="$HOME/.config/fish/config.fish"
+                # Fish shell 语法不同
+                mkdir -p "$(dirname "$target_config")"
+                if ! grep -q "# QozeCode PATH" "$target_config" 2>/dev/null; then
+                    echo "" >> "$target_config"
+                    echo "# QozeCode PATH" >> "$target_config"
+                    echo "set -gx PATH \"$BIN_DIR\" \$PATH" >> "$target_config"
+                    configured_files+=("$target_config")
+                    log_success "✅ 已为 Fish shell 配置 PATH 到 $target_config"
+                fi
+                ;;
+            *)
+                target_config="$HOME/.profile"
+                ;;
+        esac
+        
+        # 为非 Fish shell 创建配置
+        if [ "$current_shell" != "fish" ] && [ -n "$target_config" ]; then
+            log_info "创建新的配置文件: $target_config"
+            echo "" >> "$target_config"
+            echo "# QozeCode PATH" >> "$target_config"
+            echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$target_config"
+            configured_files+=("$target_config")
+            log_success "✅ 已创建并配置 $target_config"
+        fi
     fi
     
     # 临时添加到当前会话
     export PATH="$BIN_DIR:$PATH"
+    
+    # 显示配置总结
+    if [ ${#configured_files[@]} -gt 0 ]; then
+        log_success "🎉 PATH 配置完成！已配置以下文件："
+        for file in "${configured_files[@]}"; do
+            echo "  - $file"
+        done
+        echo ""
+        log_info "💡 使配置生效的方法："
+        echo "  方法1: 重新打开终端"
+        echo "  方法2: 根据你的 shell 运行以下命令之一："
+        
+        if [[ " ${configured_files[*]} " =~ " $HOME/.zshrc " ]]; then
+            echo "    source ~/.zshrc"
+        fi
+        if [[ " ${configured_files[*]} " =~ " $HOME/.bashrc " ]]; then
+            echo "    source ~/.bashrc"
+        fi
+        if [[ " ${configured_files[*]} " =~ " $HOME/.bash_profile " ]]; then
+            echo "    source ~/.bash_profile"
+        fi
+        if [[ " ${configured_files[*]} " =~ " $HOME/.profile " ]]; then
+            echo "    source ~/.profile"
+        fi
+    else
+        log_warning "⚠️  未找到合适的 shell 配置文件进行配置"
+        log_info "你可以手动添加以下行到你的 shell 配置文件："
+        echo "  export PATH=\"$BIN_DIR:\$PATH\""
+    fi
 }
 
 # 验证安装
