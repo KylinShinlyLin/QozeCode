@@ -52,10 +52,7 @@
 > 如果你考虑性价比并且还是国内用户， 建议你选择 ' deepseek ' 作为你的首选模型使用
 
 ### 使用演示
-
-<video src="./assets/video.webm" controls width="720">
-  您的浏览器不支持 HTML5 视频。
-</video>
+[video.mp4](assets%2Fvideo.mp4)
 
 ## QuickStart
 
