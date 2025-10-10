@@ -64,7 +64,7 @@
 - 1、下载源码在本地构建：二进制文件
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s uninstall
+curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
 ```
 
 - 2、 构建完成后手动添加到环境变量中
@@ -72,6 +72,14 @@ curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/instal
 ```bash
 source ~/.qoze/qoze_env.sh && qoze
 ```
+<br>
+
+- 卸载 QozeCode
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
+```
+
 <br><br>
 
 ### 方式二：通过 Homebrew 安装（目前兼容有点问题）
