@@ -376,206 +376,212 @@ EOF
 configure_env() {
     log_info "配置环境变量..."
     
-    # 定义所有可能的 shell 配置文件
-    declare -a shell_configs=(
-        "$HOME/.zshrc"
-        "$HOME/.bashrc"
-        "$HOME/.bash_profile"
-        "$HOME/.profile"
-    )
-    
     # 检测当前使用的 shell
     current_shell=$(basename "$SHELL" 2>/dev/null || echo "unknown")
     log_info "检测到当前 shell: $current_shell"
     
-    # 记录已配置的文件
-    configured_files=()
-    
-    # 遍历所有配置文件，如果存在就添加 PATH
-    for config_file in "${shell_configs[@]}"; do
-        if [ -f "$config_file" ]; then
-            # 检查是否已经添加了 PATH
-            if ! grep -q "# QozeCode PATH" "$config_file" 2>/dev/null; then
-                log_info "配置 $config_file..."
-                echo "" >> "$config_file"
-                echo "# QozeCode PATH" >> "$config_file"
-                echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$config_file"
-                configured_files+=("$config_file")
-                log_success "✅ 已添加 PATH 到 $config_file"
+    # 确定主要的配置文件
+    primary_config=""
+    case "$current_shell" in
+        "zsh")
+            primary_config="$HOME/.zshrc"
+            ;;
+        "bash")
+            # 优先使用 .bashrc，如果不存在则使用 .bash_profile
+            if [ -f "$HOME/.bashrc" ]; then
+                primary_config="$HOME/.bashrc"
             else
-                log_info "📝 $config_file 已经配置过 QozeCode PATH"
-                # 即使已配置，也加入到配置文件列表中，以便后续重新加载
-                configured_files+=("$config_file")
+                primary_config="$HOME/.bash_profile"
             fi
-        fi
-    done
+            ;;
+        "fish")
+            primary_config="$HOME/.config/fish/config.fish"
+            ;;
+        *)
+            primary_config="$HOME/.profile"
+            ;;
+    esac
     
-    # 如果没有找到任何现有的配置文件，创建适合当前 shell 的配置文件
-    if [ ${#configured_files[@]} -eq 0 ]; then
-        case "$current_shell" in
-            "zsh")
-                target_config="$HOME/.zshrc"
-                ;;
-            "bash")
-                target_config="$HOME/.bashrc"
-                ;;
-            "fish")
-                target_config="$HOME/.config/fish/config.fish"
-                # Fish shell 语法不同
-                mkdir -p "$(dirname "$target_config")"
-                if ! grep -q "# QozeCode PATH" "$target_config" 2>/dev/null; then
-                    echo "" >> "$target_config"
-                    echo "# QozeCode PATH" >> "$target_config"
-                    echo "set -gx PATH \"$BIN_DIR\" \$PATH" >> "$target_config"
-                    configured_files+=("$target_config")
-                    log_success "✅ 已为 Fish shell 配置 PATH 到 $target_config"
-                fi
-                ;;
-            *)
-                target_config="$HOME/.profile"
-                ;;
-        esac
+    # 确保主配置文件存在
+    if [ ! -f "$primary_config" ]; then
+        log_info "创建配置文件: $primary_config"
+        mkdir -p "$(dirname "$primary_config")"
+        touch "$primary_config"
+    fi
+    
+    # 添加PATH配置到主配置文件
+    if ! grep -q "# QozeCode PATH" "$primary_config" 2>/dev/null; then
+        log_info "添加 PATH 配置到: $primary_config"
+        echo "" >> "$primary_config"
+        echo "# QozeCode PATH" >> "$primary_config"
         
-        # 为非 Fish shell 创建配置
-        if [ "$current_shell" != "fish" ] && [ -n "$target_config" ]; then
-            log_info "创建新的配置文件: $target_config"
-            echo "" >> "$target_config"
-            echo "# QozeCode PATH" >> "$target_config"
-            echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$target_config"
-            configured_files+=("$target_config")
-            log_success "✅ 已创建并配置 $target_config"
+        if [ "$current_shell" = "fish" ]; then
+            echo "set -gx PATH \"$BIN_DIR\" \$PATH" >> "$primary_config"
+        else
+            echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$primary_config"
         fi
+        
+        log_success "✅ 已添加 PATH 配置到 $primary_config"
+    else
+        log_info "📝 $primary_config 已经配置过 QozeCode PATH"
     fi
     
     # 临时添加到当前会话
     export PATH="$BIN_DIR:$PATH"
     
-    # 显示配置总结
-    if [ ${#configured_files[@]} -gt 0 ]; then
-        log_success "🎉 PATH 配置完成！已配置以下文件："
-        for file in "${configured_files[@]}"; do
-            echo "  - $file"
+    # 🚀 自动化解决方案：创建一个自动激活脚本
+    log_info "🔄 创建自动激活解决方案..."
+    
+    # 创建激活脚本
+    activation_script="$INSTALL_DIR/activate_qoze.sh"
+    cat > "$activation_script" << 'EOF'
+#!/bin/bash
+# QozeCode 自动激活脚本
+
+QOZE_BIN_DIR="$HOME/.local/bin"
+
+# 检查是否已经在PATH中
+if echo "$PATH" | grep -q "$QOZE_BIN_DIR"; then
+    echo "✅ qoze 已在 PATH 中"
+else
+    echo "🔄 添加 qoze 到当前会话 PATH..."
+    export PATH="$QOZE_BIN_DIR:$PATH"
+fi
+
+# 验证qoze命令
+if command -v qoze &> /dev/null; then
+    echo "🎉 qoze 命令可用！"
+    return 0 2>/dev/null || exit 0
+else
+    echo "❌ qoze 命令不可用"
+    return 1 2>/dev/null || exit 1
+fi
+EOF
+    chmod +x "$activation_script"
+    
+    # 🎯 关键：创建一个可以被source的环境设置脚本
+    env_script="$INSTALL_DIR/qoze_env.sh"
+    cat > "$env_script" << EOF
+#!/bin/bash
+# QozeCode 环境变量设置脚本
+# 使用方法: source $env_script
+
+export PATH="$BIN_DIR:\$PATH"
+EOF
+    chmod +x "$env_script"
+    
+    # 🚀 尝试多种自动激活方法
+    log_info "🎯 尝试自动激活环境变量..."
+    
+    success_methods=()
+    
+    # 方法1: 尝试在当前shell中source配置文件
+    if [ "$current_shell" != "fish" ]; then
+        log_info "方法1: 尝试重新加载 $primary_config"
+        if source "$primary_config" 2>/dev/null; then
+            success_methods+=("重新加载配置文件")
+            log_success "✅ 成功重新加载 $primary_config"
+        else
+            log_warning "⚠️  重新加载配置文件失败"
+        fi
+    fi
+    
+    # 方法2: 检查命令是否可用
+    if command -v qoze &> /dev/null; then
+        success_methods+=("qoze命令可用")
+        log_success "✅ qoze 命令在当前会话中可用"
+    else
+        log_info "ℹ️  qoze 命令在当前会话中暂不可用"
+    fi
+    
+    # 🎉 显示结果和使用指南
+    echo ""
+    log_success "🎉 环境变量配置完成！"
+    echo ""
+    echo "📋 配置摘要："
+    echo "  - 主配置文件: $primary_config"
+    echo "  - 激活脚本: $activation_script"
+    echo "  - 环境脚本: $env_script"
+    echo ""
+    
+    if [ ${#success_methods[@]} -gt 0 ]; then
+        echo "✅ 自动激活成功："
+        for method in "${success_methods[@]}"; do
+            echo "  - $method"
         done
         echo ""
-        
-        # 🆕 强制重新加载配置文件并验证
-        log_info "🔄 正在强制重新加载配置文件..."
-        reloaded_files=()
-        
-        # 首先尝试重新加载主要的配置文件
-        primary_config=""
-        case "$current_shell" in
-            "zsh")
-                primary_config="$HOME/.zshrc"
-                ;;
-            "bash")
-                if [ -f "$HOME/.bashrc" ]; then
-                    primary_config="$HOME/.bashrc"
-                elif [ -f "$HOME/.bash_profile" ]; then
-                    primary_config="$HOME/.bash_profile"
-                fi
-                ;;
-        esac
-        
-        # 如果找到主要配置文件，优先重新加载它
-        if [ -n "$primary_config" ] && [ -f "$primary_config" ]; then
-            log_info "重新加载主配置文件: $primary_config"
-            if source "$primary_config" 2>/dev/null; then
-                reloaded_files+=("$primary_config")
-                log_success "✅ 已重新加载 $primary_config"
-            else
-                log_warning "⚠️  重新加载 $primary_config 失败，尝试其他方法"
-            fi
-        fi
-        
-        # 重新加载其他配置文件
-        for config_file in "${configured_files[@]}"; do
-            # 跳过已经处理过的主配置文件
-            if [ "$config_file" = "$primary_config" ]; then
-                continue
-            fi
-            
-            case "$config_file" in
-                *".zshrc"|*".bashrc"|*".bash_profile"|*".profile")
-                    if source "$config_file" 2>/dev/null; then
-                        reloaded_files+=("$config_file")
-                        log_success "✅ 已重新加载 $config_file"
-                    else
-                        log_warning "⚠️  重新加载 $config_file 失败"
-                    fi
-                    ;;
-                *"config.fish")
-                    log_info "📝 Fish shell 配置需要重新打开终端生效"
-                    ;;
-            esac
-        done
-        
-        # 验证PATH是否生效
-        log_info "🔍 验证PATH配置..."
-        if echo "$PATH" | grep -q "$BIN_DIR"; then
-            log_success "✅ PATH配置已生效，包含: $BIN_DIR"
-            
-            # 进一步验证qoze命令是否可用
+    fi
+    
+    echo "🚀 使用 qoze 的方法："
+    echo ""
+    echo "  方法1 - 立即使用（推荐）："
+    echo "    source $env_script"
+    echo "    qoze"
+    echo ""
+    echo "  方法2 - 重新加载配置："
+    if [ "$current_shell" = "fish" ]; then
+        echo "    # Fish shell 需要重新打开终端"
+    else
+        echo "    source $primary_config"
+        echo "    qoze"
+    fi
+    echo ""
+    echo "  方法3 - 重新打开终端后直接使用："
+    echo "    qoze"
+    echo ""
+    echo "  方法4 - 使用完整路径："
+    echo "    $BIN_DIR/qoze"
+    echo ""
+    
+    # 🎯 创建一个一键启动脚本
+    quick_start="$INSTALL_DIR/qoze_start.sh"
+    cat > "$quick_start" << EOF
+#!/bin/bash
+# QozeCode 一键启动脚本
+
+echo "🚀 启动 QozeCode..."
+
+# 确保PATH包含qoze
+if ! command -v qoze &> /dev/null; then
+    echo "🔄 设置环境变量..."
+    export PATH="$BIN_DIR:\$PATH"
+fi
+
+# 启动qoze
+if command -v qoze &> /dev/null; then
+    echo "✅ 启动 qoze..."
+    exec qoze "\$@"
+else
+    echo "❌ 无法找到 qoze 命令"
+    echo "💡 尝试使用完整路径..."
+    exec "$BIN_DIR/qoze" "\$@"
+fi
+EOF
+    chmod +x "$quick_start"
+    
+    echo "📦 额外工具："
+    echo "  - 一键启动: $quick_start"
+    echo "  - 环境激活: source $activation_script"
+    echo ""
+    
+    # 🎯 尝试自动执行source命令（如果可能）
+    if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
+        log_info "🔄 尝试自动激活当前会话..."
+        if source "$env_script" 2>/dev/null; then
             if command -v qoze &> /dev/null; then
-                log_success "🎉 qoze 命令现在可以使用了！"
+                log_success "🎉 自动激活成功！qoze 命令现在可用"
                 echo ""
-                echo "🚀 立即测试："
+                echo "🧪 测试命令："
                 echo "  qoze --help"
                 echo ""
-            else
-                log_warning "⚠️  PATH已配置但qoze命令仍不可用"
-                echo "🔧 临时解决方案："
-                echo "  $BIN_DIR/qoze"
-                echo ""
+                return 0
             fi
-        else
-            log_warning "⚠️  PATH配置可能未完全生效"
-            echo ""
-            echo "🔧 请尝试以下解决方案："
-            echo ""
-            echo "方案1 - 重新加载配置（推荐）："
-            case "$current_shell" in
-                "zsh")
-                    echo "  source ~/.zshrc"
-                    ;;
-                "bash")
-                    echo "  source ~/.bashrc"
-                    if [ -f "$HOME/.bash_profile" ]; then
-                        echo "  # 或者: source ~/.bash_profile"
-                    fi
-                    ;;
-                *)
-                    echo "  source ~/.profile"
-                    ;;
-            esac
-            echo ""
-            echo "方案2 - 重新打开终端"
-            echo ""
-            echo "方案3 - 直接使用完整路径："
-            echo "  $BIN_DIR/qoze"
-            echo ""
-            echo "方案4 - 手动添加到当前会话："
-            echo "  export PATH=\"$BIN_DIR:\$PATH\""
-            echo ""
         fi
-        
-        echo ""
-        if [ ${#reloaded_files[@]} -gt 0 ]; then
-            log_success "📋 已重新加载的配置文件："
-            for file in "${reloaded_files[@]}"; do
-                echo "  - $file"
-            done
-        fi
-        
-    else
-        log_warning "⚠️  未找到合适的 shell 配置文件进行配置"
-        log_info "你可以手动添加以下行到你的 shell 配置文件："
-        echo "  export PATH=\"$BIN_DIR:\$PATH\""
-        echo ""
-        echo "🔧 临时使用方法："
-        echo "  export PATH=\"$BIN_DIR:\$PATH\""
-        echo "  qoze"
     fi
+    
+    log_info "💡 建议立即运行以下命令来激活 qoze："
+    echo "  source $env_script && qoze --help"
+    echo ""
 }
 
 # 验证安装
@@ -594,60 +600,31 @@ verify_installation() {
         return 1
     fi
     
-    # 确保当前会话PATH包含bin目录
-    export PATH="$BIN_DIR:$PATH"
+    log_success "✅ 启动脚本验证通过"
     
-    # 测试命令是否可用
-    if command -v qoze &> /dev/null; then
-        log_success "✅ QozeCode 安装成功！"
-        echo ""
-        echo "🎉 安装完成！使用方法："
-        echo "  qoze          # 启动 QozeCode"
-        echo ""
-        
-        # 简单测试
-        log_info "🧪 测试 QozeCode..."
-        if timeout 10 "$BIN_DIR/qoze" --help &>/dev/null; then
-            log_success "✅ QozeCode 运行测试通过"
-        else
-            log_warning "⚠️  QozeCode 可能需要首次配置，请运行 'qoze' 进行初始化"
-        fi
-        
-        echo ""
-        echo "🚀 现在就试试："
-        echo "  qoze"
-        echo ""
-        
-        return 0
+    # 测试二进制文件
+    log_info "🧪 测试 QozeCode..."
+    if timeout 10 "$BIN_DIR/qoze" --help &>/dev/null; then
+        log_success "✅ QozeCode 运行测试通过"
     else
-        log_error "❌ 安装验证失败：qoze 命令不可用"
-        echo ""
-        echo "🔧 故障排除："
-        echo "1. 检查PATH是否包含 $BIN_DIR："
-        echo "   echo \$PATH | grep $BIN_DIR"
-        echo ""
-        echo "2. 手动添加到PATH："
-        echo "   export PATH=\"$BIN_DIR:\$PATH\""
-        echo ""
-        echo "3. 直接使用完整路径："
-        echo "   $BIN_DIR/qoze"
-        echo ""
-        echo "4. 重新加载shell配置："
-        current_shell=$(basename "$SHELL" 2>/dev/null || echo "unknown")
-        case "$current_shell" in
-            "zsh")
-                echo "   source ~/.zshrc"
-                ;;
-            "bash")
-                echo "   source ~/.bashrc"
-                ;;
-            *)
-                echo "   source ~/.profile"
-                ;;
-        esac
-        echo ""
-        return 1
+        log_warning "⚠️  QozeCode 可能需要首次配置"
     fi
+    
+    echo ""
+    log_success "🎉 QozeCode 安装验证完成！"
+    echo ""
+    
+    # 🎯 提供立即使用的方案
+    echo "🚀 立即开始使用 QozeCode："
+    echo ""
+    echo "  复制并运行以下命令："
+    echo "  source ~/.qoze/qoze_env.sh && qoze"
+    echo ""
+    echo "📝 或者重新打开终端后直接使用："
+    echo "  qoze"
+    echo ""
+    
+    return 0
 }
 
 # 卸载函数
