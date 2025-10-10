@@ -151,25 +151,59 @@ try_build_binary() {
         return 1
     fi
     
-    # 安装 PyInstaller
+    log_success "找到 Qoze.spec 文件"
+    
+    # 安装 PyInstaller 和相关依赖
+    log_info "安装 PyInstaller..."
     pip install pyinstaller
     
+    # 检查系统依赖（macOS 特定）
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS 可能需要额外的工具
+        if ! command -v strip &> /dev/null; then
+            log_warning "未找到 strip 工具，可能影响二进制构建"
+        fi
+    fi
+    
     # 清理之前的构建
+    log_info "清理之前的构建文件..."
     rm -rf build dist
     
-    # 使用 PyInstaller 构建
+    # 使用 PyInstaller 构建（显示详细输出）
     log_info "开始 PyInstaller 构建..."
-    if timeout 300 pyinstaller Qoze.spec 2>/dev/null; then
+    log_info "构建命令: pyinstaller Qoze.spec --clean --noconfirm"
+    
+    # 创建构建日志文件
+    BUILD_LOG="$INSTALL_DIR/build.log"
+    
+    if pyinstaller Qoze.spec --clean --noconfirm 2>&1 | tee "$BUILD_LOG"; then
         # 检查构建结果
         if [ -f "dist/qoze/qoze" ]; then
             log_success "二进制文件构建成功"
-            return 0
+            log_info "二进制文件位置: $(pwd)/dist/qoze/qoze"
+            
+            # 测试二进制文件是否可执行
+            if ./dist/qoze/qoze --help &>/dev/null; then
+                log_success "二进制文件测试通过"
+                return 0
+            else
+                log_warning "二进制文件无法正常运行"
+                log_info "构建日志保存在: $BUILD_LOG"
+                return 1
+            fi
         else
             log_warning "二进制文件构建失败：找不到输出文件"
+            log_info "预期位置: $(pwd)/dist/qoze/qoze"
+            log_info "实际构建内容:"
+            ls -la dist/ 2>/dev/null || log_warning "dist 目录不存在"
+            log_info "构建日志保存在: $BUILD_LOG"
             return 1
         fi
     else
-        log_warning "PyInstaller 构建超时或失败"
+        log_error "PyInstaller 构建失败"
+        log_info "构建日志保存在: $BUILD_LOG"
+        log_info "最后几行错误信息:"
+        tail -10 "$BUILD_LOG" 2>/dev/null || true
         return 1
     fi
 }
@@ -374,20 +408,26 @@ main() {
             install_dependencies
             
             # 尝试二进制构建，失败则回退到源码安装
+            log_info "尝试二进制构建..."
             if try_build_binary; then
                 install_binary
-                log_success "使用二进制安装方式"
+                log_success "✅ 使用二进制安装方式完成"
             else
-                log_warning "二进制构建失败，回退到源码安装方式"
+                log_warning "⚠️  二进制构建失败，回退到源码安装方式"
+                log_info "这是正常的，源码安装同样稳定可靠"
                 install_from_source
-                log_success "使用源码安装方式"
+                log_success "✅ 使用源码安装方式完成"
             fi
             
             configure_env
             if verify_installation; then
                 log_success "🎉 QozeCode 安装完成！"
             else
-                log_error "安装验证失败"
+                log_error "❌ 安装验证失败"
+                log_info "请检查以下内容："
+                log_info "1. 启动脚本: $BIN_DIR/qoze"
+                log_info "2. 虚拟环境: $VENV_DIR"
+                log_info "3. PATH 配置: ~/.zshrc 或 ~/.bashrc"
                 exit 1
             fi
             ;;
@@ -448,6 +488,17 @@ main() {
             ;;
         "debug")
             show_debug
+            # 额外的调试信息
+            log_info "系统信息:"
+            echo "- OS: $OSTYPE"
+            echo "- Python: $(python3 --version 2>/dev/null || echo '未找到')"
+            echo "- Git: $(git --version 2>/dev/null || echo '未找到')"
+            echo "- PyInstaller: $(pip show pyinstaller 2>/dev/null | grep Version || echo '未安装')"
+            
+            if [ -f "$INSTALL_DIR/build.log" ]; then
+                log_info "最近的构建日志 (最后20行):"
+                tail -20 "$INSTALL_DIR/build.log"
+            fi
             ;;
         "--help"|"-h")
             show_help
