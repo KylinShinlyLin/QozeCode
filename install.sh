@@ -135,7 +135,56 @@ install_dependencies() {
         log_info "非交互式安装，跳过浏览器功能"
     fi
     
+    # 预安装 PyInstaller（为二进制构建做准备）
+    log_info "预安装 PyInstaller..."
+    if pip install pyinstaller; then
+        log_success "PyInstaller 安装成功"
+        # 验证安装
+        if python -c "import PyInstaller; print(f'PyInstaller 版本: {PyInstaller.__version__}')" 2>/dev/null; then
+            log_success "PyInstaller 验证通过"
+        else
+            log_warning "PyInstaller 安装可能有问题"
+        fi
+    else
+        log_error "PyInstaller 安装失败"
+    fi
+    
     log_success "项目依赖安装完成"
+}
+
+# 检查并安装 PyInstaller
+ensure_pyinstaller() {
+    log_info "检查 PyInstaller 安装状态..."
+    
+    source "$VENV_DIR/bin/activate"
+    
+    # 检查 PyInstaller 是否已安装
+    if python -c "import PyInstaller; print(f'PyInstaller 版本: {PyInstaller.__version__}')" 2>/dev/null; then
+        log_success "PyInstaller 已安装并可用"
+        return 0
+    fi
+    
+    log_info "PyInstaller 未安装，开始安装..."
+    
+    # 升级 pip 以确保兼容性
+    pip install --upgrade pip setuptools wheel
+    
+    # 安装 PyInstaller
+    if pip install --upgrade pyinstaller; then
+        log_success "PyInstaller 安装成功"
+        
+        # 验证安装
+        if python -c "import PyInstaller; print(f'PyInstaller 版本: {PyInstaller.__version__}')" 2>/dev/null; then
+            log_success "PyInstaller 验证通过"
+            return 0
+        else
+            log_error "PyInstaller 安装验证失败"
+            return 1
+        fi
+    else
+        log_error "PyInstaller 安装失败"
+        return 1
+    fi
 }
 
 # 尝试构建二进制文件
@@ -153,15 +202,27 @@ try_build_binary() {
     
     log_success "找到 Qoze.spec 文件"
     
-    # 安装 PyInstaller 和相关依赖
-    log_info "安装 PyInstaller..."
-    pip install pyinstaller
+    # 验证 PyInstaller 是否可用
+    log_info "验证 PyInstaller 安装状态..."
+    if ! python -c "import PyInstaller; print(f'PyInstaller 版本: {PyInstaller.__version__}')" 2>/dev/null; then
+        log_warning "PyInstaller 不可用，重新安装..."
+        if ! pip install --upgrade pyinstaller; then
+            log_error "PyInstaller 安装失败"
+            return 1
+        fi
+    fi
     
     # 检查系统依赖（macOS 特定）
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS 可能需要额外的工具
         if ! command -v strip &> /dev/null; then
             log_warning "未找到 strip 工具，可能影响二进制构建"
+        fi
+        
+        # 检查 Xcode Command Line Tools
+        if ! xcode-select -p &>/dev/null; then
+            log_warning "未检测到 Xcode Command Line Tools，可能影响构建"
+            log_info "可以运行 'xcode-select --install' 安装"
         fi
     fi
     
@@ -176,34 +237,43 @@ try_build_binary() {
     # 创建构建日志文件
     BUILD_LOG="$INSTALL_DIR/build.log"
     
-    if pyinstaller Qoze.spec --clean --noconfirm 2>&1 | tee "$BUILD_LOG"; then
+    # 设置构建环境变量
+    export PYTHONPATH="$(pwd):$PYTHONPATH"
+    
+    # 显示构建环境信息
+    log_info "构建环境信息："
+    echo "  - Python 版本: $(python --version)"
+    echo "  - PyInstaller 版本: $(python -c "import PyInstaller; print(PyInstaller.__version__)" 2>/dev/null || echo '未知')"
+    echo "  - 工作目录: $(pwd)"
+    echo "  - PYTHONPATH: $PYTHONPATH"
+    
+    if pyinstaller Qoze.spec --clean --noconfirm --log-level INFO 2>&1 | tee "$BUILD_LOG"; then
         # 检查构建结果
         if [ -f "dist/qoze/qoze" ]; then
             log_success "二进制文件构建成功"
             log_info "二进制文件位置: $(pwd)/dist/qoze/qoze"
             
+            # 显示文件信息
+            ls -la "dist/qoze/qoze"
+            
             # 测试二进制文件是否可执行
+            log_info "测试二进制文件..."
             if ./dist/qoze/qoze --help &>/dev/null; then
                 log_success "二进制文件测试通过"
                 return 0
             else
-                log_warning "二进制文件无法正常运行"
-                log_info "构建日志保存在: $BUILD_LOG"
+                log_warning "二进制文件无法正常运行，查看详细错误："
+                ./dist/qoze/qoze --help || true
                 return 1
             fi
         else
-            log_warning "二进制文件构建失败：找不到输出文件"
-            log_info "预期位置: $(pwd)/dist/qoze/qoze"
-            log_info "实际构建内容:"
-            ls -la dist/ 2>/dev/null || log_warning "dist 目录不存在"
-            log_info "构建日志保存在: $BUILD_LOG"
+            log_error "二进制文件构建失败：未找到输出文件"
+            log_info "查看构建日志: $BUILD_LOG"
             return 1
         fi
     else
-        log_error "PyInstaller 构建失败"
-        log_info "构建日志保存在: $BUILD_LOG"
-        log_info "最后几行错误信息:"
-        tail -10 "$BUILD_LOG" 2>/dev/null || true
+        log_error "PyInstaller 构建过程失败"
+        log_info "查看构建日志: $BUILD_LOG"
         return 1
     fi
 }
@@ -486,7 +556,22 @@ main() {
             create_venv
             install_dependencies
             
-            # 尝试二进制构建，失败则回退到源码安装
+            # 确保 PyInstaller 可用
+            if ! ensure_pyinstaller; then
+                log_error "PyInstaller 安装失败，无法进行二进制构建"
+                log_info "将使用源码安装方式"
+                install_from_source
+                configure_env
+                if verify_installation; then
+                    log_success "🎉 QozeCode 安装完成（源码方式）！"
+                else
+                    log_error "❌ 安装验证失败"
+                    exit 1
+                fi
+                return
+            fi
+            
+            # 尝试二进制构建
             log_info "尝试二进制构建..."
             if try_build_binary; then
                 install_binary
