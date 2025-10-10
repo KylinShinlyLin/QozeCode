@@ -279,17 +279,46 @@ try_build_binary() {
 }
 
 # 安装二进制文件
-# 修复 install_binary 函数中的启动脚本
 install_binary() {
     log_info "安装 QozeCode 二进制文件..."
+    
+    # 正确的源文件路径
+    SOURCE_BINARY="$BUILD_DIR/QozeCode/dist/qoze/qoze"
+    
+    # 检查源文件是否存在
+    if [ ! -f "$SOURCE_BINARY" ]; then
+        log_error "二进制文件不存在: $SOURCE_BINARY"
+        log_error "PyInstaller 构建可能失败了"
+        return 1
+    fi
+    
+    log_success "找到二进制文件: $SOURCE_BINARY"
     
     # 复制整个 dist 目录以保持依赖完整
     if [ -d "$INSTALL_DIR/qoze-dist" ]; then
         rm -rf "$INSTALL_DIR/qoze-dist"
     fi
-    cp -r "$BUILD_DIR/QozeCode/dist/qoze" "$INSTALL_DIR/qoze-dist"
     
-    # 创建启动脚本 - 修复路径问题
+    log_info "复制二进制文件到安装目录..."
+    if cp -r "$BUILD_DIR/QozeCode/dist/qoze" "$INSTALL_DIR/qoze-dist"; then
+        log_success "二进制文件复制成功"
+    else
+        log_error "二进制文件复制失败"
+        return 1
+    fi
+    
+    # 验证复制后的文件
+    TARGET_BINARY="$INSTALL_DIR/qoze-dist/qoze"
+    if [ ! -f "$TARGET_BINARY" ]; then
+        log_error "复制后的二进制文件不存在: $TARGET_BINARY"
+        return 1
+    fi
+    
+    # 确保二进制文件可执行
+    chmod +x "$TARGET_BINARY"
+    log_success "二进制文件权限设置完成"
+    
+    # 创建启动脚本
     cat > "$BIN_DIR/qoze" << EOF
 #!/bin/bash
 # QozeCode 启动脚本 (二进制版本)
@@ -301,7 +330,19 @@ if [ -f "\$QOZE_BINARY" ]; then
 else
     echo "错误: QozeCode 二进制文件未找到"
     echo "预期位置: \$QOZE_BINARY"
-    echo "请重新运行安装脚本"
+    echo ""
+    echo "调试信息:"
+    echo "  - 安装目录: $INSTALL_DIR"
+    echo "  - 二进制目录: $INSTALL_DIR/qoze-dist"
+    echo "  - 源文件位置: $BUILD_DIR/QozeCode/dist/qoze/qoze"
+    echo ""
+    if [ -f "$BUILD_DIR/QozeCode/dist/qoze/qoze" ]; then
+        echo "  ✅ 源文件存在，可以重新运行安装"
+        echo "  建议: bash install.sh install"
+    else
+        echo "  ❌ 源文件不存在，需要重新构建"
+        echo "  建议: bash install.sh source  # 使用源码安装"
+    fi
     exit 1
 fi
 EOF
@@ -309,6 +350,9 @@ EOF
     chmod +x "$BIN_DIR/qoze"
     
     log_success "二进制文件安装完成"
+    log_info "源文件: $SOURCE_BINARY"
+    log_info "目标文件: $TARGET_BINARY"
+    log_info "启动脚本: $BIN_DIR/qoze"
 }
 
 # 源码安装方式
