@@ -51,8 +51,9 @@
 
 > 如果你考虑性价比并且还是国内用户， 建议你选择 ' deepseek ' 作为你的首选模型使用
 
-### 使用演示
-[video.mp4](assets%2Fvideo.mp4)
+## 使用演示
+
+[演示视频](./assets/video.mp4)
 
 ## QuickStart
 
