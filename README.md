@@ -59,7 +59,21 @@
 
 ### 安装方式
 
-#### 方式一：通过 Homebrew 安装（推荐）
+#### 方式一：通过脚本+源码自动构建
+
+- 1、下载源码在本地构建：二进制文件
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s uninstall
+```
+
+- 2、 构建完成后手动添加到环境变量中
+
+```bash
+source ~/.qoze/qoze_env.sh && qoze
+```
+
+#### 方式二：通过 Homebrew 安装（目前兼容有点问题）
 
 1. 添加 tap 源：
 
@@ -89,6 +103,22 @@ brew tap KylinShinlyLin/qoze https://github.com/KylinShinlyLin/homebrew-qoze
 
 # 安装最新版本
 brew install qoze
+```
+
+#### brew 安装遇到-授权证书问题
+
+```bash
+# 1. 临时禁用 Gatekeeper
+sudo spctl --master-disable
+
+# 2. 执行你的安装命令
+brew cleanup qoze
+brew untap KylinShinlyLin/qoze
+brew tap KylinShinlyLin/qoze https://github.com/KylinShinlyLin/homebrew-qoze
+brew install qoze
+
+# 3. 重新启用 Gatekeeper（重要！）
+sudo spctl --master-enable
 ```
 
 ### 使用方法
