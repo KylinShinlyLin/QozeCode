@@ -11,7 +11,10 @@
 
 ### 使用演示
 
-https://storage.googleapis.com/manus_test/resourse/video.mp4
+
+<video src="./assets/video.webm" controls width="720">
+  您的浏览器不支持 HTML5 视频。
+</video>
 
 ## QuickStart
 

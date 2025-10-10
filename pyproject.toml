@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-Qoze = "inquirer_launcher:main"
+qoze = "inquirer_launcher:main"
 
 [tool.setuptools]
 py-modules = ["inquirer_launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager"]

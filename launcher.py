@@ -5,8 +5,6 @@ QozeCode Agent 启动器 - Inquirer版本
 提供键盘上下选择的模型选择界面
 """
 import os
-import shutil
-
 import sys
 from typing import Optional
 
