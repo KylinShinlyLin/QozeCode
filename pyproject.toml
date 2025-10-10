@@ -20,7 +20,7 @@ dependencies = [
     "langchain-google-vertexai",
     "boto3",
     "langchain-aws",
-    "httpx",
+    "httpx[socks]",
     "tavily-python",
     "langchain-openai",
 ]
