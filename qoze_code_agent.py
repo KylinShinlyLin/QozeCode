@@ -27,6 +27,7 @@ from tools.file_operations_tools import read_file, grep_search
 from tools.math_tools import multiply, add, divide
 # 导入工具函数
 from tools.tavily_search_tool import tavily_search
+# from tools.common_tools import ask, confirm, request_auth
 from utils.command_exec import run_command
 
 # # 导入浏览器工具
@@ -91,8 +92,8 @@ llm = None
 llm_with_tools = None
 
 # Augment the LLM with tools
+# base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search, ask, confirm, request_auth]
 base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search]
-
 # # 添加浏览器工具（如果可用）
 # if BROWSER_TOOLS_AVAILABLE:
 #     browser_tool_list = [
@@ -122,14 +123,76 @@ class MessagesState(TypedDict):
 
 # Step 2: Define model node
 def llm_call(state: dict):
+    import platform
+    import os
+    import socket
+
     messages = state["messages"]
     current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # 获取系统信息
+    try:
+        # 基本系统信息
+        system_info = platform.system()
+        system_version = platform.version()
+        system_release = platform.release()
+        machine_type = platform.machine()
+        processor = platform.processor()
+
+        # 当前工作目录
+        current_dir = os.getcwd()
+
+        # 用户信息
+        username = os.getenv('USER') or os.getenv('USERNAME') or 'unknown'
+
+        # 主机名
+        hostname = socket.gethostname()
+
+        # 环境变量中的重要信息
+        shell = os.getenv('SHELL', 'unknown')
+        home_dir = os.getenv('HOME', 'unknown')
+
+    except Exception as e:
+        traceback.print_exc()
+        # 如果获取系统信息失败，使用基本信息
+        system_info = platform.system()
+        system_version = "unknown"
+        current_dir = os.getcwd()
+        username = os.getenv('USER', 'unknown')
+        hostname = socket.gethostname()
+
+        shell = home_dir = "unknown"
+        machine_type = processor = "unknown"
+
     # 确保 SystemMessage 在开头
     system_msg = SystemMessage(
         content=f'''
-你是一名出色的 AI agent 助手:
+你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
+- 你需要根据我的诉求，利用当前的tools在终端中帮我完成复杂的任务 
+
+## 系统环境信息
+**操作系统**: {system_info} {system_release} ({system_version})
+**架构**: {machine_type}
+**处理器**: {processor}
+**主机名**: {hostname}
+**用户**: {username}
+**Shell**: {shell}
 - 当前系统时间:{current_time}
-        ''')
+
+## 当前环境
+**工作目录**: {current_dir}
+**用户主目录**: {home_dir}
+**当前时间**: {current_time}
+
+## 工作原则
+- 始终考虑当前的系统环境和资源限制
+- 在执行可能影响系统的操作前，先评估风险
+- 优先使用适合当前操作系统的命令和工具
+- 提供准确、实用的建议和解决方案
+- 保持对用户数据和隐私的尊重
+
+请根据用户的需求，充分利用你的工具和当前系统环境来提供最佳的帮助。
+''')
 
     # 过滤掉之前的 SystemMessage，只保留最新的，并清理文本
     non_system_messages = []
