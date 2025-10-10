@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # QozeCode 安装脚本
-# 支持从源码编译安装并自动配置环境变量
+# 支持 PyInstaller 二进制构建和源码安装两种方式
 
 set -e
 
@@ -17,6 +17,7 @@ REPO_URL="https://github.com/KylinShinlyLin/QozeCode.git"
 INSTALL_DIR="$HOME/.qoze"
 BIN_DIR="$HOME/.local/bin"
 VENV_DIR="$INSTALL_DIR/venv"
+BUILD_DIR="$INSTALL_DIR/build"
 
 # 日志函数
 log_info() {
@@ -46,7 +47,6 @@ check_requirements() {
     fi
     
     python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
-    required_version="3.9"
     
     if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 9) else 1)"; then
         log_error "Python 版本过低 ($python_version)，需要 3.9 或更高版本"
@@ -70,6 +70,7 @@ create_directories() {
     
     mkdir -p "$INSTALL_DIR"
     mkdir -p "$BIN_DIR"
+    mkdir -p "$BUILD_DIR"
     
     log_success "目录创建完成"
 }
@@ -78,24 +79,24 @@ create_directories() {
 download_source() {
     log_info "下载 QozeCode 源码..."
     
-    if [ -d "$INSTALL_DIR/QozeCode" ]; then
-        log_warning "检测到已存在的安装，正在更新..."
-        cd "$INSTALL_DIR/QozeCode"
+    if [ -d "$BUILD_DIR/QozeCode" ]; then
+        log_warning "检测到已存在的源码，正在更新..."
+        cd "$BUILD_DIR/QozeCode"
         git pull origin main
     else
-        cd "$INSTALL_DIR"
+        cd "$BUILD_DIR"
         git clone "$REPO_URL"
     fi
     
     log_success "源码下载完成"
 }
 
-# 创建虚拟环境
-create_venv() {
-    log_info "创建 Python 虚拟环境..."
+# 创建构建环境
+create_build_env() {
+    log_info "创建构建环境..."
     
     if [ -d "$VENV_DIR" ]; then
-        log_warning "虚拟环境已存在，正在重新创建..."
+        log_warning "构建环境已存在，正在重新创建..."
         rm -rf "$VENV_DIR"
     fi
     
@@ -105,47 +106,88 @@ create_venv() {
     # 升级 pip
     pip install --upgrade pip
     
-    log_success "虚拟环境创建完成"
+    log_success "构建环境创建完成"
 }
 
-# 安装依赖
-install_dependencies() {
-    log_info "安装项目依赖..."
+# 安装构建依赖
+install_build_dependencies() {
+    log_info "安装构建依赖..."
     
     source "$VENV_DIR/bin/activate"
-    cd "$INSTALL_DIR/QozeCode"
+    cd "$BUILD_DIR/QozeCode"
     
-    # 安装项目
+    # 安装项目依赖
     pip install -e .
     
-    # 安装可选依赖（浏览器功能）
-    read -p "是否安装浏览器自动化功能？(y/N): " install_browser
+    # 安装 PyInstaller
+    pip install pyinstaller
+    
+    # 询问是否安装浏览器功能
+    read -p "是否包含浏览器自动化功能？(y/N): " install_browser
     if [[ $install_browser =~ ^[Yy]$ ]]; then
         pip install -e ".[browser]"
         log_info "安装 Playwright 浏览器..."
         playwright install
     fi
     
-    log_success "依赖安装完成"
+    log_success "构建依赖安装完成"
 }
 
-# 创建启动脚本
-create_launcher() {
-    log_info "创建启动脚本..."
+# 构建二进制文件
+build_binary() {
+    log_info "构建 QozeCode 二进制文件..."
     
-    cat > "$BIN_DIR/qoze" << EOF
+    source "$VENV_DIR/bin/activate"
+    cd "$BUILD_DIR/QozeCode"
+    
+    # 清理之前的构建
+    rm -rf build dist
+    
+    # 使用 PyInstaller 构建
+    pyinstaller Qoze.spec
+    
+    if [ ! -f "dist/qoze/qoze" ]; then
+        log_error "二进制文件构建失败"
+        exit 1
+    fi
+    
+    log_success "二进制文件构建完成"
+}
+
+# 安装二进制文件
+install_binary() {
+    log_info "安装 QozeCode 二进制文件..."
+    
+    # 复制二进制文件到 bin 目录
+    cp "$BUILD_DIR/QozeCode/dist/qoze/qoze" "$BIN_DIR/"
+    chmod +x "$BIN_DIR/qoze"
+    
+    # 复制整个 dist 目录以保持依赖完整
+    if [ -d "$INSTALL_DIR/qoze-dist" ]; then
+        rm -rf "$INSTALL_DIR/qoze-dist"
+    fi
+    cp -r "$BUILD_DIR/QozeCode/dist/qoze" "$INSTALL_DIR/qoze-dist"
+    
+    # 创建启动脚本，指向实际的二进制文件
+    cat > "$BIN_DIR/qoze" << 'EOF'
 #!/bin/bash
 # QozeCode 启动脚本
 
-# 激活虚拟环境并运行
-source "$VENV_DIR/bin/activate"
-cd "$INSTALL_DIR/QozeCode"
-python launcher.py "\$@"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QOZE_DIR="$(dirname "$SCRIPT_DIR")/.qoze/qoze-dist"
+
+if [ -f "$QOZE_DIR/qoze" ]; then
+    exec "$QOZE_DIR/qoze" "$@"
+else
+    echo "错误: QozeCode 二进制文件未找到"
+    echo "请重新运行安装脚本"
+    exit 1
+fi
 EOF
     
     chmod +x "$BIN_DIR/qoze"
     
-    log_success "启动脚本创建完成"
+    log_success "二进制文件安装完成"
 }
 
 # 配置环境变量
@@ -179,19 +221,57 @@ configure_env() {
 verify_installation() {
     log_info "验证安装..."
     
+    # 临时添加到 PATH 进行测试
+    export PATH="$BIN_DIR:$PATH"
+    
     if command -v qoze &> /dev/null; then
         log_success "QozeCode 安装成功！"
         echo ""
         echo "使用方法："
         echo "  qoze          # 启动 QozeCode"
-        echo "  qoze --help   # 查看帮助"
         echo ""
         echo "注意：如果命令未找到，请重新打开终端或运行："
-        echo "  source $shell_rc"
+        echo "  source ~/.zshrc   # zsh 用户"
+        echo "  source ~/.bashrc  # bash 用户"
+        echo ""
+        
+        # 测试运行
+        log_info "测试 QozeCode 版本信息..."
+        if timeout 5 qoze --help &>/dev/null; then
+            log_success "QozeCode 运行测试通过"
+        else
+            log_warning "QozeCode 可能需要首次配置，请运行 'qoze' 进行初始化"
+        fi
     else
         log_error "安装验证失败，请检查安装过程"
         exit 1
     fi
+}
+
+# 源码安装方式（备用）
+install_from_source() {
+    log_info "使用源码安装方式..."
+    
+    source "$VENV_DIR/bin/activate"
+    cd "$BUILD_DIR/QozeCode"
+    
+    # 安装项目
+    pip install -e .
+    
+    # 创建启动脚本
+    cat > "$BIN_DIR/qoze" << EOF
+#!/bin/bash
+# QozeCode 启动脚本
+
+# 激活虚拟环境并运行
+source "$VENV_DIR/bin/activate"
+cd "$BUILD_DIR/QozeCode"
+python launcher.py "\$@"
+EOF
+    
+    chmod +x "$BIN_DIR/qoze"
+    
+    log_success "源码安装完成"
 }
 
 # 卸载函数
@@ -222,7 +302,8 @@ show_help() {
     echo "  $0 [选项]"
     echo ""
     echo "选项："
-    echo "  install     安装 QozeCode (默认)"
+    echo "  install     安装 QozeCode (默认，使用二进制构建)"
+    echo "  source      从源码安装 (不构建二进制)"
     echo "  uninstall   卸载 QozeCode"
     echo "  update      更新 QozeCode"
     echo "  --help      显示此帮助信息"
@@ -233,13 +314,32 @@ show_help() {
 main() {
     case "${1:-install}" in
         "install")
-            log_info "开始安装 QozeCode..."
+            log_info "开始安装 QozeCode (二进制方式)..."
             check_requirements
             create_directories
             download_source
-            create_venv
-            install_dependencies
-            create_launcher
+            create_build_env
+            install_build_dependencies
+            
+            # 尝试构建二进制，如果失败则回退到源码安装
+            if build_binary; then
+                install_binary
+            else
+                log_warning "二进制构建失败，回退到源码安装方式..."
+                install_from_source
+            fi
+            
+            configure_env
+            verify_installation
+            ;;
+        "source")
+            log_info "开始从源码安装 QozeCode..."
+            check_requirements
+            create_directories
+            download_source
+            create_build_env
+            install_build_dependencies
+            install_from_source
             configure_env
             verify_installation
             ;;
@@ -250,9 +350,24 @@ main() {
             log_info "更新 QozeCode..."
             check_requirements
             download_source
-            source "$VENV_DIR/bin/activate"
-            cd "$INSTALL_DIR/QozeCode"
-            pip install -e . --upgrade
+            
+            if [ -d "$INSTALL_DIR/qoze-dist" ]; then
+                # 二进制安装方式更新
+                create_build_env
+                install_build_dependencies
+                if build_binary; then
+                    install_binary
+                else
+                    log_warning "二进制构建失败，请尝试重新安装"
+                    exit 1
+                fi
+            else
+                # 源码安装方式更新
+                source "$VENV_DIR/bin/activate"
+                cd "$BUILD_DIR/QozeCode"
+                pip install -e . --upgrade
+            fi
+            
             log_success "QozeCode 更新完成"
             ;;
         "--help"|"-h")
