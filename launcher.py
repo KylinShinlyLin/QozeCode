@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+# 顶部模块区（增加日志工具）
+# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 QozeCode Agent 启动器 - Inquirer版本
@@ -6,21 +7,45 @@ QozeCode Agent 启动器 - Inquirer版本
 """
 import os
 import sys
+import time
+import traceback
 from typing import Optional
 
-from qoze_code_agent import handleRun
 # 导入共享的 console 实例
 from shared_console import console
 
+START_TIME = time.perf_counter()
+LOG_DIR = os.path.expanduser("~/.qoze")
+LOG_FILE = os.path.join(LOG_DIR, "launcher.log")
+
+# def _write_log_line(msg: str):
+#     try:
+#         os.makedirs(LOG_DIR, exist_ok=True)
+#         with open(LOG_FILE, "a", encoding="utf-8") as f:
+#             f.write(f"{datetime.now().isoformat()} {msg}\n")
+#     except Exception:
+#         pass
+#
+#
+# def log(msg: str):
+#     elapsed = time.perf_counter() - START_TIME
+#     line = f"[{elapsed:0.3f}s] {msg}"
+#     _write_log_line(line)
+#     try:
+#         console.log(line)
+#     except Exception:
+#         print(line)
+
+
+# 第三方依赖导入区（记录导入耗时）
 try:
+    t_import = time.perf_counter()
     import inquirer
     from rich.console import Console
     from rich.panel import Panel
     from rich.text import Text
     from rich.align import Align
 except ImportError as e:
-    print("❌ 缺少依赖库")
-    print("请运行: pip install inquirer rich")
     print(f"错误详情: {e}")
     sys.exit(1)
 
@@ -42,8 +67,11 @@ credentials_path=
 """
 
 
+# 函数 print_banner（记录绘制耗时）
 def print_banner():
     """打印ASCII艺术风格的启动横幅"""
+    t = time.perf_counter()
+    # log("开始绘制启动横幅")
     # ASCII艺术风格的 QOZE CODE
     ascii_art = """
 ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗
@@ -53,27 +81,21 @@ def print_banner():
 ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗
  ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
 """
-
     subtitle = Text("使用 ↑↓ 选择，回车确认", style="dim")
-
-    # 创建带颜色的ASCII艺术
     colored_art = Text(ascii_art, style="bold bright_cyan")
-
     content = Align.center(colored_art + "\n" + subtitle)
-
     panel = Panel(
         content,
         border_style="cyan",
         padding=(1, 2)
     )
-
     console.print(panel)
     console.print()
 
 
+# 函数 get_model_choice（记录交互耗时）
 def get_model_choice() -> Optional[str]:
     """获取用户的模型选择 - 支持键盘上下选择"""
-    # 清屏
     console.clear()
 
     # 显示横幅
@@ -89,7 +111,6 @@ def get_model_choice() -> Optional[str]:
         "[退出程序]"
     ]
 
-    # 创建交互式选择菜单
     questions = [
         inquirer.List(
             'model',
@@ -125,6 +146,7 @@ def get_model_choice() -> Optional[str]:
 
 
 # 判断配置文件是否存在，如果不存在则创建一个
+# 函数 ensure_config（记录文件检查与创建耗时）
 def ensure_config():
     config_dir = "/etc/conf"
     config_file = os.path.join(config_dir, "qoze.conf")
@@ -150,13 +172,16 @@ def ensure_config():
         console.print(f"创建配置文件失败: {e}", style="red")
 
 
+# 函数 launch_agent（记录启动与返回耗时）
 def launch_agent(model: str):
     """启动 QozeCode Agent"""
     console.clear()
+    from qoze_code_agent import handleRun
     # 直接调用 handleRun 并传入选择的模型
     handleRun(model_name=model, session_id='123')
 
 
+# 函数 main（记录各阶段耗时）
 def main():
     """主函数"""
     try:

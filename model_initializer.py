@@ -3,38 +3,37 @@
 负责根据模型名称初始化对应的LLM实例
 """
 
-import boto3
-import httpx
-from langchain_deepseek import ChatDeepSeek
-from langchain_google_vertexai import ChatVertexAI
+# 保留轻量级导入
+from shared_console import console
 
 
 def initialize_llm(model_name: str):
     """根据模型名称初始化对应的LLM"""
     import os
-    from shared_console import console
     from config_manager import ensure_model_credentials
     if model_name == 'claude-4':
         # 使用 Claude-4 (通过 Bedrock)
         try:
+            # 延迟导入重依赖
             from langchain_aws import ChatBedrock
-
+            from botocore.config import Config
+            import boto3
+            
             # 配置代理
             proxies = {
                 "http://": "socks5://us1-proxy.owll.ai:11800",
                 "https://": "socks5://us1-proxy.owll.ai:11800",
             }
-
+            
             # 读取 AWS 凭证（不做网络验证）
             creds = ensure_model_credentials('claude-4')
-
+            
             # 创建带代理的 boto3 配置
-            from botocore.config import Config
             config = Config(
                 proxies=proxies,
                 region_name=creds['region_name']
             )
-
+            
             # 创建 bedrock 客户端
             bedrock_client = boto3.client(
                 'bedrock-runtime',
@@ -43,7 +42,7 @@ def initialize_llm(model_name: str):
                 region_name=creds['region_name'],
                 config=config
             )
-
+            
             llm = ChatBedrock(
                 client=bedrock_client,
                 model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
@@ -55,104 +54,87 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Claude-4 初始化失败: {str(e)}")
             raise
-
     elif model_name == 'gemini':
-        # 使用 Gemini
         try:
-            # 读取 VertexAI 凭证（不做网络验证）
+            # 延迟导入重依赖
+            from langchain_google_vertexai import ChatVertexAI
+            
             creds = ensure_model_credentials('gemini')
-            # 配置 Google 凭证路径
-            if creds.get("credentials_path"):
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds["credentials_path"]
-
+            # 仅构建客户端，不做网络验证
             llm = ChatVertexAI(
-                model_name="gemini-2.5-pro",
+                model_name="gemini-1.5-pro",
                 project=creds["project"],
-                location=creds["location"]
+                location=creds["location"],
+                credentials=creds["credentials_path"]
             )
             return llm
+        except ImportError:
+            print("❌ 缺少 langchain_google_vertexai 依赖，请安装: pip install langchain-google-vertexai")
+            raise
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
             raise
-
-    elif model_name == 'gpt-5':
-        # 使用 GPT-5 (通过 OpenAI)
+    elif model_name in ('gpt-5', 'gpt-5-codex'):
         try:
+            # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
-
+            import httpx
+            
             # 配置代理
             proxies = {
                 "http://": "socks5://us1-proxy.owll.ai:11800",
                 "https://": "socks5://us1-proxy.owll.ai:11800",
             }
-
-            # 方法1: 使用 httpx.Client (推荐用于 langchain_openai)
+            
+            # 使用 httpx.Client
             http_client = httpx.Client(proxy=proxies["https://"])
-
-            # 读取 OpenAI 密钥（不做网络验证），并设置环境变量提高兼容性
-            creds = ensure_model_credentials('gpt-5')
+            
+            # 读取 OpenAI 密钥
+            creds = ensure_model_credentials(model_name)
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
-
-            llm = ChatOpenAI(
-                model="gpt-5",
-                temperature=0.1,
-                api_key=creds["api_key"],
-                http_client=http_client,
-                reasoning_effort="minimal"
-            )
-            return llm
-        except ImportError:
-            print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
-            raise
-        except Exception as e:
-            print(f"❌ GPT-5 初始化失败: {str(e)}")
-            raise
-    elif model_name == 'gpt-5-codex':
-        # 使用 GPT-5 (通过 OpenAI)
-        try:
-            from langchain_openai import ChatOpenAI
-
-            # 配置代理
-            proxies = {
-                "http://": "socks5://us1-proxy.owll.ai:11800",
-                "https://": "socks5://us1-proxy.owll.ai:11800",
+            
+            model_config = {
+                "temperature": 0.1,
+                "api_key": creds["api_key"],
+                "http_client": http_client,
             }
-
-            # 方法1: 使用 httpx.Client (推荐用于 langchain_openai)
-            http_client = httpx.Client(proxy=proxies["https://"])
-
-            # 读取 OpenAI 密钥（不做网络验证），并设置环境变量提高兼容性
-            creds = ensure_model_credentials('gpt-5-codex')
-            os.environ["OPENAI_API_KEY"] = creds["api_key"]
-
-            llm = ChatOpenAI(
-                model="gpt-5-codex",
-                temperature=0.1,
-                api_key=creds["api_key"],
-                http_client=http_client,
-            )
+            
+            if model_name == 'gpt-5':
+                model_config["model"] = "gpt-5"
+                model_config["reasoning_effort"] = "minimal"
+            else:  # gpt-5-codex
+                model_config["model"] = "gpt-5-codex"
+            
+            llm = ChatOpenAI(**model_config)
             return llm
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
             raise
         except Exception as e:
-            print(f"❌ GPT-5 初始化失败: {str(e)}")
+            print(f"❌ {model_name} 初始化失败: {str(e)}")
             raise
     elif model_name == 'DeepSeek':
-        # 使用 DeepSeek
         try:
-            # 读取 DeepSeek 密钥（不做网络验证），并设置环境变量提高兼容性
+            # 延迟导入重依赖
+            from langchain_deepseek import ChatDeepSeek
+            
+            # 读取 DeepSeek 密钥
             creds = ensure_model_credentials('DeepSeek')
             os.environ["DEEPSEEK_API_KEY"] = creds["api_key"]
-
+            
             llm = ChatDeepSeek(
                 model="deepseek-reasoner",
                 api_key=creds["api_key"]
             )
             return llm
+        except ImportError:
+            print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
+            raise
         except Exception as e:
             print(f"❌ DeepSeek 初始化失败: {str(e)}")
             raise
+    else:
+        raise ValueError(f"不支持的模型: {model_name}")
 
 
 def verify_credentials(model_name: str):
@@ -230,6 +212,5 @@ def verify_llm(llm):
         # LangChain Chat 模型支持直接 invoke 字符串
         llm.invoke("ping")
     except Exception as e:
-        from shared_console import console
         console.print(f"❌ 密钥验证失败: {e}", style="red")
         raise

@@ -20,9 +20,6 @@ from rich.prompt import Prompt
 from typing_extensions import TypedDict, Annotated
 
 from config_manager import ensure_model_credentials
-# 导入模型初始化函数
-from model_initializer import initialize_llm
-# 导入共享的 console 实例
 from shared_console import console
 # 顶部导入区域
 from tools.execute_command_tool import execute_command
@@ -523,10 +520,11 @@ def handleRun(model_name: str = None, session_id: str = None):
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）
         with console.status("[bold green]正在初始化模型...", spinner="dots"):
+            # 延迟导入以避免启动时加载模型相关重依赖
+            from model_initializer import initialize_llm
             llm = initialize_llm(model_name)
             # 初始化带工具的 LLM
             llm_with_tools = llm.bind_tools(tools)
-
         # 启动聊天循环
         asyncio.run(start_chat_with_session(session_id, model_name))
 
