@@ -11,26 +11,26 @@ requires-python = ">=3.9"
 authors = [{ name = "QozeCode" }]
 
 dependencies = [
-  "rich",
-  "inquirer",
-  "langchain-core",
-  "langgraph",
-  "typing_extensions",
-  "langchain-deepseek",
-  "langchain-google-vertexai",
-  "boto3",
-  "langchain-aws",
-  "httpx",
-  "tavily-python",
-  "langchain-openai",
+    "rich",
+    "inquirer",
+    "langchain-core",
+    "langgraph",
+    "typing_extensions",
+    "langchain-deepseek",
+    "langchain-google-vertexai",
+    "boto3",
+    "langchain-aws",
+    "httpx",
+    "tavily-python",
+    "langchain-openai",
 ]
 
 [project.scripts]
-qoze = "inquirer_launcher:main"
+qoze = "launcher:main"
 
 [tool.setuptools]
-py-modules = ["inquirer_launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager"]
-packages = ["tools"]
+py-modules = ["launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager"]
+packages = ["tools", "utils"]
 
 [project.optional-dependencies]
 browser = ["playwright", "langchain-community", "nest_asyncio"]
