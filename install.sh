@@ -279,6 +279,7 @@ try_build_binary() {
 }
 
 # 安装二进制文件
+# 修复 install_binary 函数中的启动脚本
 install_binary() {
     log_info "安装 QozeCode 二进制文件..."
     
@@ -288,19 +289,18 @@ install_binary() {
     fi
     cp -r "$BUILD_DIR/QozeCode/dist/qoze" "$INSTALL_DIR/qoze-dist"
     
-    # 创建启动脚本
-    cat > "$BIN_DIR/qoze" << 'EOF'
+    # 创建启动脚本 - 修复路径问题
+    cat > "$BIN_DIR/qoze" << EOF
 #!/bin/bash
 # QozeCode 启动脚本 (二进制版本)
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-QOZE_DIR="$(dirname "$SCRIPT_DIR")/.qoze/qoze-dist"
+QOZE_BINARY="$INSTALL_DIR/qoze-dist/qoze"
 
-if [ -f "$QOZE_DIR/qoze" ]; then
-    exec "$QOZE_DIR/qoze" "$@"
+if [ -f "\$QOZE_BINARY" ]; then
+    exec "\$QOZE_BINARY" "\$@"
 else
     echo "错误: QozeCode 二进制文件未找到"
-    echo "预期位置: $QOZE_DIR/qoze"
+    echo "预期位置: \$QOZE_BINARY"
     echo "请重新运行安装脚本"
     exit 1
 fi
@@ -360,6 +360,8 @@ configure_env() {
                 log_success "✅ 已添加 PATH 到 $config_file"
             else
                 log_info "📝 $config_file 已经配置过 QozeCode PATH"
+                # 即使已配置，也加入到配置文件列表中，以便后续重新加载
+                configured_files+=("$config_file")
             fi
         fi
     done
@@ -411,21 +413,73 @@ configure_env() {
             echo "  - $file"
         done
         echo ""
-        log_info "💡 使配置生效的方法："
-        echo "  方法1: 重新打开终端"
-        echo "  方法2: 根据你的 shell 运行以下命令之一："
         
-        if [[ " ${configured_files[*]} " =~ " $HOME/.zshrc " ]]; then
-            echo "    source ~/.zshrc"
-        fi
-        if [[ " ${configured_files[*]} " =~ " $HOME/.bashrc " ]]; then
-            echo "    source ~/.bashrc"
-        fi
-        if [[ " ${configured_files[*]} " =~ " $HOME/.bash_profile " ]]; then
-            echo "    source ~/.bash_profile"
-        fi
-        if [[ " ${configured_files[*]} " =~ " $HOME/.profile " ]]; then
-            echo "    source ~/.profile"
+        # 🆕 自动重新加载配置文件
+        log_info "🔄 正在自动重新加载配置文件..."
+        reloaded_files=()
+        
+        for config_file in "${configured_files[@]}"; do
+            # 根据文件类型选择合适的重新加载方式
+            case "$config_file" in
+                *".zshrc")
+                    if [ "$current_shell" = "zsh" ]; then
+                        if source "$config_file" 2>/dev/null; then
+                            reloaded_files+=("$config_file")
+                            log_success "✅ 已重新加载 $config_file"
+                        else
+                            log_warning "⚠️  重新加载 $config_file 失败"
+                        fi
+                    fi
+                    ;;
+                *".bashrc"|*".bash_profile")
+                    if [ "$current_shell" = "bash" ]; then
+                        if source "$config_file" 2>/dev/null; then
+                            reloaded_files+=("$config_file")
+                            log_success "✅ 已重新加载 $config_file"
+                        else
+                            log_warning "⚠️  重新加载 $config_file 失败"
+                        fi
+                    fi
+                    ;;
+                *".profile")
+                    if source "$config_file" 2>/dev/null; then
+                        reloaded_files+=("$config_file")
+                        log_success "✅ 已重新加载 $config_file"
+                    else
+                        log_warning "⚠️  重新加载 $config_file 失败"
+                    fi
+                    ;;
+                *"config.fish")
+                    # Fish shell 需要特殊处理，这里跳过自动重新加载
+                    log_info "📝 Fish shell 配置需要重新打开终端生效"
+                    ;;
+            esac
+        done
+        
+        echo ""
+        if [ ${#reloaded_files[@]} -gt 0 ]; then
+            log_success "🎉 配置已自动生效！以下文件已重新加载："
+            for file in "${reloaded_files[@]}"; do
+                echo "  - $file"
+            done
+            log_info "💡 你现在可以直接使用 'qoze' 命令了！"
+        else
+            log_info "💡 使配置生效的方法："
+            echo "  方法1: 重新打开终端"
+            echo "  方法2: 根据你的 shell 运行以下命令之一："
+            
+            if [[ " ${configured_files[*]} " =~ " $HOME/.zshrc " ]]; then
+                echo "    source ~/.zshrc"
+            fi
+            if [[ " ${configured_files[*]} " =~ " $HOME/.bashrc " ]]; then
+                echo "    source ~/.bashrc"
+            fi
+            if [[ " ${configured_files[*]} " =~ " $HOME/.bash_profile " ]]; then
+                echo "    source ~/.bash_profile"
+            fi
+            if [[ " ${configured_files[*]} " =~ " $HOME/.profile " ]]; then
+                echo "    source ~/.profile"
+            fi
         fi
     else
         log_warning "⚠️  未找到合适的 shell 配置文件进行配置"
