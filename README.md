@@ -55,7 +55,7 @@
 
 [演示视频](./assets/video.mp4)
 
-## QuickStart
+# QuickStart
 
 ## 安装方式
 
@@ -128,7 +128,6 @@ sudo spctl --master-enable
 ```bash
 qoze
 ```
-
 
 ## 许可证
 
