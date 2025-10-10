@@ -72,6 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/instal
 ```bash
 source ~/.qoze/qoze_env.sh && qoze
 ```
+<br><br>
 
 ### 方式二：通过 Homebrew 安装（目前兼容有点问题）
 
