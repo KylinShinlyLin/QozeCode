@@ -14,12 +14,13 @@ from shared_console import console
 
 
 @tool
-def execute_command(command: str, timeout: int = 3600) -> str:
+def execute_command(command: str, timeout: int = 3600, silent: bool = False) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
     
     Args:
         command: The command to execute (e.g., "ls -la", "python script.py", "npm install")
-        timeout: Maximum execution time in seconds (default: 30)
+        timeout: Maximum execution time in seconds (default: 3600)
+        silent: If True, execute without real-time display (default: False)
     
     Returns:
         The command output including both stdout and stderr
@@ -56,6 +57,24 @@ def execute_command(command: str, timeout: int = 3600) -> str:
         timeout_thread = threading.Thread(target=kill_process_after_timeout, daemon=True)
         timeout_thread.start()
 
+        # 静默模式：直接执行不显示实时输出
+        if silent:
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+                return_code = process.returncode
+
+                if return_code != 0:
+                    return f"❌ 命令执行失败 (返回码: {return_code})\n输出: {stdout}"
+                else:
+                    return stdout
+
+            except subprocess.TimeoutExpired:
+                process.kill()
+                return f"❌ 命令执行超时 ({timeout}秒)"
+            except Exception as e:
+                return f"❌ 命令执行异常: {str(e)}"
+
+        # 非静默模式：显示实时输出
         # 创建初始面板
         initial_panel = Panel(
             f"🚀 正在执行命令: [bold cyan]{command}[/bold cyan]\n\n⏳ 等待输出...",
@@ -230,6 +249,7 @@ def curl(
         timeout: Request timeout in seconds (default: 30)
         follow_redirects: Whether to follow redirects (default: True)
         verify_ssl: Whether to verify SSL certificates (default: True)
+        silent: Whether to suppress real-time output display (default: True)
     
     Returns:
         The HTTP response including headers and body
@@ -270,69 +290,109 @@ def curl(
         # 添加 URL
         curl_cmd.append(url)
 
-        # 显示执行信息
-        cmd_str = " ".join(curl_cmd)
-        initial_panel = Panel(
-            f"🌐 正在执行 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n\n"
-            f"⏳ 等待响应...",
-            title="[bold yellow]HTTP 请求[/bold yellow]",
-            border_style="blue",
-            padding=(0, 1)
-        )
-
         start_time = time.time()
 
-        with Live(initial_panel, console=console, refresh_per_second=4) as live:
-            # 执行 curl 命令
-            process = subprocess.Popen(
-                curl_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True
+        # 根据 silent 参数决定是否显示实时界面
+        if not silent:
+            # 显示执行信息
+            initial_panel = Panel(
+                f"🌐 正在执行 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n\n"
+                f"⏳ 等待响应...",
+                title="[bold yellow]HTTP 请求[/bold yellow]",
+                border_style="blue",
+                padding=(0, 1)
             )
 
+            with Live(initial_panel, console=console, refresh_per_second=4) as live:
+                # 执行 curl 命令
+                process = subprocess.Popen(
+                    curl_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True
+                )
+
+                try:
+                    stdout, stderr = process.communicate(timeout=timeout + 5)
+                    execution_time = time.time() - start_time
+
+                    # 解析响应
+                    response_info = stderr  # curl 的详细信息在 stderr 中
+                    response_body = stdout
+
+                    # 提取状态码
+                    status_code = "Unknown"
+                    for line in response_info.split('\n'):
+                        if '< HTTP/' in line:
+                            parts = line.split()
+                            if len(parts) >= 3:
+                                status_code = parts[2]
+                            break
+
+                    # 判断请求是否成功
+                    is_success = process.returncode == 0
+
+                    if is_success:
+                        # 成功面板
+                        final_panel = Panel(
+                            f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
+                            f"✅ [bold green]请求成功![/bold green] (状态码: {status_code}, 耗时: {execution_time:.2f}秒)\n"
+                            f"📄 响应大小: {len(response_body)} 字符",
+                            title="[bold green]HTTP 请求 - 成功[/bold green]",
+                            border_style="green",
+                            padding=(0, 2)
+                        )
+                    else:
+                        # 失败面板
+                        final_panel = Panel(
+                            f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
+                            f"❌ [bold red]请求失败[/bold red] (返回码: {process.returncode}, 耗时: {execution_time:.2f}秒)",
+                            title="[bold red]HTTP 请求 - 失败[/bold red]",
+                            border_style="red",
+                            padding=(0, 2)
+                        )
+
+                    live.update(final_panel)
+                    time.sleep(1)  # 让用户看到结果
+
+                    # 返回完整响应信息
+                    full_response = f"=== HTTP Response Info ===\n{response_info}\n\n=== Response Body ===\n{response_body}"
+                    return full_response
+
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    timeout_panel = Panel(
+                        f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
+                        f"⚠️  [bold yellow]请求超时[/bold yellow] (超时: {timeout}秒)",
+                        title="[bold yellow]HTTP 请求 - 超时[/bold yellow]",
+                        border_style="red",
+                        padding=(0, 2)
+                    )
+                    live.update(timeout_panel)
+                    time.sleep(1)
+                    return f"❌ HTTP 请求超时: {url}"
+
+        else:
+            # 静默模式：直接执行，不显示实时界面
             try:
+                process = subprocess.Popen(
+                    curl_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True
+                )
+
                 stdout, stderr = process.communicate(timeout=timeout + 5)
                 execution_time = time.time() - start_time
 
                 # 解析响应
-                response_info = stderr  # curl 的详细信息在 stderr 中
+                response_info = stderr
                 response_body = stdout
 
-                # 提取状态码
-                status_code = "Unknown"
-                for line in response_info.split('\n'):
-                    if '< HTTP/' in line:
-                        parts = line.split()
-                        if len(parts) >= 3:
-                            status_code = parts[2]
-                        break
-
                 # 判断请求是否成功
-                is_success = process.returncode == 0
-
-                if is_success:
-                    # 成功面板
-                    final_panel = Panel(
-                        f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                        f"✅ [bold green]请求成功![/bold green] (状态码: {status_code}, 耗时: {execution_time:.2f}秒)\n"
-                        f"📄 响应大小: {len(response_body)} 字符",
-                        title="[bold green]HTTP 请求 - 成功[/bold green]",
-                        border_style="green",
-                        padding=(0, 2)
-                    )
-                else:
-                    # 失败面板
-                    final_panel = Panel(
-                        f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                        f"❌ [bold red]请求失败[/bold red] (返回码: {process.returncode}, 耗时: {execution_time:.2f}秒)",
-                        title="[bold red]HTTP 请求 - 失败[/bold red]",
-                        border_style="red",
-                        padding=(0, 2)
-                    )
-
-                live.update(final_panel)
-                time.sleep(1)  # 让用户看到结果
+                if process.returncode != 0:
+                    console.print(f"❌ HTTP 请求失败: {url}")
+                    return f"❌ HTTP 请求失败: {url} (返回码: {process.returncode})"
 
                 # 返回完整响应信息
                 full_response = f"=== HTTP Response Info ===\n{response_info}\n\n=== Response Body ===\n{response_body}"
@@ -340,29 +400,24 @@ def curl(
 
             except subprocess.TimeoutExpired:
                 process.kill()
-                timeout_panel = Panel(
-                    f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                    f"⚠️  [bold yellow]请求超时[/bold yellow] (超时: {timeout}秒)",
-                    title="[bold yellow]HTTP 请求 - 超时[/bold yellow]",
-                    border_style="red",
-                    padding=(0, 2)
-                )
-                live.update(timeout_panel)
-                time.sleep(1)
+                console.print(f"❌ HTTP 请求超时: {url}")
                 return f"❌ HTTP 请求超时: {url}"
 
     except Exception as e:
         error_msg = f"❌ 执行 HTTP 请求时发生错误: {str(e)}"
 
-        # 显示错误面板
-        error_panel = Panel(
-            f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-            f"❌ [bold red]发生异常[/bold red]\n\n"
-            f"📄 错误信息:\n{str(e)}",
-            title="[bold red]HTTP 请求 - 异常[/bold red]",
-            border_style="red",
-            padding=(0, 2)
-        )
-        console.print(error_panel)
+        if not silent:
+            # 显示错误面板
+            error_panel = Panel(
+                f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
+                f"❌ [bold red]发生异常[/bold red]\n\n"
+                f"📄 错误信息:\n{str(e)}",
+                title="[bold red]HTTP 请求 - 异常[/bold red]",
+                border_style="red",
+                padding=(0, 2)
+            )
+            console.print(error_panel)
+        else:
+            console.print(f"❌ HTTP 请求异常: {str(e)}")
 
         return error_msg
