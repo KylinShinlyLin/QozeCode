@@ -23,6 +23,8 @@ dependencies = [
     "httpx[socks]",
     "tavily-python",
     "langchain-openai",
+    "lxml",
+    "beautifulsoup4",
 ]
 
 [project.scripts]

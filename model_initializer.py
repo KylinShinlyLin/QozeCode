@@ -18,22 +18,22 @@ def initialize_llm(model_name: str):
             from langchain_aws import ChatBedrock
             from botocore.config import Config
             import boto3
-            
+
             # 配置代理
             proxies = {
                 "http://": "socks5://us1-proxy.owll.ai:11800",
                 "https://": "socks5://us1-proxy.owll.ai:11800",
             }
-            
+
             # 读取 AWS 凭证（不做网络验证）
             creds = ensure_model_credentials('claude-4')
-            
+
             # 创建带代理的 boto3 配置
             config = Config(
                 proxies=proxies,
                 region_name=creds['region_name']
             )
-            
+
             # 创建 bedrock 客户端
             bedrock_client = boto3.client(
                 'bedrock-runtime',
@@ -42,7 +42,7 @@ def initialize_llm(model_name: str):
                 region_name=creds['region_name'],
                 config=config
             )
-            
+
             llm = ChatBedrock(
                 client=bedrock_client,
                 model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
@@ -58,7 +58,7 @@ def initialize_llm(model_name: str):
         try:
             # 延迟导入重依赖
             from langchain_google_vertexai import ChatVertexAI
-            
+
             creds = ensure_model_credentials('gemini')
             # 仅构建客户端，不做网络验证
             llm = ChatVertexAI(
@@ -79,32 +79,32 @@ def initialize_llm(model_name: str):
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
             import httpx
-            
+
             # 配置代理
             proxies = {
                 "http://": "socks5://us1-proxy.owll.ai:11800",
                 "https://": "socks5://us1-proxy.owll.ai:11800",
             }
-            
+
             # 使用 httpx.Client
             http_client = httpx.Client(proxy=proxies["https://"])
-            
+
             # 读取 OpenAI 密钥
             creds = ensure_model_credentials(model_name)
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
-            
+
             model_config = {
                 "temperature": 0.1,
                 "api_key": creds["api_key"],
                 "http_client": http_client,
             }
-            
+
             if model_name == 'gpt-5':
                 model_config["model"] = "gpt-5"
                 model_config["reasoning_effort"] = "minimal"
             else:  # gpt-5-codex
                 model_config["model"] = "gpt-5-codex"
-            
+
             llm = ChatOpenAI(**model_config)
             return llm
         except ImportError:
@@ -117,13 +117,13 @@ def initialize_llm(model_name: str):
         try:
             # 延迟导入重依赖
             from langchain_deepseek import ChatDeepSeek
-            
+
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials('DeepSeek')
             os.environ["DEEPSEEK_API_KEY"] = creds["api_key"]
-            
+
             llm = ChatDeepSeek(
-                model="deepseek-reasoner",
+                model="deepseek-chat",
                 api_key=creds["api_key"]
             )
             return llm

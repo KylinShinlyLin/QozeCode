@@ -40,12 +40,12 @@ from typing_extensions import TypedDict, Annotated
 from config_manager import ensure_model_credentials
 from shared_console import console
 # 顶部导入区域
-from tools.execute_command_tool import execute_command
+from tools.execute_command_tool import execute_command, curl
 from tools.file_operations_tools import read_file, grep_search
 from tools.math_tools import multiply, add, divide
 # 导入工具函数
 from tools.tavily_search_tool import tavily_search
-# from tools.common_tools import ask, confirm, request_auth
+from tools.common_tools import ask
 from utils.command_exec import run_command
 
 # # 导入浏览器工具
@@ -62,7 +62,7 @@ from utils.command_exec import run_command
 #     )
 #
 #     BROWSER_TOOLS_AVAILABLE = True
-#     console.print("✅ 浏览器工具已加载", style="green")
+#
 # except ImportError as e:
 #     BROWSER_TOOLS_AVAILABLE = False
 #     console.print(f"⚠️ 浏览器工具不可用: {str(e)}", style="yellow")
@@ -111,7 +111,20 @@ llm_with_tools = None
 
 # Augment the LLM with tools
 # base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search, ask, confirm, request_auth]
-base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search]
+base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search, ask, curl]
+# # 判断是否有浏览器操作依赖
+# if BROWSER_TOOLS_AVAILABLE:
+#     browser_tool_list = [
+#         navigate_browser,
+#         click_element,
+#         extract_text,
+#         extract_hyperlinks,
+#         get_elements,
+#         current_page,
+#         navigate_back
+#     ]
+#     base_tools += browser_tool_list
+
 # # 添加浏览器工具（如果可用）
 # if BROWSER_TOOLS_AVAILABLE:
 #     browser_tool_list = [
@@ -186,7 +199,7 @@ def llm_call(state: dict):
     system_msg = SystemMessage(
         content=f'''
 你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
-- 你需要根据我的诉求，利用当前的tools在终端中帮我完成复杂的任务 
+- 你需要根据我的诉求，利用当前的tools在终端中帮我完成复杂的任务
 
 ## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})
@@ -195,12 +208,11 @@ def llm_call(state: dict):
 **主机名**: {hostname}
 **用户**: {username}
 **Shell**: {shell}
-- 当前系统时间:{current_time}
 
 ## 当前环境
 **工作目录**: {current_dir}
 **用户主目录**: {home_dir}
-**当前时间**: {current_time}
+**当前系统时间**: {current_time}
 
 ## 工作原则
 - 始终考虑当前的系统环境和资源限制
@@ -305,13 +317,11 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         f"[dim]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/dim]\n\n"
         f"[bold white]模型:[/bold white] [bold yellow]{model_name or 'Unknown'}[/bold yellow]\n"
         f"[bold white]状态:[/bold white] [bold green]✅ 启动成功![/bold green]\n"
-        # f"[bold white]浏览器工具:[/bold white] [bold {browser_style}]{browser_status}[/bold {browser_style}]\n\n"
         f"[dim]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/dim]\n"
         f"[bold white]💡 使用提示:[/bold white]\n"
         f"[dim]  • 输入问题开始对话\n"
-        f"  • 输入 [bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出\n"
+        f"  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出\n"
         f"  • 支持多轮对话和上下文记忆\n",
-        # f"  • 可以使用浏览器操作网页 (如果已启用)[/dim]",
         border_style="cyan",
         title="[bold green]启动完成[/bold green]",
         title_align="center",
@@ -405,7 +415,51 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
                 # 使用流式处理
                 async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
-                                                                   config={"recursion_limit": 150}):  # 增加递归限制到100
+                                                                   config={"recursion_limit": 150}):
+
+                    # 更完善的工具消息过滤逻辑
+                    should_skip = False
+
+                    # 1. 检查消息是否是 ToolMessage 类型
+                    if isinstance(message_chunk, ToolMessage):
+                        # 检查工具名称
+                        if hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
+                            should_skip = True
+                        # 检查工具调用ID中是否包含这些工具
+                        elif hasattr(message_chunk, 'tool_call_id'):
+                            # 可以根据需要添加更多检查逻辑
+                            should_skip = True
+
+                    # 2. 检查消息是否包含工具调用
+                    elif hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
+                        skip_tools = {'execute_command', 'curl'}
+                        if any(tool_call.get('name') in skip_tools for tool_call in message_chunk.tool_calls):
+                            should_skip = True
+
+                    # 3. 检查消息名称
+                    elif hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
+                        should_skip = True
+
+                    # 4. 检查消息内容是否包含工具响应的特征
+                    elif hasattr(message_chunk, 'content') and message_chunk.content:
+                        content_str = str(message_chunk.content)
+                        # 检查是否包含 HTTP 响应或命令执行的特征字符串
+                        if any(pattern in content_str for pattern in [
+                            '=== HTTP Response Info ===',
+                            '=== Response Body ===',
+                            'HTTP/',
+                            'curl:',
+                            'Connection #0 to host',
+                            '< content-type:',
+                            '< server:',
+                            'cdn-pullzone',
+                            'cdn-uid'
+                        ]):
+                            should_skip = True
+
+                    # 如果需要跳过，则继续下一个消息
+                    if should_skip:
+                        continue
 
                     if message_chunk.content:
                         # 收集响应消息
