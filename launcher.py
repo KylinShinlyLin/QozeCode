@@ -198,7 +198,7 @@ def main():
     except KeyboardInterrupt:
         console.print("\n👋 再见", style="dim")
     except Exception as e:
-        console.print(f"\n❌ 错误: {str(e)}", style="red")
+        console.print(f"\n❌ 错误: {str(e)}", style="red", markup=False)
 
 
 if __name__ == '__main__':

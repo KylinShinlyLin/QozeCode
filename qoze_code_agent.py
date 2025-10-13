@@ -39,13 +39,13 @@ from typing_extensions import TypedDict, Annotated
 
 from config_manager import ensure_model_credentials
 from shared_console import console
+from tools.common_tools import ask
 # 顶部导入区域
 from tools.execute_command_tool import execute_command, curl
-from tools.file_operations_tools import read_file, grep_search
+from tools.file_operations_tools import read_file, edit_file
 from tools.math_tools import multiply, add, divide
 # 导入工具函数
 from tools.tavily_search_tool import tavily_search
-from tools.common_tools import ask
 from utils.command_exec import run_command
 
 # # 导入浏览器工具
@@ -71,6 +71,9 @@ from utils.command_exec import run_command
 
 # 本地会话存储
 local_sessions = {}
+
+
+# toolkit = FileManagementToolkit()
 
 
 def clean_text(text: str) -> str:
@@ -111,7 +114,9 @@ llm_with_tools = None
 
 # Augment the LLM with tools
 # base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search, ask, confirm, request_auth]
-base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search, ask, curl]
+base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, edit_file, ask, curl]
+# base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
+# base_tools += toolkit.get_tools()
 # # 判断是否有浏览器操作依赖
 # if BROWSER_TOOLS_AVAILABLE:
 #     browser_tool_list = [
@@ -216,10 +221,12 @@ def llm_call(state: dict):
 
 ## 工作原则
 - 始终考虑当前的系统环境和资源限制
+- 文件编辑尽量有限使用提供个工具方式操作
 - 在执行可能影响系统的操作前，先评估风险
 - 优先使用适合当前操作系统的命令和工具
 - 提供准确、实用的建议和解决方案
 - 保持对用户数据和隐私的尊重
+- 我为了保证任务完成质量，需要对执行结果进行检查
 
 请根据用户的需求，充分利用你的工具和当前系统环境来提供最佳的帮助。
 ''')
