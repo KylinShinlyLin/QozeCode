@@ -25,6 +25,7 @@ import traceback
 import uuid
 from typing import Literal
 
+from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -42,7 +43,7 @@ from shared_console import console
 from tools.common_tools import ask
 # 顶部导入区域
 from tools.execute_command_tool import execute_command, curl
-from tools.file_operations_tools import read_file, edit_file
+from tools.file_operations_tools import read_file
 from tools.math_tools import multiply, add, divide
 # 导入工具函数
 from tools.tavily_search_tool import tavily_search
@@ -72,8 +73,9 @@ from utils.command_exec import run_command
 # 本地会话存储
 local_sessions = {}
 
-
-# toolkit = FileManagementToolkit()
+toolkit = FileManagementToolkit(
+    selected_tools=["write_file", "list_directory"],
+)
 
 
 def clean_text(text: str) -> str:
@@ -112,11 +114,9 @@ def clean_message(message):
 llm = None
 llm_with_tools = None
 
-# Augment the LLM with tools
-# base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, grep_search, ask, confirm, request_auth]
-base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, edit_file, ask, curl]
+base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, ask, curl]
 # base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
-# base_tools += toolkit.get_tools()
+base_tools += toolkit.get_tools()
 # # 判断是否有浏览器操作依赖
 # if BROWSER_TOOLS_AVAILABLE:
 #     browser_tool_list = [
@@ -321,18 +321,16 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
     combined_panel = Panel(
         f"[bold cyan]🚀 QozeCode Agent[/bold cyan]\n"
-        f"[dim]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/dim]\n\n"
         f"[bold white]模型:[/bold white] [bold yellow]{model_name or 'Unknown'}[/bold yellow]\n"
-        f"[bold white]状态:[/bold white] [bold green]✅ 启动成功![/bold green]\n"
-        f"[dim]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/dim]\n"
+        f"[bold white]状态:[/bold white] [bold green]启动成功 [/bold green] \n"
         f"[bold white]💡 使用提示:[/bold white]\n"
         f"[dim]  • 输入问题开始对话\n"
         f"  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出\n"
-        f"  • 支持多轮对话和上下文记忆\n",
+        f"  • 支持多轮对话和上下文记忆",
         border_style="cyan",
         title="[bold green]启动完成[/bold green]",
         title_align="center",
-        padding=(1, 2),
+        padding=(1, 1),
         expand=False
     )
     console.print(combined_panel)
