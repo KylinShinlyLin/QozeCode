@@ -84,9 +84,7 @@ curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/instal
 source ~/.qoze/qoze_env.sh && qoze
 ```
 
-<br>
-
-- 卸载 QozeCode
+- 卸载
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
