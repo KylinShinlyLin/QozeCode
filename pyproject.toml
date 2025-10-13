@@ -25,6 +25,7 @@ dependencies = [
     "langchain-openai",
     "lxml",
     "beautifulsoup4",
+    "langchain-community",
 ]
 
 [project.scripts]
@@ -35,4 +36,4 @@ py-modules = ["launcher", "qoze_code_agent", "model_initializer", "shared_consol
 packages = ["tools", "utils"]
 
 [project.optional-dependencies]
-browser = ["playwright", "langchain-community", "nest_asyncio"]
+browser = ["playwright", "nest_asyncio"]
