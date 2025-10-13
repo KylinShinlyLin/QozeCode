@@ -114,7 +114,7 @@ def clean_message(message):
 llm = None
 llm_with_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, read_file, ask, curl]
+base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
 # base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
 base_tools += toolkit.get_tools()
 # # 判断是否有浏览器操作依赖
@@ -222,6 +222,8 @@ def llm_call(state: dict):
 ## 工作原则
 - 不要去虚构不存在的内容
 - 编程场景，一般你先呈现解决方案（不直接写入文件），待询问我我是否要应用后再操作
+- 或者避免大量 token 的浪费，需要查找的内容，尽量避免读取整个文件
+- 写入修改文件的时候也避免整个文件重写，可以使用 grep + sed 组合来定位和修改特定内容
 - 始终考虑当前的系统环境和资源限制
 - 文件编辑尽量有限使用提供个工具方式操作
 - 在执行可能影响系统的操作前，先评估风险
