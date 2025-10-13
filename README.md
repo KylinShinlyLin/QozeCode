@@ -72,7 +72,7 @@
 
 ### 方式一：通过脚本+源码自动构建
 
-- 1、下载源码在本地构建：二进制文件
+- 1、安装 or 更新 直接执行
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
