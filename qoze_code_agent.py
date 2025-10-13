@@ -74,7 +74,7 @@ from utils.command_exec import run_command
 local_sessions = {}
 
 toolkit = FileManagementToolkit(
-    selected_tools=["write_file", "list_directory"],
+    selected_tools=["list_directory"],
 )
 
 
