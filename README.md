@@ -5,19 +5,21 @@
 ```QozeCode Agent``` 是一个功能强大的AI编程助手，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
 
 - **多模型支持**: 支持 ```Claude-4、GPT-5、DeepSeek``` 等多种主流AI模型，Gemini 和 Ollama 支持正在开发中
+
 #### 📦 目前集成模型厂商
 
-| 模型名称       | 厂商                   | 状态 | 说明 |
-|----------|----------------------|--------|------|
-| Claude-4 | Anthropic (AWS Bedrock) | 🟢 可用 | 通过 AWS Bedrock 集成 |
-| GPT-5    | OpenAI 官方            | 🟢 可用 | 支持代码模式和普通模式 |
-| DeepSeek | DeepSeek 官方          | 🟢 可用 | 支持 DeepSeek Chat V3.2-Exp |
-| Gemini   | Google Vertex AI     | 🟡 开发中 | 通过 Google Cloud Vertex AI 集成 |
-| Ollama   | 本地模型         | 🔴 计划中 | 支持本地部署的自有模型 |
+| 模型名称     | 厂商                      | 状态     | 说明                           |
+|----------|-------------------------|--------|------------------------------|
+| Claude-4 | Anthropic (AWS Bedrock) | 🟢 可用  | 通过 AWS Bedrock 集成            |
+| GPT-5    | OpenAI 官方               | 🟢 可用  | 支持代码模式和普通模式                  |
+| DeepSeek | DeepSeek 官方             | 🟢 可用  | 支持 DeepSeek Chat V3.2-Exp    |
+| Gemini   | Google Vertex AI        | 🟡 开发中 | 通过 Google Cloud Vertex AI 集成 |
+| Ollama   | 本地模型                    | 🔴 计划中 | 支持本地部署的自有模型                  |
 
 > 为什么不全模型集成？
 >> 在测试 Agent 期间发现，全模型支持，必然会放弃一些高阶模型本身的能力而去兼容一些能力不足的模型，为了保证最佳使用体验，通过个人体验分析后，选择性的择优一些模型集成。
 > > 如果您有特殊的需要可以提出 Issues ，我会尽快和您联系沟通
+
 ### 核心功能特性
 
 #### 📊 办公自动化
