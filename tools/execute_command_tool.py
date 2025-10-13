@@ -177,7 +177,7 @@ def execute_command(command: str, timeout: int = 3600, silent: bool = False) -> 
             if return_code == 0:
                 final_panel = Panel(
                     f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n"
-                    f"[bold green]执行成功![/bold green] (耗时: {execution_time:.2f}秒)",
+                    f"✅ [bold green]执行成功![/bold green] (耗时: {execution_time:.2f}秒)",
                     title="[bold yellow]命令执行 - 成功[/bold yellow]",
                     border_style="yellow",
                     padding=(0, 2)
