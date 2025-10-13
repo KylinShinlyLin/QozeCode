@@ -72,13 +72,13 @@
 
 ### 方式一：通过脚本+源码自动构建
 
-- 1、安装 or 更新 直接执行
+- 安装 or 更新 直接执行
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
 ```
 
-- 2、 构建完成后手动添加到环境变量中
+- 添加环境变量，方便使用
 
 ```bash
 source ~/.qoze/qoze_env.sh && qoze
