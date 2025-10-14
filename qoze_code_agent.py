@@ -43,7 +43,6 @@ from shared_console import console
 from tools.common_tools import ask
 # 顶部导入区域
 from tools.execute_command_tool import execute_command, curl
-from tools.file_operations_tools import read_file
 from tools.math_tools import multiply, add, divide
 # 导入工具函数
 from tools.tavily_search_tool import tavily_search
@@ -162,6 +161,7 @@ def llm_call(state: dict):
     import platform
     import os
     import socket
+    import subprocess
 
     messages = state["messages"]
     current_time = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -188,8 +188,54 @@ def llm_call(state: dict):
         shell = os.getenv('SHELL', 'unknown')
         home_dir = os.getenv('HOME', 'unknown')
 
-    except Exception as e:
-        traceback.print_exc()
+        # 获取当前目录树结构（5级深度）
+        try:
+            # 定义要排除的目录列表
+            exclude_dirs = [
+                'dist', 'build', 'target',  # 构建产物
+                'node_modules', '.npm',  # Node.js
+                '__pycache__', '.pytest_cache', '.mypy_cache',  # Python
+                '.git', '.svn', '.hg',  # 版本控制
+                '.vscode', '.idea',  # IDE配置
+                'venv', 'env', '.env',  # Python虚拟环境
+                'vendor',  # 依赖包
+                'coverage', '.coverage',  # 测试覆盖率
+                'logs', 'log',  # 日志文件
+                'tmp', 'temp', '.tmp',  # 临时文件
+                '.DS_Store'  # macOS系统文件
+            ]
+
+            if system_info == "Windows":
+                # Windows 使用 tree 命令
+                tree_result = subprocess.run(['tree', '/F', '/A'],
+                                             capture_output=True, text=True, cwd=current_dir)
+            else:
+                # Unix-like 系统使用 tree 命令，如果没有则使用 find
+                try:
+                    # 使用 -I 参数排除指定目录
+                    exclude_pattern = '|'.join(exclude_dirs)
+                    tree_result = subprocess.run(['tree', '-L', '8', '-a', '-I', exclude_pattern],
+                                                 capture_output=True, text=True, cwd=current_dir)
+                except FileNotFoundError:
+                    # 如果没有 tree 命令，使用 find 作为备选，并手动过滤
+                    find_cmd = ['find', '.', '-maxdepth', '8']
+                    # 为每个排除目录添加 -not -path 条件
+                    for exclude_dir in exclude_dirs:
+                        find_cmd.extend(['-not', '-path', f'*/{exclude_dir}/*'])
+                        find_cmd.extend(['-not', '-name', exclude_dir])
+                    find_cmd.extend(['-type', 'd'])
+
+                    tree_result = subprocess.run(find_cmd, capture_output=True, text=True, cwd=current_dir)
+
+            if tree_result.returncode == 0:
+                directory_tree = tree_result.stdout.strip()
+            else:
+                directory_tree = "无法获取目录结构"
+        except Exception:
+            directory_tree = "无法获取目录结构"
+
+    except Exception:
+        # traceback.print_exc()
         # 如果获取系统信息失败，使用基本信息
         system_info = platform.system()
         system_version = "unknown"
@@ -199,6 +245,7 @@ def llm_call(state: dict):
 
         shell = home_dir = "unknown"
         machine_type = processor = "unknown"
+        directory_tree = "无法获取目录结构"
 
     # 确保 SystemMessage 在开头
     system_msg = SystemMessage(
@@ -231,6 +278,9 @@ def llm_call(state: dict):
 - 提供准确、实用的建议和解决方案
 - 保持对用户数据和隐私的尊重
 - 我为了保证任务完成质量，需要对执行结果进行检查
+
+## 当前目录结构
+{directory_tree}
 
 请根据用户的需求，充分利用你的工具和当前系统环境来提供最佳的帮助。
 ''')
