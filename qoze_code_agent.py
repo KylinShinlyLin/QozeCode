@@ -69,9 +69,10 @@ from utils.command_exec import run_command
 # 本地会话存储
 local_sessions = {}
 
-toolkit = FileManagementToolkit(
-    selected_tools=["list_directory"],
-)
+
+# toolkit = FileManagementToolkit(
+#     selected_tools=["list_directory"],
+# )
 
 
 def clean_text(text: str) -> str:
@@ -112,7 +113,7 @@ llm_with_tools = None
 
 base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
 # base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
-base_tools += toolkit.get_tools()
+# base_tools += toolkit.get_tools()
 # # 判断是否有浏览器操作依赖
 # if BROWSER_TOOLS_AVAILABLE:
 #     browser_tool_list = [
