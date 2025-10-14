@@ -476,49 +476,51 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
                                                                    config={"recursion_limit": 150}):
 
+                    # print(message_chunk)
+                    # print(metadata)
                     # 更完善的工具消息过滤逻辑
-                    should_skip = False
+                    # should_skip = False
 
                     # 1. 检查消息是否是 ToolMessage 类型
                     if isinstance(message_chunk, ToolMessage):
                         # 检查工具名称
                         if hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
-                            should_skip = True
+                            continue
                         # 检查工具调用ID中是否包含这些工具
                         elif hasattr(message_chunk, 'tool_call_id'):
                             # 可以根据需要添加更多检查逻辑
-                            should_skip = True
+                            continue
 
-                    # 2. 检查消息是否包含工具调用
-                    elif hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
-                        skip_tools = {'execute_command', 'curl'}
-                        if any(tool_call.get('name') in skip_tools for tool_call in message_chunk.tool_calls):
-                            should_skip = True
+                    # # 2. 检查消息是否包含工具调用
+                    # elif hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
+                    #     skip_tools = {'execute_command', 'curl'}
+                    #     if any(tool_call.get('name') in skip_tools for tool_call in message_chunk.tool_calls):
+                    #         should_skip = True
 
-                    # 3. 检查消息名称
-                    elif hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
-                        should_skip = True
+                    # # 3. 检查消息名称
+                    # elif hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
+                    #     should_skip = True
 
                     # 4. 检查消息内容是否包含工具响应的特征
-                    elif hasattr(message_chunk, 'content') and message_chunk.content:
-                        content_str = str(message_chunk.content)
-                        # 检查是否包含 HTTP 响应或命令执行的特征字符串
-                        if any(pattern in content_str for pattern in [
-                            '=== HTTP Response Info ===',
-                            '=== Response Body ===',
-                            'HTTP/',
-                            'curl:',
-                            'Connection #0 to host',
-                            '< content-type:',
-                            '< server:',
-                            'cdn-pullzone',
-                            'cdn-uid'
-                        ]):
-                            should_skip = True
+                    # elif hasattr(message_chunk, 'content') and message_chunk.content:
+                    #     content_str = str(message_chunk.content)
+                    #     # 检查是否包含 HTTP 响应或命令执行的特征字符串
+                    #     if any(pattern in content_str for pattern in [
+                    #         '=== HTTP Response Info ===',
+                    #         '=== Response Body ===',
+                    #         'HTTP/',
+                    #         'curl:',
+                    #         'Connection #0 to host',
+                    #         '< content-type:',
+                    #         '< server:',
+                    #         'cdn-pullzone',
+                    #         'cdn-uid'
+                    #     ]):
+                    #         should_skip = True
 
                     # 如果需要跳过，则继续下一个消息
-                    if should_skip:
-                        continue
+                    # if should_skip:
+                    #     continue
 
                     if message_chunk.content:
                         # 收集响应消息
@@ -601,7 +603,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                                         padding=(0, 2)
                                     )
 
-                            # 在流式处理中使用新的Panel创建函数
                             # 实时更新显示
                             if response_text:
                                 try:
