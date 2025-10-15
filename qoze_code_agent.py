@@ -45,6 +45,7 @@ from tools.execute_command_tool import execute_command, curl
 from tools.math_tools import multiply, add, divide
 from tools.tavily_search_tool import tavily_search
 from utils.command_exec import run_command
+from utils.directory_config import get_exclude_directories, get_scan_config, EXCLUDE_DIRECTORIES
 
 # # 导入浏览器工具
 # try:
@@ -187,54 +188,72 @@ def llm_call(state: dict):
         shell = os.getenv('SHELL', 'unknown')
         home_dir = os.getenv('HOME', 'unknown')
 
-        # 获取当前目录树结构（5级深度）
+        # 获取当前目录树结构（智能限制深度和长度）
         try:
-            # 定义要排除的目录列表
-            exclude_dirs = [
-                'dist', 'build', 'target',  # 构建产物
-                'node_modules', '.npm',  # Node.js
-                '__pycache__', '.pytest_cache', '.mypy_cache',  # Python
-                '.git', '.svn', '.hg',  # 版本控制
-                '.vscode', '.idea',  # IDE配置
-                'venv', 'env', '.env',  # Python虚拟环境
-                'vendor',  # 依赖包
-                'coverage', '.coverage',  # 测试覆盖率
-                'logs', 'log',  # 日志文件
-                'tmp', 'temp', '.tmp',  # 临时文件
-                '.DS_Store'  # macOS系统文件
-            ]
+
+            # 智能判断目录深度：根据当前目录路径决定扫描深度
+            path_depth = len(current_dir.split(os.sep))
+            if path_depth <= 3:  # 接近根目录
+                max_depth = 3
+            elif path_depth <= 5:  # 中等深度
+                max_depth = 4
+            else:  # 深层目录
+                max_depth = 5
+
+            # 设置最大输出长度限制（约2000个字符，避免token溢出）
+            MAX_TREE_LENGTH = 3000
 
             if system_info == "Windows":
-                # Windows 使用 tree 命令
-                tree_result = subprocess.run(['tree', '/F', '/A'],
-                                             capture_output=True, text=True, cwd=current_dir)
+                # Windows 使用 tree 命令，限制深度
+                tree_result = subprocess.run(['tree', '/F', '/A', f'/L:{max_depth}'],
+                                             capture_output=True, text=True, cwd=current_dir, timeout=10)
             else:
                 # Unix-like 系统使用 tree 命令，如果没有则使用 find
                 try:
-                    # 使用 -I 参数排除指定目录
-                    exclude_pattern = '|'.join(exclude_dirs)
-                    tree_result = subprocess.run(['tree', '-L', '6', '-a', '-I', exclude_pattern],
-                                                 capture_output=True, text=True, cwd=current_dir)
+                    # 使用 -I 参数排除指定目录，限制深度
+                    exclude_pattern = '|'.join(EXCLUDE_DIRECTORIES)
+                    tree_result = subprocess.run(['tree', '-L', str(max_depth), '-a', '-I', exclude_pattern],
+                                                 capture_output=True, text=True, cwd=current_dir, timeout=10)
                 except FileNotFoundError:
                     # 如果没有 tree 命令，使用 find 作为备选，并手动过滤
-                    find_cmd = ['find', '.', '-maxdepth', '6']
+                    find_cmd = ['find', '.', '-maxdepth', str(max_depth)]
                     # 为每个排除目录添加 -not -path 条件
-                    for exclude_dir in exclude_dirs:
+                    for exclude_dir in EXCLUDE_DIRECTORIES:
                         find_cmd.extend(['-not', '-path', f'*/{exclude_dir}/*'])
                         find_cmd.extend(['-not', '-name', exclude_dir])
                     find_cmd.extend(['-type', 'd'])
 
-                    tree_result = subprocess.run(find_cmd, capture_output=True, text=True, cwd=current_dir)
+                    tree_result = subprocess.run(find_cmd, capture_output=True, text=True, cwd=current_dir, timeout=10)
 
             if tree_result.returncode == 0:
-                directory_tree = tree_result.stdout.strip()
+                raw_tree = tree_result.stdout.strip()
+
+                # 智能截断：如果输出过长，进行截断并添加提示
+                if len(raw_tree) > MAX_TREE_LENGTH:
+                    # 按行分割，保留前面的行
+                    lines = raw_tree.split('\n')
+                    truncated_lines = []
+                    current_length = 0
+
+                    for line in lines:
+                        if current_length + len(line) + 1 > MAX_TREE_LENGTH - 100:  # 预留空间给提示信息
+                            break
+                        truncated_lines.append(line)
+                        current_length += len(line) + 1
+
+                    directory_tree = '\n'.join(truncated_lines)
+                    directory_tree += f"\n\n... (目录结构过大，已截断显示前 {len(truncated_lines)} 行)"
+                    directory_tree += f"\n💡 提示: 当前在 {current_dir}，建议在具体项目目录中执行以获得更详细的结构信息"
+                else:
+                    directory_tree = raw_tree
             else:
                 directory_tree = "无法获取目录结构"
+        except subprocess.TimeoutExpired:
+            directory_tree = "目录结构获取超时（目录过大）"
         except Exception:
             directory_tree = "无法获取目录结构"
 
     except Exception:
-        # traceback.print_exc()
         # 如果获取系统信息失败，使用基本信息
         system_info = platform.system()
         system_version = "unknown"
