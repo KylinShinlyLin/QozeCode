@@ -18,26 +18,6 @@ START_TIME = time.perf_counter()
 LOG_DIR = os.path.expanduser("~/.qoze")
 LOG_FILE = os.path.join(LOG_DIR, "launcher.log")
 
-# def _write_log_line(msg: str):
-#     try:
-#         os.makedirs(LOG_DIR, exist_ok=True)
-#         with open(LOG_FILE, "a", encoding="utf-8") as f:
-#             f.write(f"{datetime.now().isoformat()} {msg}\n")
-#     except Exception:
-#         pass
-#
-#
-# def log(msg: str):
-#     elapsed = time.perf_counter() - START_TIME
-#     line = f"[{elapsed:0.3f}s] {msg}"
-#     _write_log_line(line)
-#     try:
-#         console.log(line)
-#     except Exception:
-#         print(line)
-
-
-# 第三方依赖导入区（记录导入耗时）
 try:
     t_import = time.perf_counter()
     import inquirer
@@ -67,12 +47,8 @@ credentials_path=
 """
 
 
-# 函数 print_banner（记录绘制耗时）
 def print_banner():
     """打印ASCII艺术风格的启动横幅"""
-    t = time.perf_counter()
-    # log("开始绘制启动横幅")
-    # ASCII艺术风格的 QOZE CODE
     ascii_art = """
 ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗
 ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝
@@ -104,7 +80,7 @@ def get_model_choice() -> Optional[str]:
     # 定义选项 - 简洁对齐
     choices = [
         "Claude-4      Anthropic",
-        # "Gemini        Google GCP",
+        "Gemini        Google GCP",
         "GPT-5         OpenAI",
         # "GPT-5-Codex   OpenAI",
         "DeepSeek      V3.2-Exp",

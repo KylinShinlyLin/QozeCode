@@ -522,6 +522,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                     # 使用流式处理
                     async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
                                                                        config={"recursion_limit": 150}):
+                        # print(message_chunk)
                         # 更新进度状态
                         if hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
                             # 检测到工具调用，更新进度描述
