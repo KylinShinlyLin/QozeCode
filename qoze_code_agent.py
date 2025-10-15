@@ -388,13 +388,41 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
     while True:
         try:
-            # 获取用户输入，带有美化的提示符和占位符
-            user_input = Prompt.ask(
-                "[bold cyan]您[/bold cyan]",
-                console=console,
-                default="",
-                show_default=False
-            ).strip()
+            # 使用更安全的输入方式，完全避免提示符被删除的问题
+            import readline
+            import sys
+
+            try:
+                # 清除任何可能的readline历史干扰
+                if hasattr(readline, 'clear_history'):
+                    readline.clear_history()
+
+                # 设置readline配置，确保提示符安全
+                if hasattr(readline, 'set_startup_hook'):
+                    readline.set_startup_hook(None)
+
+                # 先显示提示符，然后在新行获取输入
+                console.print("[bold cyan]您[/bold cyan]:")
+                user_input = input().strip()
+
+                # 清理可能的编码问题
+                user_input = clean_text(user_input)
+
+            except (UnicodeDecodeError, UnicodeError, KeyboardInterrupt) as e:
+                if isinstance(e, KeyboardInterrupt):
+                    raise e  # 重新抛出键盘中断
+                # 如果遇到编码错误，回退到Rich的Prompt.ask
+                console.print("\n")  # 换行
+                try:
+                    user_input = Prompt.ask(
+                        "[bold cyan]您[/bold cyan]",
+                        console=console,
+                        default="",
+                        show_default=False
+                    ).strip()
+                    user_input = clean_text(user_input)
+                except Exception:
+                    user_input = ""
 
             # 优雅处理空输入：静默跳过，保持界面整洁
             if not user_input:
@@ -451,11 +479,11 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             }
 
             # 使用Live来实时更新显示
-            with Live(console=console, refresh_per_second=4) as live:  # 降低刷新频率从10到4
+            with Live(console=console, refresh_per_second=30) as live:  # 降低刷新频率从10到4
                 # 收集完整的响应消息
                 response_messages = []
                 last_update_time = 0
-                update_interval = 0.25  # 最小更新间隔250ms，避免过于频繁的更新
+                update_interval = 0.01  # 最小更新间隔250ms，避免过于频繁的更新
                 current_response_text = ""  # 当前流式响应的文本
                 complete_responses = []  # 存储已完成的响应段落
 
@@ -589,7 +617,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                             complete_responses = []
 
                             # new_streaming_markdown = Markdown("")
-                            live.update("\n")
+                            # live.update("\n")
 
                         except Exception as e:
                             console.print(f"创建完整回复Panel时出错: {str(e)}", style="red")

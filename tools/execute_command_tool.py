@@ -61,6 +61,7 @@ def execute_command(command: str, timeout: int = 3600) -> str:
                 SpinnerColumn(),
                 TextColumn("[bold blue]{task.description}"),
                 TimeElapsedColumn(),
+                refresh_per_second=30,
                 console=console,
                 transient=False  # 保留进度条直到完成
         ) as progress:
@@ -110,10 +111,10 @@ def execute_command(command: str, timeout: int = 3600) -> str:
                 # 更新最终状态
                 if return_code == 0:
                     progress.update(task,
-                                    description=f"  ✅ [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                                    description=f"  ✅ [cyan] {command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
                 else:
                     progress.update(task,
-                                    description=f"  ❌ [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                                    description=f"  ❌ [cyan] {command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
 
                 # 收集完整输出
                 full_output = '\n'.join(output_lines)
