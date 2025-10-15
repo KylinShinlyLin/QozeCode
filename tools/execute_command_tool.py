@@ -110,10 +110,10 @@ def execute_command(command: str, timeout: int = 3600) -> str:
                 # 更新最终状态
                 if return_code == 0:
                     progress.update(task,
-                                    description=f"  [green]✅ 执行成功:[green] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                                    description=f"  [green]✅[green] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
                 else:
                     progress.update(task,
-                                    description=f"  [red]❌ 执行失败:[red] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                                    description=f"  [red]❌[red] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
 
                 # 收集完整输出
                 full_output = '\n'.join(output_lines)
