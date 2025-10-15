@@ -35,6 +35,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import TypedDict, Annotated
 
 from config_manager import ensure_model_credentials
@@ -478,180 +479,204 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 "llm_calls": conversation_state["llm_calls"]
             }
 
-            # 使用Live来实时更新显示
-            with Live(console=console, refresh_per_second=30) as live:  # 降低刷新频率从10到4
-                # 收集完整的响应消息
-                response_messages = []
-                last_update_time = 0
-                update_interval = 0.01  # 最小更新间隔250ms，避免过于频繁的更新
-                current_response_text = ""  # 当前流式响应的文本
-                complete_responses = []  # 存储已完成的响应段落
+            # 创建进度指示器
+            with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    TimeElapsedColumn(),
+                    refresh_per_second=20,
+                    console=console,
+                    transient=True  # 完成后自动清除
+            ) as progress:
+                # 添加任务进度
+                task_id = progress.add_task("🚀 正在处理您的请求...", total=None)
 
-                # 使用流式处理
-                async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
-                                                                   config={"recursion_limit": 150}):
-                    # print(message_chunk)
-                    # 1. 检查消息是否是 ToolMessage 类型
-                    if isinstance(message_chunk, ToolMessage):
-                        # 检查工具名称
-                        if hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
-                            continue
-                        # 检查工具调用ID中是否包含这些工具
-                        elif hasattr(message_chunk, 'tool_call_id'):
-                            # 可以根据需要添加更多检查逻辑
-                            continue
+                # 使用Live来实时更新显示
+                with Live(console=console, refresh_per_second=30) as live:  # 降低刷新频率从10到4
+                    # 收集完整的响应消息
+                    response_messages = []
+                    last_update_time = 0
+                    update_interval = 0.01  # 最小更新间隔250ms，避免过于频繁的更新
+                    current_response_text = ""  # 当前流式响应的文本
+                    complete_responses = []  # 存储已完成的响应段落
 
-                    # 检查是否有 finish_reason
-                    has_finish_reason = False
-                    if hasattr(message_chunk, 'response_metadata') and message_chunk.response_metadata:
-                        if 'finish_reason' in message_chunk.response_metadata:
-                            live.update("")
-                            has_finish_reason = True
+                    # 使用流式处理
+                    async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
+                                                                       config={"recursion_limit": 150}):
+                        # 更新进度状态
+                        if hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
+                            # 检测到工具调用，更新进度描述
+                            tool_names = [call['name'] for call in message_chunk.tool_calls]
+                            progress.update(task_id, description=f"🔧 正在执行工具: {', '.join(tool_names)}")
+                        elif message_chunk.content:
+                            # 检测到内容生成，更新进度描述
+                            progress.update(task_id, description="💭 正在生成回复...")
 
-                    if message_chunk.content:
-                        # 收集响应消息
-                        response_messages.append(message_chunk)
-                        # 提取文本内容
-                        chunk_text = ""
-                        if isinstance(message_chunk.content, list):
-                            for content_item in message_chunk.content:
-                                if isinstance(content_item, dict) and 'type' in content_item and content_item.get(
-                                        'type') == 'text':
-                                    text_content = content_item.get('text', '')
-                                    # 清理文本内容
-                                    text_content = clean_text(text_content)
-                                    chunk_text += text_content
-                        elif isinstance(message_chunk.content, str):
-                            text_content = message_chunk.content
-                            # 清理文本内容
-                            text_content = clean_text(text_content)
-                            chunk_text += text_content
+                        # print(message_chunk)
+                        # 1. 检查消息是否是 ToolMessage 类型
+                        if isinstance(message_chunk, ToolMessage):
+                            # 检查工具名称
+                            if hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
+                                continue
+                            # 检查工具调用ID中是否包含这些工具
+                            elif hasattr(message_chunk, 'tool_call_id'):
+                                # 可以根据需要添加更多检查逻辑
+                                continue
 
-                        # 累积当前响应文本
-                        current_response_text += chunk_text
+                        # 检查是否有 finish_reason
+                        has_finish_reason = False
+                        if hasattr(message_chunk, 'response_metadata') and message_chunk.response_metadata:
+                            if 'finish_reason' in message_chunk.response_metadata:
+                                live.update("")
+                                has_finish_reason = True
 
-                        # 防抖机制：限制更新频率
-                        current_time = time.time()
-                        if current_time - last_update_time >= update_interval:
-                            # 在文件顶部，clean_text函数之后添加这些辅助函数
-                            def get_terminal_display_lines():
-                                """获取终端可用于显示内容的行数"""
-                                try:
-                                    terminal_height = console.size.height
-                                    # 预留空间给Panel边框(2行)、标题(1行)、padding(2行)、其他UI元素(3行)
-                                    return max(10, terminal_height - 8)
-                                except:
-                                    # 如果获取终端大小失败，使用默认值
-                                    return 20
+                        if message_chunk.content:
+                            # 收集响应消息
+                            response_messages.append(message_chunk)
+                            # 提取文本内容
+                            chunk_text = ""
+                            if isinstance(message_chunk.content, list):
+                                for content_item in message_chunk.content:
+                                    if isinstance(content_item, dict) and 'type' in content_item and content_item.get(
+                                            'type') == 'text':
+                                        text_content = content_item.get('text', '')
+                                        # 清理文本内容
+                                        text_content = clean_text(text_content)
+                                        chunk_text += text_content
+                            elif isinstance(message_chunk.content, str):
+                                text_content = message_chunk.content
+                                # 清理文本内容
+                                text_content = clean_text(text_content)
+                                chunk_text += text_content
 
-                            # 添加滚动显示的辅助函数
-                            def create_scrollable_markdown(text: str, show_scroll_info: bool = True) -> Markdown:
-                                """创建可滚动的Panel，自动显示最新内容"""
-                                try:
-                                    if not text.strip():
-                                        return Markdown("正在思考...", style="blue")
+                            # 累积当前响应文本
+                            current_response_text += chunk_text
 
-                                    max_lines = get_terminal_display_lines()
-                                    lines = text.split('\n')
+                            # 防抖机制：限制更新频率
+                            current_time = time.time()
+                            if current_time - last_update_time >= update_interval:
+                                # 在文件顶部，clean_text函数之后添加这些辅助函数
+                                def get_terminal_display_lines():
+                                    """获取终端可用于显示内容的行数"""
+                                    try:
+                                        terminal_height = console.size.height
+                                        # 预留空间给Panel边框(2行)、标题(1行)、padding(2行)、其他UI元素(3行)
+                                        return max(10, terminal_height - 8)
+                                    except:
+                                        # 如果获取终端大小失败，使用默认值
+                                        return 20
 
-                                    if len(lines) <= max_lines:
-                                        display_text = text
-                                    else:
-                                        if show_scroll_info:
-                                            # 显示滚动指示器和最新内容
-                                            total_lines = len(lines)
-                                            scroll_indicator = f"内容较长，显示最新 {max_lines} 行 (共 {total_lines} 行)"
-                                            display_lines = [scroll_indicator, ""] + lines[-max_lines:]
-                                            display_text = '\n'.join(display_lines)
+                                # 添加滚动显示的辅助函数
+                                def create_scrollable_markdown(text: str, show_scroll_info: bool = True) -> Markdown:
+                                    """创建可滚动的Panel，自动显示最新内容"""
+                                    try:
+                                        if not text.strip():
+                                            return Markdown("正在思考...", style="blue")
+
+                                        max_lines = get_terminal_display_lines()
+                                        lines = text.split('\n')
+
+                                        if len(lines) <= max_lines:
+                                            display_text = text
                                         else:
-                                            # 不显示滚动指示器，直接显示最新内容
-                                            display_text = '\n'.join(lines[-max_lines:])
-                                    return Markdown(display_text, style="blue", justify="left", hyperlinks=True)
-                                except Exception as e:
-                                    # 如果创建Panel失败，返回简单的错误Panel
-                                    return Markdown(f"显示错误: {str(e)}", style="red")
+                                            if show_scroll_info:
+                                                # 显示滚动指示器和最新内容
+                                                total_lines = len(lines)
+                                                scroll_indicator = f"内容较长，显示最新 {max_lines} 行 (共 {total_lines} 行)"
+                                                display_lines = [scroll_indicator, ""] + lines[-max_lines:]
+                                                display_text = '\n'.join(display_lines)
+                                            else:
+                                                # 不显示滚动指示器，直接显示最新内容
+                                                display_text = '\n'.join(lines[-max_lines:])
+                                        return Markdown(display_text, style="blue", justify="left", hyperlinks=True)
+                                    except Exception as e:
+                                        # 如果创建Panel失败，返回简单的错误Panel
+                                        return Markdown(f"显示错误: {str(e)}", style="red")
 
-                            # 实时更新显示
-                            if current_response_text:
-                                try:
-                                    # 构建完整的显示文本（包括之前完成的响应）
-                                    full_display_text = ""
+                                # 实时更新显示
+                                if current_response_text:
+                                    try:
+                                        # 构建完整的显示文本（包括之前完成的响应）
+                                        full_display_text = ""
 
-                                    # 添加已完成的响应
-                                    for i, completed_text in enumerate(complete_responses):
-                                        full_display_text += completed_text
-                                        if i < len(complete_responses) - 1:
+                                        # 添加已完成的响应
+                                        for i, completed_text in enumerate(complete_responses):
+                                            full_display_text += completed_text
+                                            if i < len(complete_responses) - 1:
+                                                full_display_text += "\n---\n"
+
+                                        # 添加当前正在流式的响应
+                                        if complete_responses and current_response_text:
                                             full_display_text += "\n---\n"
+                                        full_display_text += current_response_text
 
-                                    # 添加当前正在流式的响应
-                                    if complete_responses and current_response_text:
-                                        full_display_text += "\n---\n"
-                                    full_display_text += current_response_text
+                                        updated_markdown = create_scrollable_markdown(full_display_text)
+                                        live.update(updated_markdown)
+                                        last_update_time = current_time
+                                    except Exception as e:
+                                        # 如果更新失败，记录错误但继续处理
+                                        console.print(f"更新显示时出错: {str(e)}", style="red")
 
-                                    updated_markdown = create_scrollable_markdown(full_display_text)
-                                    live.update(updated_markdown)
-                                    last_update_time = current_time
-                                except Exception as e:
-                                    # 如果更新失败，记录错误但继续处理
-                                    console.print(f"更新显示时出错: {str(e)}", style="red")
+                        # 如果检测到 finish_reason，创建完整的 Panel
+                        if has_finish_reason and current_response_text.strip():
+                            try:
+                                # 将当前响应添加到完成列表
+                                complete_responses.append(current_response_text)
 
-                    # 如果检测到 finish_reason，创建完整的 Panel
-                    if has_finish_reason and current_response_text.strip():
-                        try:
-                            # 将当前响应添加到完成列表
-                            complete_responses.append(current_response_text)
+                                # 构建包含所有已完成响应的显示文本
+                                all_completed_text = ""
+                                for i, completed_text in enumerate(complete_responses):
+                                    all_completed_text += completed_text
+                                    if i < len(complete_responses) - 1:
+                                        all_completed_text += "\n\n---\n\n"
 
-                            # 构建包含所有已完成响应的显示文本
-                            all_completed_text = ""
-                            for i, completed_text in enumerate(complete_responses):
-                                all_completed_text += completed_text
-                                if i < len(complete_responses) - 1:
-                                    all_completed_text += "\n\n---\n\n"
+                                complete_markdown = Markdown(current_response_text, style="blue", justify="left",
+                                                             hyperlinks=True)
+                                console.print(complete_markdown)
 
-                            complete_markdown = Markdown(current_response_text, style="blue", justify="left",
-                                                         hyperlinks=True)
-                            console.print(complete_markdown)
+                                # 重置当前响应文本，准备接收下一段流式内容
+                                current_response_text = ""
+                                complete_responses = []
 
-                            # 重置当前响应文本，准备接收下一段流式内容
-                            current_response_text = ""
-                            complete_responses = []
+                                # new_streaming_markdown = Markdown("")
+                                # live.update("\n")
 
-                            # new_streaming_markdown = Markdown("")
-                            # live.update("\n")
+                            except Exception as e:
+                                console.print(f"创建完整回复Panel时出错: {str(e)}", style="red")
 
-                        except Exception as e:
-                            console.print(f"创建完整回复Panel时出错: {str(e)}", style="red")
+                    # 最终处理：如果还有未完成的响应文本
+                    if current_response_text.strip():
+                        complete_responses.append(current_response_text)
 
-                # 最终处理：如果还有未完成的响应文本
-                if current_response_text.strip():
-                    complete_responses.append(current_response_text)
+                    # 合并所有响应文本
+                    response_text = "\n\n---\n\n".join(complete_responses) if len(complete_responses) > 1 else (
+                        complete_responses[0] if complete_responses else "")
 
-                # 合并所有响应文本
-                response_text = "\n\n---\n\n".join(complete_responses) if len(complete_responses) > 1 else (
-                    complete_responses[0] if complete_responses else "")
+                    # 显示最终的完整回复
+                    if response_text:
+                        # try:
+                        #     final_complete_markdown = Markdown(response_text, style="blue", justify="left")
+                        #     live.update(final_complete_markdown)
+                        #
+                        # except Exception as e:
+                        #     console.print(f"显示最终完整回复时出错: {str(e)}", style="red")
 
-                # 显示最终的完整回复
-                if response_text:
-                    # try:
-                    #     final_complete_markdown = Markdown(response_text, style="blue", justify="left")
-                    #     live.update(final_complete_markdown)
-                    #
-                    # except Exception as e:
-                    #     console.print(f"显示最终完整回复时出错: {str(e)}", style="red")
+                        from langchain_core.messages import AIMessage
+                        # 创建AI消息对象，只包含文本内容
+                        ai_response = AIMessage(content=response_text)
+                        # 更新对话状态，使用简化的响应消息
+                        conversation_state["messages"].extend([user_message, ai_response])
+                    else:
+                        # 如果没有文本内容，仍然保存原始响应
+                        conversation_state["messages"].extend([user_message] + response_messages)
 
-                    from langchain_core.messages import AIMessage
-                    # 创建AI消息对象，只包含文本内容
-                    ai_response = AIMessage(content=response_text)
-                    # 更新对话状态，使用简化的响应消息
-                    conversation_state["messages"].extend([user_message, ai_response])
-                else:
-                    # 如果没有文本内容，仍然保存原始响应
-                    conversation_state["messages"].extend([user_message] + response_messages)
+                    conversation_state["llm_calls"] += 1
 
-                conversation_state["llm_calls"] += 1
+                    # 标记任务完成
+                    progress.update(task_id, description="✅ 任务完成", completed=True)
 
-                # 实时保存状态到本地存储
-                local_sessions[session_id] = conversation_state
+                    # 实时保存状态到本地存储
+                    local_sessions[session_id] = conversation_state
 
         except KeyboardInterrupt:
             console.print("\n\n👋 程序被用户中断", style="yellow")
