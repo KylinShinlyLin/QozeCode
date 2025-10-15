@@ -110,38 +110,14 @@ def execute_command(command: str, timeout: int = 3600) -> str:
                 # 更新最终状态
                 if return_code == 0:
                     progress.update(task,
-                                    description=f"  [green]✅[green] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                                    description=f"  ✅ [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
                 else:
                     progress.update(task,
-                                    description=f"  [red]❌[red] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                                    description=f"  ❌ [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
 
                 # 收集完整输出
                 full_output = '\n'.join(output_lines)
 
-                # # 显示执行结果Panel
-                # if return_code == 0:
-                #     result_panel = Panel(
-                #         f"✅ 命令执行成功\n"
-                #         f"命令: [cyan]{command}[/cyan]\n"
-                #         f"耗时: [green]{execution_time:.2f}秒[/green]\n"
-                #         f"输出行数: [blue]{len(output_lines)}行[/blue]",
-                #         title="[bold green]执行成功[/bold green]",
-                #         border_style="green",
-                #         padding=(0, 1)
-                #     )
-                # else:
-                #     result_panel = Panel(
-                #         f"❌ 命令执行失败\n"
-                #         f"命令: [cyan]{command}[/cyan]\n"
-                #         f"返回码: [red]{return_code}[/red]\n"
-                #         f"耗时: [yellow]{execution_time:.2f}秒[/yellow]\n"
-                #         f"输出行数: [blue]{len(output_lines)}行[/blue]",
-                #         title="[bold red]执行失败[/bold red]",
-                #         border_style="red",
-                #         padding=(0, 1)
-                #     )
-                #
-                # console.print(result_panel)
                 return full_output
 
             except KeyboardInterrupt:
