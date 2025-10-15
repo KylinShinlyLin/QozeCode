@@ -6,7 +6,7 @@ import json
 from typing import Optional, Dict, Any
 
 from langchain_core.tools import tool
-from rich.live import Live
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.panel import Panel
 
 # 导入共享的 console 实例
@@ -14,13 +14,12 @@ from shared_console import console
 
 
 @tool
-def execute_command(command: str, timeout: int = 3600, silent: bool = False) -> str:
+def execute_command(command: str, timeout: int = 3600) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
     
     Args:
         command: The command to execute (e.g., "ls -la", "python script.py", "npm install")
         timeout: Maximum execution time in seconds (default: 3600)
-        silent: If True, execute without real-time display (default: False)
     
     Returns:
         The command output including both stdout and stderr
@@ -57,173 +56,137 @@ def execute_command(command: str, timeout: int = 3600, silent: bool = False) -> 
         timeout_thread = threading.Thread(target=kill_process_after_timeout, daemon=True)
         timeout_thread.start()
 
-        # 静默模式：直接执行不显示实时输出
-        if silent:
+        # 使用Progress显示执行状态
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False  # 保留进度条直到完成
+        ) as progress:
+
+            # 创建进度任务
+            task = progress.add_task(f"正在执行: {command[:50]}{'...' if len(command) > 50 else ''}", total=None)
+
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
-                return_code = process.returncode
-
-                if return_code != 0:
-                    return f"❌ 命令执行失败 (返回码: {return_code})\n输出: {stdout}"
-                else:
-                    return stdout
-
-            except subprocess.TimeoutExpired:
-                process.kill()
-                return f"❌ 命令执行超时 ({timeout}秒)"
-            except Exception as e:
-                return f"❌ 命令执行异常: {str(e)}"
-
-        # 非静默模式：显示实时输出
-        # 创建初始面板
-        initial_panel = Panel(
-            f"🚀 正在执行命令: [bold cyan]{command}[/bold cyan]\n\n⏳ 等待输出...",
-            title="[bold yellow]命令执行[/bold yellow]",
-            border_style="blue",
-            padding=(0, 1)
-        )
-
-        # 使用 Live 实时显示输出
-        with Live(initial_panel, console=console, refresh_per_second=10) as live:
-            # 实时读取输出
-            try:
+                # 静默收集输出，不显示内容
                 while True:
+                    current_time = time.time()
+                    elapsed_time = current_time - start_time
+
                     # 检查是否超时
-                    if time.time() - start_time > timeout:
-                        timeout_msg = f"\n⚠️  命令执行超时 ({timeout}秒)"
-                        output_lines.append(timeout_msg)
+                    if elapsed_time > timeout:
+                        progress.update(task,
+                                        description=f"[red]执行超时: {command[:40]}{'...' if len(command) > 40 else ''}")
+                        process.kill()
 
-                        # 更新面板显示超时信息
-                        current_output = '\n'.join(output_lines)
-                        updated_panel = Panel(
-                            f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n\n"
-                            f"⚠️  [bold red]执行超时[/bold red]\n\n"
-                            f"\n```bash\n{current_output}\n```",
-                            title="[bold red]命令执行 - 超时[/bold red]",
+                        # 显示超时结果Panel
+                        timeout_panel = Panel(
+                            f"⚠️ 命令执行超时 ({timeout}秒)\n"
+                            f"命令: [cyan]{command}[/cyan]",
+                            title="[bold red]执行超时[/bold red]",
                             border_style="red",
-                            padding=(0, 2)
+                            padding=(0, 1)
                         )
-                        live.update(updated_panel)
+                        console.print(timeout_panel)
+                        return f"❌ 命令执行超时 ({timeout}秒)"
+
+                    # 非阻塞读取输出（不显示）
+                    output = process.stdout.readline()
+                    if output == '' and process.poll() is not None:
                         break
 
-                    # 非阻塞读取
-                    try:
-                        output = process.stdout.readline()
-                        if output == '' and process.poll() is not None:
-                            break
-                        if output:
-                            output_lines.append(output)
+                    if output:
+                        output_lines.append(output.rstrip())
 
-                            # 实时更新面板
-                            current_output = '\n'.join(output_lines)
-                            execution_time = time.time() - start_time
+                    # 更新进度描述
+                    progress.update(task,
+                                    description=f"  正在执行: [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan] ({len(output_lines)}行)")
 
-                            updated_panel = Panel(
-                                f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n\n"
-                                f"⏱️  运行时间: {execution_time:.1f}秒\n\n"
-                                f"\n```bash\n{current_output}\n```",
-                                title="[bold yellow]命令执行中...[/bold yellow]",
-                                border_style="blue",
-                                padding=(0, 2)
-                            )
-                            live.update(updated_panel)
+                # 等待进程完成
+                return_code = process.wait()
+                # execution_time = time.time() - start_time
 
-                    except Exception as e:
-                        error_msg = f"读取输出时出错: {e}"
-                        output_lines.append(error_msg)
+                # 更新最终状态
+                if return_code == 0:
+                    progress.update(task,
+                                    description=f"  [green]✅ 执行成功:[green] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+                else:
+                    progress.update(task,
+                                    description=f"  [red]❌ 执行失败:[red] [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
 
-                        # 更新面板显示错误信息
-                        current_output = '\n'.join(output_lines)
-                        error_panel = Panel(
-                            f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n\n"
-                            f"❌ [bold red]读取错误[/bold red]\n\n"
-                            f"\n```bash\n{current_output}\n```",
-                            title="[bold red]命令执行 - 错误[/bold red]",
-                            border_style="red",
-                            padding=(0, 2)
-                        )
-                        live.update(error_panel)
-                        break
+                # 收集完整输出
+                full_output = '\n'.join(output_lines)
+
+                # # 显示执行结果Panel
+                # if return_code == 0:
+                #     result_panel = Panel(
+                #         f"✅ 命令执行成功\n"
+                #         f"命令: [cyan]{command}[/cyan]\n"
+                #         f"耗时: [green]{execution_time:.2f}秒[/green]\n"
+                #         f"输出行数: [blue]{len(output_lines)}行[/blue]",
+                #         title="[bold green]执行成功[/bold green]",
+                #         border_style="green",
+                #         padding=(0, 1)
+                #     )
+                # else:
+                #     result_panel = Panel(
+                #         f"❌ 命令执行失败\n"
+                #         f"命令: [cyan]{command}[/cyan]\n"
+                #         f"返回码: [red]{return_code}[/red]\n"
+                #         f"耗时: [yellow]{execution_time:.2f}秒[/yellow]\n"
+                #         f"输出行数: [blue]{len(output_lines)}行[/blue]",
+                #         title="[bold red]执行失败[/bold red]",
+                #         border_style="red",
+                #         padding=(0, 1)
+                #     )
+                #
+                # console.print(result_panel)
+                return full_output
 
             except KeyboardInterrupt:
-                interrupt_msg = "\n⚠️  用户中断命令执行"
-                output_lines.append(interrupt_msg)
+                progress.update(task,
+                                description=f"[yellow]⚠️ 用户中断: {command[:40]}{'...' if len(command) > 40 else ''}")
                 process.terminate()
 
-                # 更新面板显示中断信息
-                current_output = '\n'.join(output_lines)
                 interrupt_panel = Panel(
-                    f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n\n"
-                    f"⚠️  [bold yellow]用户中断[/bold yellow]\n\n"
-                    f"📄 输出:\n{current_output}",
-                    title="[bold yellow]命令执行 - 已中断[/bold yellow]",
-                    border_style="red",
-                    padding=(0, 2)
-                )
-                live.update(interrupt_panel)
-
-            # 等待进程完成或确认已终止
-            try:
-                return_code = process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                return_code = -1
-
-            # 收集完整输出
-            full_output = '\n'.join(output_lines)
-            execution_time = time.time() - start_time
-
-            # 显示最终结果
-            if return_code == 0:
-                final_panel = Panel(
-                    f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n"
-                    f"✅ [bold green]执行成功![/bold green] (耗时: {execution_time:.2f}秒)",
-                    title="[bold yellow]命令执行 - 成功[/bold yellow]",
+                    f"⚠️ 用户中断命令执行\n"
+                    f"命令: [cyan]{command}[/cyan]\n"
+                    f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
+                    title="[bold yellow]执行中断[/bold yellow]",
                     border_style="yellow",
-                    padding=(0, 2)
+                    padding=(0, 1)
                 )
+                console.print(interrupt_panel)
+                return "⚠️ 用户中断命令执行"
 
-            elif return_code == -1:
-                final_panel = Panel(
-                    f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n"
-                    f"⚠️  [bold yellow]执行超时被终止[/bold yellow] (超时: {timeout}秒)\n"
-                    f"📄 已获取输出:\n{full_output}",
-                    title="[bold yellow]命令执行 - 超时[/bold yellow]",
+            except Exception as e:
+                progress.update(task,
+                                description=f"[red]❌ 执行异常: {command[:40]}{'...' if len(command) > 40 else ''}")
+
+                error_panel = Panel(
+                    f"❌ 命令执行异常\n"
+                    f"命令: [cyan]{command}[/cyan]\n"
+                    f"错误: [red]{str(e)}[/red]\n"
+                    f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
+                    title="[bold red]执行异常[/bold red]",
                     border_style="red",
-                    padding=(0, 2)
+                    padding=(0, 1)
                 )
-
-            else:
-                final_panel = Panel(
-                    f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n"
-                    f"❌ [bold red]执行失败[/bold red] (返回码: {return_code}, 耗时: {execution_time:.2f}秒)\n",
-                    # f"📄 输出:\n{full_output}",
-                    title="[bold red]命令执行 - 失败[/bold red]",
-                    border_style="red",
-                    padding=(0, 2)
-                )
-
-            # 更新为最终面板并保持显示一段时间
-            live.update(final_panel)
-            time.sleep(1)  # 让用户看到最终结果
-
-        return full_output
+                console.print(error_panel)
+                return f"❌ 命令执行异常: {str(e)}"
 
     except Exception as e:
-        error_msg = f"❌ 执行命令时发生错误: {str(e)}"
-
-        # 显示错误面板
         error_panel = Panel(
-            f"🚀 执行命令: [bold cyan]{command}[/bold cyan]\n"
-            f"❌ [bold red]发生异常[/bold red]\n\n"
-            f"📄 错误信息:\n{str(e)}",
-            title="[bold red]命令执行 - 异常[/bold red]",
+            f"❌ 执行命令时发生错误\n"
+            f"命令: [cyan]{command}[/cyan]\n"
+            f"错误: [red]{str(e)}[/red]",
+            title="[bold red]系统错误[/bold red]",
             border_style="red",
-            padding=(0, 2)
+            padding=(0, 1)
         )
         console.print(error_panel)
-
-        return error_msg
+        return f"❌ 执行命令时发生错误: {str(e)}"
 
 
 @tool
@@ -235,8 +198,7 @@ def curl(
         json_data: Optional[Dict[str, Any]] = None,
         timeout: int = 30,
         follow_redirects: bool = True,
-        verify_ssl: bool = True,
-        silent: bool = True  # 默认改为 True，静默执行
+        verify_ssl: bool = True
 ) -> str:
     """Execute HTTP requests using curl command with enhanced functionality.
     
@@ -249,7 +211,6 @@ def curl(
         timeout: Request timeout in seconds (default: 30)
         follow_redirects: Whether to follow redirects (default: True)
         verify_ssl: Whether to verify SSL certificates (default: True)
-        silent: Whether to suppress real-time output display (default: True)
     
     Returns:
         The HTTP response including headers and body
@@ -292,18 +253,20 @@ def curl(
 
         start_time = time.time()
 
-        # 根据 silent 参数决定是否显示实时界面
-        if not silent:
-            # 显示执行信息
-            initial_panel = Panel(
-                f"🌐 正在执行 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n\n"
-                f"⏳ 等待响应...",
-                title="[bold yellow]HTTP 请求[/bold yellow]",
-                border_style="blue",
-                padding=(0, 1)
-            )
+        # 使用Progress显示请求状态
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False  # 保留进度条直到完成
+        ) as progress:
 
-            with Live(initial_panel, console=console, refresh_per_second=4) as live:
+            # 创建进度任务
+            task = progress.add_task(f"HTTP请求: {method.upper()} {url[:50]}{'...' if len(url) > 50 else ''}",
+                                     total=None)
+
+            try:
                 # 执行 curl 命令
                 process = subprocess.Popen(
                     curl_cmd,
@@ -312,112 +275,114 @@ def curl(
                     universal_newlines=True
                 )
 
-                try:
-                    stdout, stderr = process.communicate(timeout=timeout + 5)
-                    execution_time = time.time() - start_time
+                # 等待命令完成，同时更新进度
+                while process.poll() is None:
+                    elapsed_time = time.time() - start_time
 
-                    # 解析响应
-                    response_info = stderr  # curl 的详细信息在 stderr 中
-                    response_body = stdout
+                    # 检查超时
+                    if elapsed_time > timeout:
+                        progress.update(task,
+                                        description=f"[red]请求超时: {method.upper()} {url[:40]}{'...' if len(url) > 40 else ''}")
+                        process.kill()
 
-                    # 提取状态码
-                    status_code = "Unknown"
-                    for line in response_info.split('\n'):
-                        if '< HTTP/' in line:
-                            parts = line.split()
-                            if len(parts) >= 3:
-                                status_code = parts[2]
-                            break
-
-                    # 判断请求是否成功
-                    is_success = process.returncode == 0
-
-                    if is_success:
-                        # 成功面板
-                        final_panel = Panel(
-                            f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                            f"✅ [bold green]请求成功![/bold green] (状态码: {status_code}, 耗时: {execution_time:.2f}秒)\n"
-                            f"📄 响应大小: {len(response_body)} 字符",
-                            title="[bold green]HTTP 请求 - 成功[/bold green]",
-                            border_style="green",
-                            padding=(0, 2)
-                        )
-                    else:
-                        # 失败面板
-                        final_panel = Panel(
-                            f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                            f"❌ [bold red]请求失败[/bold red] (返回码: {process.returncode}, 耗时: {execution_time:.2f}秒)",
-                            title="[bold red]HTTP 请求 - 失败[/bold red]",
+                        timeout_panel = Panel(
+                            f"⚠️ HTTP请求超时 ({timeout}秒)\n"
+                            f"请求: [cyan]{method.upper()} {url}[/cyan]",
+                            title="[bold red]请求超时[/bold red]",
                             border_style="red",
-                            padding=(0, 2)
+                            padding=(0, 1)
                         )
+                        console.print(timeout_panel)
+                        return f"❌ HTTP请求超时 ({timeout}秒)"
 
-                    live.update(final_panel)
-                    time.sleep(1)  # 让用户看到结果
+                    # 更新进度描述
+                    progress.update(task,
+                                    description=f"HTTP请求: {method.upper()} {url[:40]}{'...' if len(url) > 40 else ''}")
+                    time.sleep(0.5)
 
-                    # 返回完整响应信息
-                    full_response = f"=== HTTP Response Info ===\n{response_info}\n\n=== Response Body ===\n{response_body}"
-                    return full_response
-
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    timeout_panel = Panel(
-                        f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                        f"⚠️  [bold yellow]请求超时[/bold yellow] (超时: {timeout}秒)",
-                        title="[bold yellow]HTTP 请求 - 超时[/bold yellow]",
-                        border_style="red",
-                        padding=(0, 2)
-                    )
-                    live.update(timeout_panel)
-                    time.sleep(1)
-                    return f"❌ HTTP 请求超时: {url}"
-
-        else:
-            # 静默模式：直接执行，不显示实时界面
-            try:
-                process = subprocess.Popen(
-                    curl_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    universal_newlines=True
-                )
-
-                stdout, stderr = process.communicate(timeout=timeout + 5)
+                # 获取结果
+                stdout, stderr = process.communicate()
+                return_code = process.returncode
                 execution_time = time.time() - start_time
 
-                # 解析响应
-                response_info = stderr
-                response_body = stdout
+                # 更新最终状态
+                if return_code == 0:
+                    progress.update(task,
+                                    description=f"[green]✅ 请求成功: {method.upper()} {url[:40]}{'...' if len(url) > 40 else ''}")
+                else:
+                    progress.update(task,
+                                    description=f"[red]❌ 请求失败: {method.upper()} {url[:40]}{'...' if len(url) > 40 else ''}")
 
-                # 判断请求是否成功
-                if process.returncode != 0:
-                    console.print(f"❌ HTTP 请求失败: {url}")
-                    return f"❌ HTTP 请求失败: {url} (返回码: {process.returncode})"
+                # 显示请求结果Panel
+                if return_code == 0:
+                    result_panel = Panel(
+                        f"✅ HTTP请求成功\n"
+                        f"请求: [cyan]{method.upper()} {url}[/cyan]\n"
+                        f"耗时: [green]{execution_time:.2f}秒[/green]\n"
+                        f"响应大小: [blue]{len(stdout)}字符[/blue]",
+                        title="[bold green]请求成功[/bold green]",
+                        border_style="green",
+                        padding=(0, 1)
+                    )
+                else:
+                    result_panel = Panel(
+                        f"❌ HTTP请求失败\n"
+                        f"请求: [cyan]{method.upper()} {url}[/cyan]\n"
+                        f"返回码: [red]{return_code}[/red]\n"
+                        f"耗时: [yellow]{execution_time:.2f}秒[/yellow]",
+                        title="[bold red]请求失败[/bold red]",
+                        border_style="red",
+                        padding=(0, 1)
+                    )
 
-                # 返回完整响应信息
-                full_response = f"=== HTTP Response Info ===\n{response_info}\n\n=== Response Body ===\n{response_body}"
-                return full_response
+                console.print(result_panel)
 
-            except subprocess.TimeoutExpired:
-                process.kill()
-                console.print(f"❌ HTTP 请求超时: {url}")
-                return f"❌ HTTP 请求超时: {url}"
+                # 返回完整响应
+                if stderr:
+                    return f"{stdout}\n\n--- STDERR ---\n{stderr}"
+                return stdout
+
+            except KeyboardInterrupt:
+                progress.update(task,
+                                description=f"[yellow]⚠️ 用户中断: {method.upper()} {url[:40]}{'...' if len(url) > 40 else ''}")
+                if 'process' in locals():
+                    process.terminate()
+
+                interrupt_panel = Panel(
+                    f"⚠️ 用户中断HTTP请求\n"
+                    f"请求: [cyan]{method.upper()} {url}[/cyan]\n"
+                    f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
+                    title="[bold yellow]请求中断[/bold yellow]",
+                    border_style="yellow",
+                    padding=(0, 1)
+                )
+                console.print(interrupt_panel)
+                return "⚠️ 用户中断HTTP请求"
+
+            except Exception as e:
+                progress.update(task,
+                                description=f"[red]❌ 请求异常: {method.upper()} {url[:40]}{'...' if len(url) > 40 else ''}")
+
+                error_panel = Panel(
+                    f"❌ HTTP请求异常\n"
+                    f"请求: [cyan]{method.upper()} {url}[/cyan]\n"
+                    f"错误: [red]{str(e)}[/red]\n"
+                    f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
+                    title="[bold red]请求异常[/bold red]",
+                    border_style="red",
+                    padding=(0, 1)
+                )
+                console.print(error_panel)
+                return f"❌ HTTP请求异常: {str(e)}"
 
     except Exception as e:
-        error_msg = f"❌ 执行 HTTP 请求时发生错误: {str(e)}"
-
-        if not silent:
-            # 显示错误面板
-            error_panel = Panel(
-                f"🌐 HTTP 请求: [bold cyan]{method.upper()} {url}[/bold cyan]\n"
-                f"❌ [bold red]发生异常[/bold red]\n\n"
-                f"📄 错误信息:\n{str(e)}",
-                title="[bold red]HTTP 请求 - 异常[/bold red]",
-                border_style="red",
-                padding=(0, 2)
-            )
-            console.print(error_panel)
-        else:
-            console.print(f"❌ HTTP 请求异常: {str(e)}")
-
-        return error_msg
+        error_panel = Panel(
+            f"❌ 发送HTTP请求时发生错误\n"
+            f"请求: [cyan]{method.upper()} {url}[/cyan]\n"
+            f"错误: [red]{str(e)}[/red]",
+            title="[bold red]系统错误[/bold red]",
+            border_style="red",
+            padding=(0, 1)
+        )
+        console.print(error_panel)
+        return f"❌ 发送HTTP请求时发生错误: {str(e)}"

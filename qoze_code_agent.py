@@ -589,7 +589,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                             complete_responses = []
 
                             # new_streaming_markdown = Markdown("")
-                            live.update("")
+                            live.update("\n")
 
                         except Exception as e:
                             console.print(f"创建完整回复Panel时出错: {str(e)}", style="red")
