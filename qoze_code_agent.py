@@ -428,7 +428,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                     readline.set_startup_hook(None)
 
                 # 先显示提示符，然后在新行获取输入
-                console.print("[bold cyan]您[/bold cyan]:")
+                console.print("[bold rgb(255,165,0)]您：[/bold rgb(255,165,0)]", )
                 user_input = input().strip()
 
                 # 清理可能的编码问题
@@ -614,7 +614,8 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                                             else:
                                                 # 不显示滚动指示器，直接显示最新内容
                                                 display_text = '\n'.join(lines[-max_lines:])
-                                        return Markdown(display_text, style="blue", justify="left", hyperlinks=True)
+                                        return Markdown(display_text, style="rgb(0,191,255)", justify="left",
+                                                        hyperlinks=True)
                                     except Exception as e:
                                         # 如果创建Panel失败，返回简单的错误Panel
                                         return Markdown(f"显示错误: {str(e)}", style="red")
@@ -656,16 +657,14 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                                     if i < len(complete_responses) - 1:
                                         all_completed_text += "\n\n---\n\n"
 
-                                complete_markdown = Markdown(current_response_text, style="blue", justify="left",
+                                complete_markdown = Markdown(current_response_text, style="rgb(0,191,255)",
+                                                             justify="left",
                                                              hyperlinks=True)
                                 console.print(complete_markdown)
 
                                 # 重置当前响应文本，准备接收下一段流式内容
                                 current_response_text = ""
                                 complete_responses = []
-
-                                # new_streaming_markdown = Markdown("")
-                                # live.update("\n")
 
                             except Exception as e:
                                 console.print(f"创建完整回复Panel时出错: {str(e)}", style="red")
