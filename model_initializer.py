@@ -3,6 +3,12 @@
 负责根据模型名称初始化对应的LLM实例
 """
 
+import os
+
+# 屏蔽 absl 库的 STDERR 警告
+os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')    # 屏蔽 TensorFlow 信息和警告
+
 # 保留轻量级导入
 from shared_console import console
 

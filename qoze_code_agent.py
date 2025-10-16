@@ -16,6 +16,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+# 屏蔽 absl 库的 STDERR 警告
+import os
+os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')    # 屏蔽 TensorFlow 信息和警告
+
 import argparse
 import asyncio
 import operator

@@ -11,6 +11,10 @@ import time
 import traceback
 from typing import Optional
 
+# 屏蔽 absl 库的 STDERR 警告
+os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
+
 # 导入共享的 console 实例
 from shared_console import console
 
@@ -81,12 +85,11 @@ def get_model_choice() -> Optional[str]:
 
     # 定义选项 - 简洁对齐
     choices = [
-        "Claude-4      Anthropic",
-        "Gemini        Google GCP",
-        "GPT-5         OpenAI",
-        # "GPT-5-Codex   OpenAI",
         "DeepSeek      DeepSeek",
+        "GPT-5         OpenAI",
+        "Claude-4      Anthropic",
         "GLM-4         智普",
+        "Gemini        Google GCP",
         "[退出程序]"
     ]
 
