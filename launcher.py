@@ -11,6 +11,8 @@ import time
 import traceback
 from typing import Optional
 
+from constant import template_content
+
 # 屏蔽 absl 库的 STDERR 警告
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -32,26 +34,6 @@ try:
 except ImportError as e:
     print(f"错误详情: {e}")
     sys.exit(1)
-
-template_content = """[openai]
-api_key=
-
-[deepseek]
-api_key=
-
-[aws]
-session_token=
-region_name=us-east-1
-
-[vertexai]
-project=
-location=us-central1
-credentials_path=
-
-[ZHIPU]
-api_key=
-
-"""
 
 
 def print_banner():
