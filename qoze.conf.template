@@ -5,8 +5,7 @@ api_key=
 api_key=
 
 [aws]
-access_key_id=
-secret_access_key=
+session_token=
 region_name=us-east-1
 
 [vertexai]

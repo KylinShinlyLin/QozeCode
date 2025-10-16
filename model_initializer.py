@@ -19,26 +19,17 @@ def initialize_llm(model_name: str):
             from botocore.config import Config
             import boto3
 
-            # 配置代理
-            proxies = {
-                "http://": "socks5://us1-proxy.owll.ai:11800",
-                "https://": "socks5://us1-proxy.owll.ai:11800",
-            }
-
             # 读取 AWS 凭证（不做网络验证）
             creds = ensure_model_credentials('claude-4')
 
             # 创建带代理的 boto3 配置
             config = Config(
-                proxies=proxies,
                 region_name=creds['region_name']
             )
 
             # 创建 bedrock 客户端
             bedrock_client = boto3.client(
-                'bedrock-runtime',
-                aws_access_key_id=creds['aws_access_key_id'],
-                aws_secret_access_key=creds['aws_secret_access_key'],
+                service_name="bedrock-runtime",
                 region_name=creds['region_name'],
                 config=config
             )
@@ -218,26 +209,26 @@ def verify_credentials(model_name: str):
         import boto3
         from botocore.config import Config
         creds = ensure_model_credentials(model_name)
-        try:
-            # 配置代理 - 与initialize_llm函数保持一致
-            proxies = {
-                "http://": "socks5://us1-proxy.owll.ai:11800",
-                "https://": "socks5://us1-proxy.owll.ai:11800",
-            }
-
-            sts = boto3.client(
-                "sts",
-                aws_access_key_id=creds["aws_access_key_id"],
-                aws_secret_access_key=creds["aws_secret_access_key"],
-                region_name=creds["region_name"],
-                config=Config(
-                    proxies=proxies,
-                    retries={"max_attempts": 3}
-                )
-            )
-            sts.get_caller_identity()
-        except Exception as e:
-            raise RuntimeError(f"AWS 凭证验证失败: {e}")
+        # try:
+        #     # 配置代理 - 与initialize_llm函数保持一致
+        #     proxies = {
+        #         "http://": "socks5://us1-proxy.owll.ai:11800",
+        #         "https://": "socks5://us1-proxy.owll.ai:11800",
+        #     }
+        #
+        #     sts = boto3.client(
+        #         "sts",
+        #         aws_access_key_id=creds["aws_access_key_id"],
+        #         aws_secret_access_key=creds["aws_secret_access_key"],
+        #         region_name=creds["region_name"],
+        #         config=Config(
+        #             proxies=proxies,
+        #             retries={"max_attempts": 3}
+        #         )
+        #     )
+        #     sts.get_caller_identity()
+        # except Exception as e:
+        #     raise RuntimeError(f"AWS 凭证验证失败: {e}")
 
     elif model_name == 'gemini':
         creds = ensure_model_credentials(model_name)

@@ -102,16 +102,18 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         section = "aws"
         if not cfg.has_section(section):
             fail("AWS Bedrock 凭证 (section [aws])")
-        access_key = cfg.get(section, "access_key_id", fallback=None)
-        secret_key = cfg.get(section, "secret_access_key", fallback=None)
+        session_token = cfg.get(section, "session_token", fallback=None)  # 支持临时凭证
         region = cfg.get(section, "region_name", fallback="us-east-1")
-        if not access_key or not secret_key:
-            fail("AWS Bedrock 凭证 (access_key_id/secret_access_key)")
-        return {
-            "aws_access_key_id": access_key,
-            "aws_secret_access_key": secret_key,
+        if not session_token:
+            fail("AWS Bedrock 凭证 (session_token)")
+
+        os.environ['AWS_BEARER_TOKEN_BEDROCK'] = session_token
+        credentials = {
+            "aws_session_token": session_token,
             "region_name": region,
         }
+
+        return credentials
 
     if model_name == "gemini":
         section = "vertexai"

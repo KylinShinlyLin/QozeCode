@@ -6,6 +6,18 @@
 
 - **多模型支持**: 支持 ```Claude-4、GPT-5、DeepSeek``` 等多种主流AI模型，Gemini 和 Ollama 支持正在开发中
 
+## 📚 目录
+
+- [📦 目前集成模型厂商](#-目前集成模型厂商)
+- [核心功能特性](#核心功能特性)
+- [最佳使用建议](#最佳使用建议)
+- [使用演示](#使用演示)
+- [QuickStart](#quickstart)
+    - [安装方式](#安装方式)
+    - [配置指引](#配置指引)
+    - [使用方法](#使用方法)
+- [许可证](#许可证)
+
 #### 📦 目前集成模型厂商
 
 | 模型名称     | 厂商                      | 状态     | 说明                           |
@@ -54,10 +66,17 @@
 - **网络搜索**: 集成搜索引擎，快速获取开发相关信息
 - **数学计算**: 内置数学工具，支持复杂计算和数据处琂
 
-#### 🔧 扩展能力
+#### 🔧 扩展能力 (未来支持)
 
 - **MCP 工具支持**: 即将支持更多 Model Context Protocol 工具（coming soon）
 - **API 集成**: 跟多高效有价值的工具会通过API持续集成
+
+#### 💰 高效缓存利用
+
+- 优化过高效 token 缓存利用
+- 运行一天需要 1 块钱人民币
+
+<img src="./assets/cache_token.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
 
 ##### 最佳使用建议
 
@@ -90,6 +109,91 @@ source ~/.qoze/qoze_env.sh && qoze
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
 ```
+
+## 配置指引
+
+### API 密钥配置
+
+在使用 QozeCode Agent 之前，您需要配置相应AI模型的API密钥。配置文件位置：
+
+- **优先位置**: `/etc/conf/qoze.conf` (需要管理员权限)
+- **备用位置**: `~/.qoze/qoze.conf` (用户目录)
+
+首次运行时，系统会自动创建配置文件模板。您也可以手动创建配置文件：
+
+```bash
+# 创建配置目录
+mkdir -p ~/.qoze
+```
+
+### 📋 各模型配置说明
+
+#### 1. OpenAI (GPT-5)
+
+```ini
+[openai]
+api_key=your_openai_api_key_here
+```
+
+**获取方式**:
+
+- 访问 [OpenAI Platform](https://platform.openai.com/api-keys) 获取秘钥
+
+#### 2. DeepSeek
+
+```ini
+[deepseek]
+api_key=your_deepseek_api_key_here
+```
+
+**获取方式**:
+
+- 访问 [DeepSeek 官网](https://platform.deepseek.com/)
+
+<img src="./assets/deepseek_key.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
+
+#### 3. GLM-4 (智谱AI)
+
+```ini
+[ZHIPU]
+api_key=your_zhipu_api_key_here
+```
+
+**获取方式**:
+
+- 访问 [智谱AI开放平台](https://open.bigmodel.cn/)
+
+<img src="./assets/glm_key.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
+
+#### 4. Claude-4 (AWS Bedrock)
+
+```ini
+[aws]
+session_token=your_session_key
+region_name=us-east-1
+```
+
+**获取方式**:
+
+- 登录 [AWS 控制台](https://aws.amazon.com/console/)
+- 搜索进入 bedrock
+- API秘钥 -> 生成长期 API 秘钥
+
+#### 5. Gemini (Google Vertex AI)
+
+```ini
+[vertexai]
+project=your_gcp_project_id
+location=us-central1
+credentials_path=/path/to/your/service-account-key.json
+```
+
+**获取方式**:
+
+- 本地安装 gcloud cli
+- 授权登录你的 gcp 账号
+- 搜索 Vertex AI API 并开启权限
+- 直接即可使用
 
 ### 使用方法
 
