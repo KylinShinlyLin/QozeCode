@@ -85,7 +85,7 @@ def get_model_choice() -> Optional[str]:
         "Gemini        Google GCP",
         "GPT-5         OpenAI",
         # "GPT-5-Codex   OpenAI",
-        "DeepSeek      V3.2-Exp",
+        "DeepSeek      DeepSeek",
         "GLM-4         智普",
         "[退出程序]"
     ]
