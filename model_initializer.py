@@ -7,7 +7,7 @@ import os
 
 # 屏蔽 absl 库的 STDERR 警告
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
-os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')    # 屏蔽 TensorFlow 信息和警告
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
 
 # 保留轻量级导入
 from shared_console import console
@@ -163,10 +163,10 @@ def initialize_llm(model_name: str):
             )
             return llm
         except ImportError:
-            print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
+            print("❌ 缺少 GLM 依赖")
             raise
         except Exception as e:
-            print(f"❌ DeepSeek 初始化失败: {str(e)}")
+            print(f"❌ GLM 初始化失败: {str(e)}")
             raise
     else:
         raise ValueError(f"不支持的模型: {model_name}")
