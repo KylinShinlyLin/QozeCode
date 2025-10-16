@@ -269,7 +269,8 @@ def llm_call(state: dict):
     system_msg = SystemMessage(
         content=f'''
 你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
-- 你需要根据我的诉求，利用当前的tools在终端中帮我完成复杂的任务
+- 你需要根据我的诉求，利用当前支持的tools帮我完成复杂的任务
+- 你可以结合使用各种命令去完成目标任务
 
 ## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})

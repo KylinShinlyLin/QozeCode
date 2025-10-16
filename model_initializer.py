@@ -63,11 +63,11 @@ def initialize_llm(model_name: str):
             import os
             import logging
             import warnings
-            
+
             # 抑制 Gemini schema 相关的警告信息
             logging.getLogger('langchain_google_vertexai').setLevel(logging.ERROR)
             logging.getLogger('google.ai.generativelanguage_v1beta').setLevel(logging.ERROR)
-            
+
             # 抑制 vertex_ai 参数警告
             warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
 
@@ -137,11 +137,32 @@ def initialize_llm(model_name: str):
 
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials('DeepSeek')
-            os.environ["DEEPSEEK_API_KEY"] = creds["api_key"]
+            # os.environ["DEEPSEEK_API_KEY"] = creds["api_key"]
 
             llm = ChatDeepSeek(
                 model="deepseek-chat",
                 api_key=creds["api_key"]
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
+            raise
+        except Exception as e:
+            print(f"❌ DeepSeek 初始化失败: {str(e)}")
+            raise
+    elif model_name == 'GLM-4':
+        try:
+            # 延迟导入重依赖
+            from langchain_community.chat_models import ChatZhipuAI
+
+            # 读取 DeepSeek 密钥
+            creds = ensure_model_credentials('GLM-4')
+
+            llm = ChatZhipuAI(
+                model="GLM-4.6",
+                api_key=creds["api_key"],
+                temperature=0.3,
+                thinking={"type": "disabled"}
             )
             return llm
         except ImportError:

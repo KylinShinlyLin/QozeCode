@@ -69,7 +69,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
 
     def fail(missing_desc: str):
         current_cfg_path = get_config_path()
-        current_cfg_dir = os.path.dirname(current_cfg_path)
+        # current_cfg_dir = os.path.dirname(current_cfg_path)
         console.print(
             "\n".join([
                 f"🔑 未检测到 {missing_desc}。",
@@ -123,5 +123,14 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         if not project or not cred_path:
             fail("Gemini/Vertex AI 凭证 (project/credentials_path)")
         return {"project": project, "location": location, "credentials_path": cred_path}
+
+    if model_name == "GLM-4":
+        section = "ZHIPU"
+        if not cfg.has_section(section):
+            fail("GLM-4 AI 凭证 (section [ZHIPU])")
+        api_key = cfg.get(section, "api_key", fallback=None)
+        if not api_key:
+            fail("GLM-4 AI 凭证")
+        return {"api_key": api_key}
 
     raise ValueError(f"不支持的模型: {model_name}")

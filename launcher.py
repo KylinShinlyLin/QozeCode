@@ -44,6 +44,9 @@ region_name=us-east-1
 project=
 location=us-central1
 credentials_path=
+
+[ZHIPU]
+api_key=
 """
 
 
@@ -84,6 +87,7 @@ def get_model_choice() -> Optional[str]:
         "GPT-5         OpenAI",
         # "GPT-5-Codex   OpenAI",
         "DeepSeek      V3.2-Exp",
+        "GLM-4         智普",
         "[退出程序]"
     ]
 
@@ -112,6 +116,8 @@ def get_model_choice() -> Optional[str]:
             return 'gpt-5'
         elif "DeepSeek" in selected:
             return 'DeepSeek'
+        elif "GLM-4" in selected:
+            return 'GLM-4'
         elif "退出" in selected:
             console.print("\n👋 再见", style="dim")
             return None
