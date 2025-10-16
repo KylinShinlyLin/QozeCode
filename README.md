@@ -8,6 +8,12 @@
   <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
 </div>
 
+### 多窗口 agent 同时运行
+
+<div align="center">
+  <img src="./assets/mutilrun.png" alt="窗口运行" style="padding: 5px 60px 5px 60px;">
+</div>
+
 ## 📚 目录
 
 - [📦 目前集成模型厂商](#-目前集成模型厂商)
