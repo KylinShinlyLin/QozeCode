@@ -11,7 +11,13 @@
 ### 多窗口 agent 同时运行
 
 <div align="center">
-  <img src="./assets/mutilrun.png" alt="窗口运行" style="padding: 5px 60px 5px 60px;">
+  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">
+</div>
+
+### 在IDE 中随时唤起执行
+
+<div align="center">
+  <img src="./assets/idea.png" alt="唤起执行" style="padding: 5px 60px 5px 60px;">
 </div>
 
 ## 📚 目录
