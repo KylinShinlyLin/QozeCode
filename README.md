@@ -13,7 +13,6 @@
 - [📦 目前集成模型厂商](#-目前集成模型厂商)
 - [核心功能特性](#核心功能特性)
 - [最佳使用建议](#最佳使用建议)
-- [使用演示](#使用演示)
 - [QuickStart](#quickstart)
     - [安装方式](#安装方式)
     - [配置指引](#配置指引)
@@ -48,9 +47,9 @@
 >
 > 💬 如果您有特殊的需求，欢迎提出 [Issues](https://github.com/KylinShinlyLin/QozeCode/issues)，我会尽快与您联系沟通！
 
-### 核心功能特性
+## 核心功能特性
 
-#### 多窗口 agent 同时运行
+### 多窗口 agent 同时运行
 
 - **并发处理**: 支持在多个终端窗口中同时启动不同的 QozeCode Agent 实例，每个实例拥有独立的会话ID和上下文记忆
 
@@ -58,7 +57,7 @@
   <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">
 </div>
 
-#### 在IDE 中随时唤起执行
+### 在IDE 中随时唤起执行
 
 - **快速启动**: 通过简单的 `qoze` 命令即可在任意目录下启动 AI 编程助手，无需复杂配置
 
@@ -66,29 +65,26 @@
   <img src="./assets/idea.png" alt="唤起执行" style="padding: 5px 60px 5px 60px;">
 </div>
 
-#### 🌐 浏览器自动化（计划中）
+### 🌐 浏览器自动化（计划中）
 
 - **网页操作**: 智能浏览器控制功能，可以自动化网页操作和数据抓取
 
-#### 🔧 扩展能力 (未来支持)
+### 🔧 扩展能力 (未来支持)
 
 - **MCP 工具支持**: 即将支持更多 Model Context Protocol 工具（coming soon）
 - **API 集成**: 跟多高效有价值的工具会通过API持续集成
 
-#### 💰 高效缓存利用
+### 💰 高效缓存利用
 
 - 优化过高效 token 缓存利用
 - 运行一天需要 1 块钱人民币
 
 <img src="./assets/cache_token.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
 
-##### 最佳使用建议
+#### 最佳使用建议
 
 > 如果你考虑性价比并且还是国内用户， 建议你选择 ' deepseek ' 作为你的首选模型使用
 
-##### 使用演示
-
-[演示视频](./assets/video.mp4)
 
 # QuickStart
 
