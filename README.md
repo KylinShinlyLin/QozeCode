@@ -8,18 +8,6 @@
   <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
 </div>
 
-### 多窗口 agent 同时运行
-
-<div align="center">
-  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">
-</div>
-
-### 在IDE 中随时唤起执行
-
-<div align="center">
-  <img src="./assets/idea.png" alt="唤起执行" style="padding: 5px 60px 5px 60px;">
-</div>
-
 ## 📚 目录
 
 - [📦 目前集成模型厂商](#-目前集成模型厂商)
@@ -58,26 +46,29 @@
 > - **API通畅**：提供稳定可靠的调用接口，或者能避免墙带来影响
 > - **性价比**：在使用成本和性能之间取得良好平衡
 >
-> 💬 如果您有特殊的模型集成需求，欢迎提出 [Issues](https://github.com/KylinShinlyLin/QozeCode/issues)，我们会尽快与您联系沟通！
+> 💬 如果您有特殊的需求，欢迎提出 [Issues](https://github.com/KylinShinlyLin/QozeCode/issues)，我会尽快与您联系沟通！
 
 ### 核心功能特性
 
-#### 📊 办公自动化
+#### 多窗口 agent 同时运行
 
-- **Excel 智能处琂**: Agent 可以帮助你自动化处琂 Excel 文件，包括数据分析、表格生成、公式计算等操作
-- **邮件智能分析**: 支持 macOS 自带邮件客户端集成，可以帮你阅读、分析和总结邮件内容，提取关键信息
+- **并发处理**: 支持在多个终端窗口中同时启动不同的 QozeCode Agent 实例，每个实例拥有独立的会话ID和上下文记忆
 
-#### 🌐 浏览器自动化
+<div align="center">
+  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">
+</div>
+
+#### 在IDE 中随时唤起执行
+
+- **快速启动**: 通过简单的 `qoze` 命令即可在任意目录下启动 AI 编程助手，无需复杂配置
+
+<div align="center">
+  <img src="./assets/idea.png" alt="唤起执行" style="padding: 5px 60px 5px 60px;">
+</div>
+
+#### 🌐 浏览器自动化（计划中）
 
 - **网页操作**: 智能浏览器控制功能，可以自动化网页操作和数据抓取
-- **持续更新**: 浏览器操作功能将持续更新上线，带来更多自动化可能性
-
-#### 🛠 开发工具集
-
-- **文件操作**: 智能文件管理和批量处琂
-- **命令执行**: 安全的系统命令执行和自动化脚本运行
-- **网络搜索**: 集成搜索引擎，快速获取开发相关信息
-- **数学计算**: 内置数学工具，支持复杂计算和数据处琂
 
 #### 🔧 扩展能力 (未来支持)
 
