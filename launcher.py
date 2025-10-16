@@ -51,8 +51,6 @@ credentials_path=
 [ZHIPU]
 api_key=
 
-[Kimi]
-api_key=
 """
 
 
