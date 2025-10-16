@@ -16,6 +16,11 @@
 - [QuickStart](#quickstart)
     - [安装方式](#安装方式)
     - [配置指引](#配置指引)
+        - [OpenAI](#1-openai)
+        - [DeepSeek](#2-deepseek)
+        - [智普](#3-glm-4-智谱ai)
+        - [Claude](#4-claude-4-aws-bedrock)
+        - [Gemini](#5-gemini-google-vertex-ai)
     - [使用方法](#使用方法)
 - [许可证](#许可证)
 
@@ -85,12 +90,9 @@
 
 > 如果你考虑性价比并且还是国内用户， 建议你选择 ' deepseek ' 作为你的首选模型使用
 
-
 # QuickStart
 
 ## 安装方式
-
-### 方式一：通过脚本+源码自动构建
 
 - 安装 or 更新 直接执行
 
@@ -128,7 +130,7 @@ mkdir -p ~/.qoze
 
 ### 📋 各模型配置说明
 
-#### 1. OpenAI (GPT-5)
+#### 1. OpenAI
 
 ```ini
 [openai]
