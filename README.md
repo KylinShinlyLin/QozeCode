@@ -1,4 +1,4 @@
-# QozeCode Agent
+# 🚀 QozeCode
 
 <img src="./assets/logo.png" alt="图片描述" style="padding: 60px;">
 
