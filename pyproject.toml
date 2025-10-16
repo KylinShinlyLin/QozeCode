@@ -26,6 +26,7 @@ dependencies = [
     "lxml",
     "beautifulsoup4",
     "langchain-community",
+    "pyjwt",
 ]
 
 [project.scripts]
