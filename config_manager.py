@@ -134,5 +134,13 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         if not api_key:
             fail("GLM-4 AI 凭证")
         return {"api_key": api_key}
+    if model_name == "Kimi":
+        section = "Kimi"
+        if not cfg.has_section(section):
+            fail("Kimi AI 凭证 (section [Kimi])")
+        api_key = cfg.get(section, "api_key", fallback=None)
+        if not api_key:
+            fail("Kimi AI 凭证")
+        return {"api_key": api_key}
 
     raise ValueError(f"不支持的模型: {model_name}")

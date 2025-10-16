@@ -168,6 +168,27 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ GLM 初始化失败: {str(e)}")
             raise
+
+    elif model_name == 'Kimi':
+        try:
+            # 延迟导入重依赖
+            from langchain_community.chat_models.moonshot import MoonshotChat
+
+            # 读取 DeepSeek 密钥
+            creds = ensure_model_credentials('Kimi')
+
+            llm = MoonshotChat(
+                model="kimi-k2-0905-preview",
+                temperature=0.3,
+                api_key=creds["api_key"],
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 GLM 依赖")
+            raise
+        except Exception as e:
+            print(f"❌ GLM 初始化失败: {str(e)}")
+            raise
     else:
         raise ValueError(f"不支持的模型: {model_name}")
 

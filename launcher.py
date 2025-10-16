@@ -50,6 +50,9 @@ credentials_path=
 
 [ZHIPU]
 api_key=
+
+[Kimi]
+api_key=
 """
 
 
@@ -88,6 +91,7 @@ def get_model_choice() -> Optional[str]:
         "DeepSeek      DeepSeek",
         "GPT-5         OpenAI",
         "Claude-4      Anthropic",
+        # "kimi-k2       月之暗面",
         "GLM-4         智普",
         "Gemini        Google GCP",
         "[退出程序]"
@@ -120,6 +124,8 @@ def get_model_choice() -> Optional[str]:
             return 'DeepSeek'
         elif "GLM-4" in selected:
             return 'GLM-4'
+        elif "kimi-k2" in selected:
+            return 'Kimi'
         elif "退出" in selected:
             console.print("\n👋 再见", style="dim")
             return None
