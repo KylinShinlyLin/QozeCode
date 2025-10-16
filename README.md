@@ -37,7 +37,7 @@
 | 模型名称     | 厂商                      | 状态     | 说明                           |
 |----------|-------------------------|--------|------------------------------|
 | Claude-4 | Anthropic (AWS Bedrock) | 🟢 可用  | 通过 AWS Bedrock 集成            |
-| GPT-5    | OpenAI 官方               | 🟢 可用  | GPT-5更新体验                    |
+| GPT-5    | OpenAI 官方               | 🟢 可用  | OpenAI GPT-5                 |
 | DeepSeek | DeepSeek 官方             | 🟢 可用  | 支持 DeepSeek Exp V3.2         |
 | Gemini   | Google Vertex AI        | 🟢 可用  | 通过 Google Cloud Vertex AI 集成 |
 | GLM-4    | 智谱AI 官方                 | 🟢 可用  | 支持 GLM-4.6 模型                |
