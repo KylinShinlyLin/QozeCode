@@ -4,7 +4,9 @@
 
 ```QozeCode Agent``` 是一个功能强大的AI编程助手，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
 
-<img src="./assets/show.gif" alt="图片描述" style="padding: 5px 60px 5px 60px;">
+<div align="center">
+  <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
+</div>
 
 ## 📚 目录
 
