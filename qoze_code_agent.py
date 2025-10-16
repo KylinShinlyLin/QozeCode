@@ -25,7 +25,6 @@ import traceback
 import uuid
 from typing import Literal
 
-from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -34,8 +33,8 @@ from langgraph.graph import StateGraph, START, END
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Prompt
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.prompt import Prompt
 from typing_extensions import TypedDict, Annotated
 
 from config_manager import ensure_model_credentials
@@ -45,7 +44,7 @@ from tools.execute_command_tool import execute_command, curl
 from tools.math_tools import multiply, add, divide
 from tools.tavily_search_tool import tavily_search
 from utils.command_exec import run_command
-from utils.directory_config import get_exclude_directories, get_scan_config, EXCLUDE_DIRECTORIES
+from utils.directory_config import EXCLUDE_DIRECTORIES
 
 # # 导入浏览器工具
 # try:
@@ -270,7 +269,6 @@ def llm_call(state: dict):
         content=f'''
 你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
 - 你需要根据我的诉求，利用当前支持的tools帮我完成复杂的任务
-- 你可以结合使用各种命令去完成目标任务
 
 ## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})
@@ -506,7 +504,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                     TimeElapsedColumn(),
                     refresh_per_second=20,
                     console=console,
-                    transient=True  # 完成后自动清除
+                    # transient=False  # 完成后自动清除
             ) as progress:
                 # 添加任务进度
                 task_id = progress.add_task("🚀 正在处理您的请求...", total=None)
