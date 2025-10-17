@@ -403,8 +403,8 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         f"[bold white]💡 使用提示:[/bold white]\n"
         f"[dim]  • 输入问题开始对话\n"
         f"  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出\n"
-        f"  • 支持多轮对话和上下文记忆\n"
-        f"  • !开头会直接执行例如：!ls\n",
+        f"  • !开头会直接执行例如：!ls\n"
+        f"  • 支持多轮对话和上下文记忆\n",
         border_style="cyan",
         title="[bold green]启动完成[/bold green]",
         title_align="center",
