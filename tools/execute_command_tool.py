@@ -14,7 +14,7 @@ from shared_console import console
 
 
 @tool
-def execute_command(command: str, timeout: int = 3600) -> str:
+def execute_command(command: str, timeout: int = 5400) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
     
     Args:
