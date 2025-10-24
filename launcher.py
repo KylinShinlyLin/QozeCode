@@ -70,10 +70,10 @@ def get_model_choice() -> Optional[str]:
     choices = [
         "DeepSeek      DeepSeek",
         "Qwen3         Alibaba Cloud",
+        "GLM-4         智普",
         "GPT-5         OpenAI",
         "Claude-4      bedrock",
         # "kimi-k2       月之暗面",
-        "GLM-4         智普",
         "Gemini        Google GCP",
         "[退出程序]"
     ]
