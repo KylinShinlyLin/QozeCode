@@ -16,4 +16,6 @@ credentials_path=
 [ZHIPU]
 api_key=
 
+[Qwen3]
+api_key=
 """

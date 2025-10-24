@@ -762,13 +762,13 @@ def handleRun(model_name: str = None, session_id: str = None):
         model_name = model_name or args.model
         session_id = session_id or args.session_id
 
-    # 先进行凭证交互式输入与保存，避免在加载状态下阻塞输入
-    try:
-        ensure_model_credentials(model_name)
-    except KeyboardInterrupt:
-        return
-    except Exception as e:
-        console.print(f"\n❌ {model_name} 凭证验证失败: {str(e)}", style="red")
+    # # 先进行凭证交互式输入与保存，避免在加载状态下阻塞输入
+    # try:
+    #     ensure_model_credentials(model_name)
+    # except KeyboardInterrupt:
+    #     return
+    # except Exception as e:
+    #     console.print(f"\n❌ {model_name} 凭证验证失败: {str(e)}", style="red")
 
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）
