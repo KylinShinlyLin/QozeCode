@@ -69,8 +69,9 @@ def get_model_choice() -> Optional[str]:
     # 定义选项 - 简洁对齐
     choices = [
         "DeepSeek      DeepSeek",
+        "Qwen3         Alibaba Cloud",
         "GPT-5         OpenAI",
-        "Claude-4      Anthropic",
+        "Claude-4      bedrock",
         # "kimi-k2       月之暗面",
         "GLM-4         智普",
         "Gemini        Google GCP",
@@ -106,6 +107,8 @@ def get_model_choice() -> Optional[str]:
             return 'GLM-4'
         elif "kimi-k2" in selected:
             return 'Kimi'
+        elif "Qwen3" in selected:
+            return 'Qwen3'
         elif "退出" in selected:
             console.print("\n👋 再见", style="dim")
             return None
