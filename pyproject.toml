@@ -23,6 +23,7 @@ dependencies = [
     "httpx[socks]",
     "tavily-python",
     "langchain-openai",
+    "langchain-qwq",
     "lxml",
     "beautifulsoup4",
     "langchain-community",
