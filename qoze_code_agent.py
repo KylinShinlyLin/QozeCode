@@ -518,52 +518,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 except IndexError:
                     return None
 
-                else:
-                    # 没有感叹号前缀时的补全逻辑 - 支持当前目录文件补全
-                    # 1. 文件路径补全（包括当前目录和空输入）
-                    try:
-                        # 处理波浪号
-                        if text.startswith('~'):
-                            expanded_text = os.path.expanduser(text)
-                        else:
-                            expanded_text = text
-
-                        # 获取匹配的文件和目录，限制数量
-                        matches = glob.glob(expanded_text + '*')
-                        for match in matches[:8]:  # 增加文件补全数量
-                            # 如果是目录，添加斜杠
-                            if os.path.isdir(match):
-                                options.append(match + '/')
-                            else:
-                                options.append(match)
-                    except:
-                        pass
-
-                    # 2. 如果没有文件匹配且输入长度>=2，尝试命令补全
-                    if not options and text and len(text) >= 2:
-                        try:
-                            result = subprocess.run(
-                                ['bash', '-c',
-                                 f'compgen -c -- {shlex.quote(text)} | grep "^{shlex.quote(text)}" | head -5'],
-                                capture_output=True,
-                                text=True,
-                                timeout=1
-                            )
-
-                            if result.returncode == 0:
-                                completions = result.stdout.strip().split('\n')
-                                for completion in completions:
-                                    if completion and completion.strip():
-                                        options.append("!" + completion.strip())
-                        except:
-                            pass
-
-                # 返回匹配的选项
-                try:
-                    return options[state]
-                except IndexError:
-                    return None
-
+            user_input = None
             try:
                 # 清除任何可能的readline历史干扰
                 if hasattr(readline, 'clear_history'):
@@ -601,18 +556,18 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             except (UnicodeDecodeError, UnicodeError, KeyboardInterrupt) as e:
                 if isinstance(e, KeyboardInterrupt):
                     raise e  # 重新抛出键盘中断
-                # 如果遇到编码错误，回退到Rich的Prompt.ask
-                console.print("\n")  # 换行
-                try:
-                    user_input = Prompt.ask(
-                        "[bold cyan]您[/bold cyan]",
-                        console=console,
-                        default="",
-                        show_default=False
-                    ).strip()
-                    user_input = clean_text(user_input)
-                except Exception:
-                    user_input = ""
+                # # 如果遇到编码错误，回退到Rich的Prompt.ask
+                # console.print("\n")  # 换行
+                # try:
+                #     user_input = Prompt.ask(
+                #         "[bold cyan]您[/bold cyan]",
+                #         console=console,
+                #         default="",
+                #         show_default=False
+                #     ).strip()
+                #     user_input = clean_text(user_input)
+                # except Exception:
+                #     user_input = ""
 
             # 优雅处理空输入：静默跳过，保持界面整洁
             if not user_input:
