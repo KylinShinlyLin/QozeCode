@@ -404,11 +404,11 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         f"[dim]  • 输入问题开始对话\n"
         f"  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出\n"
         f"  • !开头会直接执行例如：!ls\n"
-        f"  • 支持多轮对话和上下文记忆\n",
+        f"  • 支持多轮对话和上下文记忆",
         border_style="cyan",
         title="[bold green]启动完成[/bold green]",
         title_align="center",
-        padding=(1, 1),
+        # padding=(1, 1),
         expand=False
     )
     console.print(combined_panel)
@@ -548,7 +548,28 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
                 # 先显示提示符，然后在新行获取输入
                 console.print("[bold rgb(255,165,0)]您：[/bold rgb(255,165,0)]", )
-                user_input = input().strip()
+                console.print("[dim]💡 支持多行输入，输入空行回车执行请求[/dim]")
+
+                # 收集多行输入
+                lines = []
+                while True:
+                    try:
+                        line = input()
+                        # 检查退出命令
+                        if line.lower() in ['quit', 'exit', '退出', 'q']:
+                            # 保存最终状态到本地存储
+                            local_sessions[session_id] = conversation_state
+                            console.print("👋 再见！", style="bold cyan")
+                            return
+
+                        if line == "":
+                            break
+                        lines.append(line)
+                    except (KeyboardInterrupt, EOFError):
+                        # 处理 Ctrl+C 或 Ctrl+D
+                        break
+
+                user_input = "\n".join(lines)
 
                 # 清理可能的编码问题
                 user_input = clean_text(user_input)
@@ -601,12 +622,12 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             # 在有效输入后添加视觉分隔，提升可读性
             console.print()
 
-            # 检查退出命令
-            if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                # 保存最终状态到本地存储
-                local_sessions[session_id] = conversation_state
-                console.print("👋 再见！", style="bold cyan")
-                break
+            # # 检查退出命令
+            # if user_input.lower() in ['quit', 'exit', '退出', 'q']:
+            #     # 保存最终状态到本地存储
+            #     local_sessions[session_id] = conversation_state
+            #     console.print("👋 再见！", style="bold cyan")
+            #     break
 
             # 检查空输入 - 如果为空则直接继续循环，不显示任何提示
             if not user_input:
