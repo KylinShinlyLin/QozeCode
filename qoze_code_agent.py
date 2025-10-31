@@ -46,7 +46,7 @@ from shared_console import console
 from tools.common_tools import ask
 from tools.execute_command_tool import execute_command, curl
 from tools.math_tools import multiply, add, divide
-from tools.tavily_search_tool import tavily_search
+from tools.search_tool import tavily_search, parse_webpage_to_markdown
 from utils.command_exec import run_command
 from utils.directory_config import EXCLUDE_DIRECTORIES
 import nest_asyncio
@@ -58,7 +58,7 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
+base_tools = [add, multiply, divide, execute_command, tavily_search, parse_webpage_to_markdown, ask, curl]
 
 # 导入浏览器工具
 try:
@@ -240,6 +240,7 @@ def llm_call(state: dict):
         content=f'''
 你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
 - 你需要根据我的诉求，利用当前支持的tools帮我完成复杂的任务
+- parse_webpage_to_markdown 可以用来解析一个url 页面的内容，且响应速度很快
 
 ## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})
@@ -298,7 +299,7 @@ async def tool_node(state: dict):
         try:
 
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search"]:
+            if tool_call["name"] in ["tavily_search", "parse_webpage_to_markdown"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
@@ -529,6 +530,15 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                             console.print("👋 再见！", style="bold cyan")
                             return
 
+                        # 检查 Ctrl+Enter (在某些终端中可能显示为特殊字符)
+                        # 常见的 Ctrl+Enter 表示方式：空字符串或包含控制字符
+                        if line == "" or line.endswith('\x0a') or '\x0a' in line:
+                            # 如果是 Ctrl+Enter，移除控制字符并继续输入
+                            line = line.replace('\x0a', '')
+                            if line:  # 如果还有内容，添加到当前行
+                                lines.append(line)
+                            continue
+
                         if line == "":
                             break
                         lines.append(line)
@@ -697,7 +707,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                                             if show_scroll_info:
                                                 # 显示滚动指示器和最新内容
                                                 total_lines = len(lines)
-                                                scroll_indicator = f"内容较长，显示最新 {max_lines} 行 (共 {total_lines} 行)"
+                                                scroll_indicator = f"内容较长，显示最新 {max_lines} 行 (共 {total_lines} 行) 结束后展示完整内容"
                                                 display_lines = [scroll_indicator, ""] + lines[-max_lines:]
                                                 display_text = '\n'.join(display_lines)
                                             else:

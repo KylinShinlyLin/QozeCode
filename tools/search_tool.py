@@ -1,3 +1,4 @@
+import httpx
 from langchain_core.tools import tool
 from tavily import AsyncTavilyClient
 
@@ -61,5 +62,64 @@ async def tavily_search(query: str, max_results: int = 5) -> str:
 
     except Exception as e:
         error_msg = f"❌ Tavily 搜索失败: {str(e)}"
+        print(error_msg)
+        return error_msg
+
+
+@tool
+async def parse_webpage_to_markdown(url: str) -> str:
+    """Parse a webpage and convert its content to Markdown
+    
+    This tool uses to fetch webpage content and convert it directly to clean Markdown format.
+    - This tool is well-suited for reading URL documents or URL literature.
+    
+    Args:
+        url: The URL of the webpage to parse (must be a valid, accessible URL)
+    
+    Returns:
+        The webpage content converted to Markdown format by Jina Reader API,
+        or an error message if the API call fails
+    """
+    try:
+
+        # 构建 Jina Reader API 请求URL
+        api_url = f"https://r.jina.ai/{url}"
+
+        # 设置请求头
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        }
+
+        # 调用 Jina Reader API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url, headers=headers, follow_redirects=True)
+
+            # 检查响应状态
+            if response.status_code == 200:
+                markdown_content = response.text
+
+                # 限制输出长度（避免token过多）
+                max_length = 8000
+                if len(markdown_content) > max_length:
+                    markdown_content = markdown_content[:max_length] + "\n\n... (内容过长，已截断)"
+
+                # 添加来源信息
+                result = f"# 网页内容解析\n\n**来源URL**: {url}\n\n---\n\n{markdown_content}"
+                return result
+            else:
+                error_msg = f"❌ Jina Reader API 返回错误: {response.status_code} - {response.text}"
+                print(error_msg)
+                return error_msg
+
+    except httpx.RequestError as e:
+        error_msg = f"❌ 网络请求失败: {str(e)}"
+        print(error_msg)
+        return error_msg
+    except httpx.HTTPStatusError as e:
+        error_msg = f"❌ HTTP错误: {e.response.status_code} - {str(e)}"
+        print(error_msg)
+        return error_msg
+    except Exception as e:
+        error_msg = f"❌ 网页解析失败: {str(e)}"
         print(error_msg)
         return error_msg
