@@ -18,16 +18,17 @@ dependencies = [
     "typing_extensions>=4.15.0",
     "langchain-deepseek>=0.1.4",
     "langchain-google-vertexai>=2.1.2",
-    "boto3>=1.40.40",
     "langchain-aws>=0.2.33",
-    "httpx[socks]>=0.28.1",
-    "tavily-python>=0.7.12",
     "langchain-openai>=0.3.33",
     "langchain-qwq>=0.2.1",
+    "boto3>=1.40.40",
+    "httpx[socks]>=0.28.1",
+    "tavily-python>=0.7.12",
     "lxml>=6.0.2",
     "beautifulsoup4>=4.14.2",
     "langchain-community>=0.3.30",
     "pyjwt>=2.10.1",
+    "playwright>=1.55.0"
 ]
 
 [project.scripts]

@@ -19,8 +19,8 @@ limitations under the License.
 # 屏蔽 absl 库的 STDERR 警告
 import os
 
-os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
-os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
+from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
+from langchain_community.tools.playwright.utils import create_async_playwright_browser
 
 import argparse
 import asyncio
@@ -40,10 +40,8 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from rich.prompt import Prompt
 from typing_extensions import TypedDict, Annotated
 
-from config_manager import ensure_model_credentials
 from shared_console import console
 from tools.common_tools import ask
 from tools.execute_command_tool import execute_command, curl
@@ -51,35 +49,39 @@ from tools.math_tools import multiply, add, divide
 from tools.tavily_search_tool import tavily_search
 from utils.command_exec import run_command
 from utils.directory_config import EXCLUDE_DIRECTORIES
+import nest_asyncio
 
-# # 导入浏览器工具
-# try:
-#     from tools.browser_tools import (
-#         navigate_browser,
-#         click_element,
-#         extract_text,
-#         extract_hyperlinks,
-#         get_elements,
-#         current_page,
-#         navigate_back,
-#         close_browser
-#     )
-#
-#     BROWSER_TOOLS_AVAILABLE = True
-#
-# except ImportError as e:
-#     BROWSER_TOOLS_AVAILABLE = False
-#     console.print(f"⚠️ 浏览器工具不可用: {str(e)}", style="yellow")
-#     console.print("💡 要启用浏览器功能，请安装: pip install playwright langchain-community", style="yellow")
-#     console.print("💡 然后运行: playwright install", style="yellow")
+os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
+# 全局 LLM 变量，将在 main 函数中初始化
+llm = None
+llm_with_tools = None
+browser_tools = None
+
+base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
+
+# 导入浏览器工具
+try:
+    # 导入 nest_asyncio 来处理异步事件循环冲突
+    nest_asyncio.apply()
+    async_browser = create_async_playwright_browser(headless=False)
+    toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
+    browser_tools = toolkit.get_tools()
+except ImportError as e:
+    console.print(f"⚠️ 浏览器工具不可用: {str(e)}", style="yellow")
+    console.print("💡 要启用浏览器功能，请重新运行安装脚本: bash install.sh", style="yellow")
+    console.print("💡 或者手动安装: pip install -e .[browser] && playwright install", style="yellow")
+
+# 添加浏览器工具（如果可用）
+if browser_tools:
+    tools = base_tools + browser_tools
+    console.print(f"🔧 已加载 {len(tools)} 个工具 (包含浏览器工具)", style="cyan")
+else:
+    tools = base_tools
+    console.print(f"🔧 已加载 {len(tools)} 个工具 (不包含浏览器工具)", style="cyan")
 
 # 本地会话存储
 local_sessions = {}
-
-
-# toolkit = FileManagementToolkit(
-#     selected_tools=["list_directory"],
-# )
 
 
 def clean_text(text: str) -> str:
@@ -114,43 +116,6 @@ def clean_message(message):
     return message
 
 
-# 全局 LLM 变量，将在 main 函数中初始化
-llm = None
-llm_with_tools = None
-
-base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
-# base_tools = [add, multiply, divide, execute_command, tavily_search, ask, curl]
-# base_tools += toolkit.get_tools()
-# # 判断是否有浏览器操作依赖
-# if BROWSER_TOOLS_AVAILABLE:
-#     browser_tool_list = [
-#         navigate_browser,
-#         click_element,
-#         extract_text,
-#         extract_hyperlinks,
-#         get_elements,
-#         current_page,
-#         navigate_back
-#     ]
-#     base_tools += browser_tool_list
-
-# # 添加浏览器工具（如果可用）
-# if BROWSER_TOOLS_AVAILABLE:
-#     browser_tool_list = [
-#         navigate_browser,
-#         click_element,
-#         extract_text,
-#         extract_hyperlinks,
-#         get_elements,
-#         current_page,
-#         navigate_back
-#     ]
-#     tools = base_tools + browser_tool_list
-#     console.print(f"🔧 已加载 {len(tools)} 个工具 (包含浏览器工具)", style="cyan")
-# else:
-#     tools = base_tools
-#     console.print(f"🔧 已加载 {len(tools)} 个工具 (不包含浏览器工具)", style="cyan")
-tools = base_tools
 tools_by_name = {tool.name: tool for tool in tools}
 
 
@@ -577,18 +542,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             except (UnicodeDecodeError, UnicodeError, KeyboardInterrupt) as e:
                 if isinstance(e, KeyboardInterrupt):
                     raise e  # 重新抛出键盘中断
-                # # 如果遇到编码错误，回退到Rich的Prompt.ask
-                # console.print("\n")  # 换行
-                # try:
-                #     user_input = Prompt.ask(
-                #         "[bold cyan]您[/bold cyan]",
-                #         console=console,
-                #         default="",
-                #         show_default=False
-                #     ).strip()
-                #     user_input = clean_text(user_input)
-                # except Exception:
-                #     user_input = ""
 
             # 优雅处理空输入：静默跳过，保持界面整洁
             if not user_input:
@@ -621,13 +574,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
             # 在有效输入后添加视觉分隔，提升可读性
             console.print()
-
-            # # 检查退出命令
-            # if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-            #     # 保存最终状态到本地存储
-            #     local_sessions[session_id] = conversation_state
-            #     console.print("👋 再见！", style="bold cyan")
-            #     break
 
             # 检查空输入 - 如果为空则直接继续循环，不显示任何提示
             if not user_input:

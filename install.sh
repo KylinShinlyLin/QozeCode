@@ -123,17 +123,12 @@ install_dependencies() {
     # 安装项目
     pip install -e .
     
-    # 询问是否安装浏览器功能
-    if [ -t 0 ]; then  # 检查是否在交互式终端中
-        read -p "是否安装浏览器自动化功能？(y/N): " install_browser
-        if [[ $install_browser =~ ^[Yy]$ ]]; then
-            pip install -e ".[browser]"
-            log_info "安装 Playwright 浏览器..."
-            playwright install
-        fi
-    else
-        log_info "非交互式安装，跳过浏览器功能"
-    fi
+    # 自动安装浏览器功能
+    log_info "安装浏览器自动化功能..."
+    pip install -e ".[browser]"
+    log_info "安装 Playwright 浏览器..."
+    playwright install
+    log_success "浏览器功能安装完成"
     
     # 预安装 PyInstaller（为二进制构建做准备）
     log_info "预安装 PyInstaller..."
