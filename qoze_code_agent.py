@@ -295,16 +295,18 @@ async def tool_node(state: dict):
     result = []
     for tool_call in state["messages"][-1].tool_calls:
         tool = tools_by_name[tool_call["name"]]
+        try:
 
-        # 检查是否是异步工具
-        if tool_call["name"] in ["tavily_search", "navigate_browser", "click_element",
-                                 "extract_text", "extract_hyperlinks", "get_elements",
-                                 "current_page", "navigate_back"]:
-            observation = await tool.ainvoke(tool_call["args"])
-        else:
-            observation = tool.invoke(tool_call["args"])
-
-        result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+            # 检查是否是异步工具
+            if tool_call["name"] in ["tavily_search"]:
+                observation = await tool.ainvoke(tool_call["args"])
+            else:
+                observation = tool.invoke(tool_call["args"])
+            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+        except Exception as e:
+            error_msg = f"  ❌ '{tool_call["name"]}' 调用失败，错误信息:{e}"
+            console.print(error_msg, style="red")
+            result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"]))
     return {"messages": result}
 
 
