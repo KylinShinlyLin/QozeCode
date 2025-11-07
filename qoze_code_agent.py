@@ -324,9 +324,13 @@ def llm_call(state: dict):
 - 保持对用户数据和隐私的尊重
 - 我为了保证任务完成质量，需要对执行结果进行检查
 - 你可以使用python脚本，帮我处理Excel相关的任务
+- 针对浏览器场景的操作需要，如果 playwright 已经启动你可以使用 playwright 完成这些任务
 
 ## 当前目录结构
 {directory_tree}
+
+## 当前是否开启 playwright
+{browser_loaded}
 
 请根据用户的需求，充分利用你的工具和当前系统环境来提供最佳的帮助。
 ''')
