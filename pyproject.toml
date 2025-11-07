@@ -36,7 +36,7 @@ dependencies = [
 qoze = "launcher:main"
 
 [tool.setuptools]
-py-modules = ["launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant"]
+py-modules = ["launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant", "input_handler", "completion_handler"]
 packages = ["tools", "utils"]
 
 [project.optional-dependencies]
