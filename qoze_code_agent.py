@@ -16,21 +16,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# 屏蔽 absl 库的 STDERR 警告
-import os
-
-from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
-from langchain_community.tools.playwright.utils import create_async_playwright_browser
-
 import argparse
 import asyncio
 import operator
+# 屏蔽 absl 库的 STDERR 警告
+import os
 import re
-import time
 import traceback
 import uuid
 from typing import Literal
 
+import nest_asyncio
+from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
+from langchain_community.tools.playwright.utils import create_async_playwright_browser
 from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -43,6 +41,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import TypedDict, Annotated
 
 from completion_handler import setup_completion
+from input_handler import input_manager
 from shared_console import console
 from tools.common_tools import ask
 from tools.execute_command_tool import execute_command, curl
@@ -50,9 +49,6 @@ from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, parse_webpage_to_markdown
 from utils.command_exec import run_command
 from utils.directory_config import EXCLUDE_DIRECTORIES
-import nest_asyncio
-
-from input_handler import input_manager
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -121,7 +117,10 @@ def load_browser_tools():
     try:
         # 导入 nest_asyncio 来处理异步事件循环冲突
         nest_asyncio.apply()
+
+        # 直接调用 create_async_playwright_browser，它已经是同步函数
         async_browser = create_async_playwright_browser(headless=False)
+
         toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
         browser_tools = toolkit.get_tools()
 
