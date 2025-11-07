@@ -298,6 +298,7 @@ def llm_call(state: dict):
 你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
 - 你需要根据我的诉求，利用当前支持的tools帮我完成复杂的任务
 - parse_webpage_to_markdown 可以用来解析一个url 页面的内容，且响应速度很快
+- 在你的认知中 playwright == 浏览器
 
 ## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})
