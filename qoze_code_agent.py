@@ -362,7 +362,8 @@ async def tool_node(state: dict):
                 observation = tool.invoke(tool_call["args"])
             result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
         except Exception as e:
-            error_msg = f"  ❌ '{tool_call["name"]}' 调用失败，错误信息:{e}"
+            traceback.print_exc()
+            error_msg = f"  ❌ '{tool_call['name']}' 调用失败，错误信息:{e}"
             console.print(error_msg, style="red")
             result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"]))
     return {"messages": result}
