@@ -42,6 +42,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import TypedDict, Annotated
 
+from completion_handler import setup_completion
 from shared_console import console
 from tools.common_tools import ask
 from tools.execute_command_tool import execute_command, curl
@@ -50,6 +51,8 @@ from tools.search_tool import tavily_search, parse_webpage_to_markdown
 from utils.command_exec import run_command
 from utils.directory_config import EXCLUDE_DIRECTORIES
 import nest_asyncio
+
+from input_handler import input_manager
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -60,28 +63,43 @@ browser_tools = None
 
 base_tools = [add, multiply, divide, execute_command, tavily_search, parse_webpage_to_markdown, ask, curl]
 
-# 导入浏览器工具
-try:
-    # 导入 nest_asyncio 来处理异步事件循环冲突
-    nest_asyncio.apply()
-    async_browser = create_async_playwright_browser(headless=False)
-    toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
-    browser_tools = toolkit.get_tools()
-except ImportError as e:
-    console.print(f"⚠️ 浏览器工具不可用: {str(e)}", style="yellow")
-    console.print("💡 要启用浏览器功能，请重新运行安装脚本: bash install.sh", style="yellow")
-    console.print("💡 或者手动安装: pip install -e .[browser] && playwright install", style="yellow")
-
-# 添加浏览器工具（如果可用）
-if browser_tools:
-    tools = base_tools + browser_tools
-    console.print(f"🔧 已加载 {len(tools)} 个工具 (包含浏览器工具)", style="cyan")
-else:
-    tools = base_tools
-    console.print(f"🔧 已加载 {len(tools)} 个工具 (不包含浏览器工具)", style="cyan")
+# 初始时不加载浏览器工具
+tools = base_tools
+browser_tools = None
+browser_loaded = False
 
 # 本地会话存储
 local_sessions = {}
+
+
+def load_browser_tools():
+    """按需加载浏览器工具"""
+    global browser_tools, tools, browser_loaded
+
+    if browser_loaded:
+        return True
+
+    try:
+        # 导入 nest_asyncio 来处理异步事件循环冲突
+        nest_asyncio.apply()
+        async_browser = create_async_playwright_browser(headless=False)
+        toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
+        browser_tools = toolkit.get_tools()
+
+        # 更新工具列表
+        tools = base_tools + browser_tools
+        tools_by_name.update({tool.name: tool for tool in browser_tools})
+        browser_loaded = True
+
+        console.print(f"✅ 已成功加载 {len(browser_tools)} 个浏览器工具", style="green")
+        console.print(f"🔧 当前工具总数: {len(tools)}", style="cyan")
+        return True
+
+    except ImportError as e:
+        console.print(f"❌ 浏览器工具加载失败: {str(e)}", style="red")
+        console.print("💡 要启用浏览器功能，请重新运行安装脚本: bash install.sh", style="yellow")
+        console.print("💡 或者手动安装: pip install -e .[browser] && playwright install", style="yellow")
+        return False
 
 
 def clean_text(text: str) -> str:
@@ -388,165 +406,41 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             import sys
             import glob
 
-            # 定义自动补全函数
-            def completer(text, state):
-                """自动补全函数 - 彻底修复感叹号问题"""
-                import subprocess
-                import shlex
-                import glob
-                import os
+            # 设置自动补全
+            setup_completion()
 
-                options = []
+            from completion_handler import create_completer, setup_readline_completion
 
-                # 处理带感叹号前缀的命令补全
-                if text.startswith('!') or text.startswith('！'):
-                    # 计算连续感叹号的数量
-                    exclamation_prefix = ""
-                    clean_text = text
+            # 创建自动补全函数
+            completer = create_completer()
 
-                    # 提取所有开头的感叹号
-                    for char in text:
-                        if char in '!！':
-                            exclamation_prefix += char
-                        else:
-                            break
-
-                    # 去掉感叹号前缀得到实际的命令文本
-                    clean_text = text[len(exclamation_prefix):]
-
-                    if clean_text:
-                        try:
-                            # 使用bash的补全功能 - 获取以clean_text开头的命令
-                            result = subprocess.run(
-                                ['bash', '-c',
-                                 f'compgen -c -- {shlex.quote(clean_text)} | grep "^{shlex.quote(clean_text)}" | head -8'],
-                                capture_output=True,
-                                text=True,
-                                timeout=1
-                            )
-
-                            if result.returncode == 0:
-                                completions = result.stdout.strip().split('\n')
-                                # 过滤掉空行并添加原始的感叹号前缀
-                                for completion in completions:
-                                    if completion and completion.strip():
-                                        options.append(exclamation_prefix + completion.strip())
-
-                        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-                            pass
-                    else:
-                        # 如果只有感叹号，显示最常用的几个命令
-                        # 保持原始的感叹号前缀
-                        common_commands = ['ls', 'cd', 'pwd', 'git', 'python']
-                        options = [exclamation_prefix + cmd for cmd in common_commands]
-
-                else:
-                    # 没有感叹号前缀时的补全逻辑 - 支持当前目录文件补全
-                    # 1. 文件路径补全（包括当前目录和空输入）
-                    try:
-                        # 处理波浪号
-                        if text.startswith('~'):
-                            expanded_text = os.path.expanduser(text)
-                        else:
-                            expanded_text = text
-
-                        # 获取匹配的文件和目录，限制数量
-                        matches = glob.glob(expanded_text + '*')
-                        for match in matches[:8]:  # 增加文件补全数量
-                            # 如果是目录，添加斜杠
-                            if os.path.isdir(match):
-                                options.append(match + '/')
-                            else:
-                                options.append(match)
-                    except:
-                        pass
-
-                    # 2. 如果没有文件匹配且输入长度>=2，尝试命令补全
-                    if not options and text and len(text) >= 2:
-                        try:
-                            result = subprocess.run(
-                                ['bash', '-c',
-                                 f'compgen -c -- {shlex.quote(text)} | grep "^{shlex.quote(text)}" | head -5'],
-                                capture_output=True,
-                                text=True,
-                                timeout=1
-                            )
-
-                            if result.returncode == 0:
-                                completions = result.stdout.strip().split('\n')
-                                for completion in completions:
-                                    if completion and completion.strip():
-                                        options.append("!" + completion.strip())
-                        except:
-                            pass
-
-                # 返回匹配的选项
-                try:
-                    return options[state]
-                except IndexError:
-                    return None
+            # 配置readline自动补全
+            setup_readline_completion(completer)
 
             user_input = None
             try:
-                # 清除任何可能的readline历史干扰
-                if hasattr(readline, 'clear_history'):
-                    readline.clear_history()
-
-                # 设置readline配置，确保提示符安全
-                if hasattr(readline, 'set_startup_hook'):
-                    readline.set_startup_hook(None)
-
-                # 配置简洁的自动补全
-                if hasattr(readline, 'set_completer') and hasattr(readline, 'parse_and_bind'):
-                    readline.set_completer(completer)
-                    readline.parse_and_bind("tab: complete")
-                    # 设置补全时的分隔符
-                    readline.set_completer_delims(' \t\n`!@#$%^&*()=+[{]}\\|;:\'",<>?')
-
-                    # 配置更简洁的补全显示
-                    try:
-                        readline.parse_and_bind("set show-all-if-unmodified on")  # 只在未修改时显示所有
-                        readline.parse_and_bind("set completion-ignore-case on")  # 忽略大小写
-                        readline.parse_and_bind("set page-completions off")  # 不分页显示补全
-                        readline.parse_and_bind("set completion-query-items 1000")  # 很高的阈值，基本不询问
-                        readline.parse_and_bind("set print-completions-horizontally on")  # 水平显示补全
-                        readline.parse_and_bind("set show-all-if-ambiguous off")  # 不自动显示所有匹配项
-                    except:
-                        pass  # 如果不支持这些选项，忽略错误
-
-                # 先显示提示符，然后在新行获取输入
+                # 显示提示信息
                 console.print("[bold rgb(255,165,0)]您：[/bold rgb(255,165,0)]", )
-                console.print("[dim]💡 支持多行输入，输入空行回车执行请求[/dim]")
+                console.print("[dim]💡 直接输入内容，回车执行请求（输入 'line' 进入多行编辑模式）[/dim]")
 
-                # 收集多行输入
-                lines = []
-                while True:
-                    try:
-                        line = input()
-                        # 检查退出命令
-                        if line.lower() in ['quit', 'exit', '退出', 'q']:
-                            # 保存最终状态到本地存储
-                            local_sessions[session_id] = conversation_state
-                            console.print("👋 再见！", style="bold cyan")
-                            return
+                # 首先使用单行输入
+                user_input = input().strip()
 
-                        # 检查 Ctrl+Enter (在某些终端中可能显示为特殊字符)
-                        # 常见的 Ctrl+Enter 表示方式：空字符串或包含控制字符
-                        if line == "" or line.endswith('\x0a') or '\x0a' in line:
-                            # 如果是 Ctrl+Enter，移除控制字符并继续输入
-                            line = line.replace('\x0a', '')
-                            if line:  # 如果还有内容，添加到当前行
-                                lines.append(line)
-                            continue
+                # 如果用户输入 'line'，则切换到多行编辑模式
+                if user_input.lower() == 'line':
+                    console.print("[dim]💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交[/dim]")
+                    user_input = await input_manager.get_user_input()
 
-                        if line == "":
-                            break
-                        lines.append(line)
-                    except (KeyboardInterrupt, EOFError):
-                        # 处理 Ctrl+C 或 Ctrl+D
-                        break
+                if user_input.lower() in ['quit', 'exit', '退出', 'q']:
+                    # 保存最终状态到本地存储
+                    local_sessions[session_id] = conversation_state
+                    console.print("👋 再见！", style="bold cyan")
+                    return
 
-                user_input = "\n".join(lines)
+                # 如果没有任何输入，显示提示并继续
+                if not user_input:
+                    console.print("💡 请输入您的问题或指令", style="dim")
+                    continue
 
                 # 清理可能的编码问题
                 user_input = clean_text(user_input)
@@ -555,15 +449,19 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 if isinstance(e, KeyboardInterrupt):
                     raise e  # 重新抛出键盘中断
 
-            # 优雅处理空输入：静默跳过，保持界面整洁
-            if not user_input:
-                continue
-
             if user_input.lower() == 'clear':
                 conversation_state["messages"] = []
                 conversation_state["llm_calls"] = 0
                 local_sessions[session_id] = conversation_state
                 console.clear()
+                continue
+
+            # 处理 /browser 命令
+            if user_input.strip().lower() == 'browser':
+                if load_browser_tools():
+                    console.print("🎉 浏览器工具已启用！", style="green")
+                else:
+                    console.print("⚠️ 浏览器工具启用失败，请检查安装。", style="yellow")
                 continue
 
             if user_input.startswith('!') or user_input.startswith('！'):
@@ -724,7 +622,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                                     try:
                                         # 构建完整的显示文本（包括之前完成的响应）
                                         full_display_text = ""
-
                                         # 添加已完成的响应
                                         for i, completed_text in enumerate(complete_responses):
                                             full_display_text += completed_text
@@ -778,13 +675,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
                     # 显示最终的完整回复
                     if response_text:
-                        # try:
-                        #     final_complete_markdown = Markdown(response_text, style="blue", justify="left")
-                        #     live.update(final_complete_markdown)
-                        #
-                        # except Exception as e:
-                        #     console.print(f"显示最终完整回复时出错: {str(e)}", style="red")
-
                         from langchain_core.messages import AIMessage
                         # 创建AI消息对象，只包含文本内容
                         ai_response = AIMessage(content=response_text)
@@ -859,14 +749,6 @@ def handleRun(model_name: str = None, session_id: str = None):
         args = parse_arguments()
         model_name = model_name or args.model
         session_id = session_id or args.session_id
-
-    # # 先进行凭证交互式输入与保存，避免在加载状态下阻塞输入
-    # try:
-    #     ensure_model_credentials(model_name)
-    # except KeyboardInterrupt:
-    #     return
-    # except Exception as e:
-    #     console.print(f"\n❌ {model_name} 凭证验证失败: {str(e)}", style="red")
 
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）

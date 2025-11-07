@@ -148,7 +148,6 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         if not cfg.has_section(section):
             fail("Qwen3 AI 凭证 (section [Qwen3])")
         api_key = cfg.get(section, "api_key", fallback=None)
-        print(f"Qwen3 api_key={api_key}")
         if not api_key:
             fail("Qwen3 AI 凭证")
         return {"api_key": api_key}
