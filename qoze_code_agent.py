@@ -425,8 +425,8 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         f"[bold white]模型:[/bold white] [bold yellow]{model_name or 'Unknown'}[/bold yellow]\n"
         f"[bold white]状态:[/bold white] [bold green]启动成功 [/bold green] \n"
         f"[bold white]💡 使用提示:[/bold white]\n"
-        f"  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出\n"
-        f"  • !开头会直接执行例如：!ls",
+        f"[dim]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim]\n"
+        f"[dim]  • !开头会直接执行例如：!ls [/dim]",
         border_style="cyan",
         title="[bold green]启动完成[/bold green]",
         title_align="center",
