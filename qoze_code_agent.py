@@ -21,7 +21,6 @@ import asyncio
 import operator
 # 屏蔽 absl 库的 STDERR 警告
 import os
-import re
 import traceback
 import uuid
 from typing import Literal
@@ -29,15 +28,12 @@ from typing import Literal
 import nest_asyncio
 from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
 from langchain_community.tools.playwright.utils import create_async_playwright_browser
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, AIMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolMessage
 from langgraph.graph import StateGraph, START, END
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import TypedDict, Annotated
 
 from completion_handler import setup_completion
@@ -52,6 +48,11 @@ from utils.directory_config import EXCLUDE_DIRECTORIES
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
+
+# 定义颜色常量
+CYAN = "\033[96m"
+RESET = "\033[0m"
+
 # 全局 LLM 变量，将在 main 函数中初始化
 llm = None
 llm_with_tools = None
@@ -76,35 +77,6 @@ def get_terminal_display_lines():
     except:
         # 如果获取终端大小失败，使用默认值
         return 20
-
-
-# 添加滚动显示的辅助函数
-def create_scrollable_markdown(text: str, show_scroll_info: bool = True) -> Markdown:
-    """创建可滚动的Panel，自动显示最新内容"""
-    try:
-        if not text.strip():
-            return Markdown("正在思考...", style="blue")
-
-        max_lines = get_terminal_display_lines()
-        lines = text.split('\n')
-
-        if len(lines) <= max_lines:
-            display_text = text
-        else:
-            if show_scroll_info:
-                # 显示滚动指示器和最新内容
-                total_lines = len(lines)
-                scroll_indicator = f"内容较长，显示最新 {max_lines} 行 (共 {total_lines} 行) 结束后展示完整内容"
-                display_lines = [scroll_indicator, ""] + lines[-max_lines:]
-                display_text = '\n'.join(display_lines)
-            else:
-                # 不显示滚动指示器，直接显示最新内容
-                display_text = '\n'.join(lines[-max_lines:])
-        return Markdown(display_text, style="rgb(0,191,255)", justify="left",
-                        hyperlinks=True)
-    except Exception as e:
-        # 如果创建Panel失败，返回简单的错误Panel
-        return Markdown(f"显示错误: {str(e)}", style="red")
 
 
 def load_browser_tools():
@@ -140,38 +112,6 @@ def load_browser_tools():
         return False
 
 
-def clean_text(text: str) -> str:
-    """清理文本中的无效UTF-8字符和代理字符"""
-    if not isinstance(text, str):
-        return str(text)
-
-    try:
-        # 移除代理字符（surrogates）
-        text = text.encode('utf-8', 'ignore').decode('utf-8')
-
-        # 移除其他可能有问题的字符
-        text = re.sub(r'[\uD800-\uDFFF]', '', text)  # 移除代理字符
-        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)  # 移除控制字符
-
-        return text
-    except Exception as e:
-        console.print(f"⚠️  文本清理失败: {e}", style="yellow")
-        # 如果清理失败，返回安全的ASCII版本
-        return text.encode('ascii', 'ignore').decode('ascii')
-
-
-def clean_message(message):
-    """清理消息对象中的文本内容"""
-    if hasattr(message, 'content') and message.content:
-        if isinstance(message.content, str):
-            message.content = clean_text(message.content)
-        elif isinstance(message.content, list):
-            for item in message.content:
-                if isinstance(item, dict) and 'text' in item:
-                    item['text'] = clean_text(item['text'])
-    return message
-
-
 tools_by_name = {tool.name: tool for tool in tools}
 
 
@@ -190,7 +130,6 @@ def llm_call(state: dict):
     import subprocess
 
     messages = state["messages"]
-    # current_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
     # 获取系统信息
     try:
@@ -339,8 +278,8 @@ def llm_call(state: dict):
     non_system_messages = []
     for msg in messages:
         if not isinstance(msg, SystemMessage):
-            cleaned_msg = clean_message(msg)
-            non_system_messages.append(cleaned_msg)
+            # cleaned_msg = clean_message(msg)
+            non_system_messages.append(msg)
 
     final_messages = [system_msg] + non_system_messages
 
@@ -420,19 +359,18 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         # 清理历史消息中的无效字符
         cleaned_messages = []
         for msg in conversation_state["messages"]:
-            cleaned_msg = clean_message(msg)
-            cleaned_messages.append(cleaned_msg)
+            # cleaned_msg = clean_message(msg)
+            cleaned_messages.append(msg)
         conversation_state["messages"] = cleaned_messages
 
     combined_panel = Panel(
-        f"[bold cyan]🚀 QozeCode Agent[/bold cyan]\n"
-        f"[bold white]模型:[/bold white] [bold yellow]{model_name or 'Unknown'}[/bold yellow]\n"
-        f"[bold white]状态:[/bold white] [bold green]启动成功 [/bold green] \n"
-        f"[bold white]💡 使用提示:[/bold white]\n"
-        f"[dim]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim]\n"
-        f"[dim]  • !开头会直接执行例如：!ls [/dim]",
-        border_style="cyan",
-        title="[bold green]启动完成[/bold green]",
+        f"[bold cyan]✦ Welcome to QozeCode 0.2.1[/bold cyan]\n"
+        f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'}[bold cyan]\n"
+        f"[bold white]使用提示:[/bold white]\n"
+        f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
+        f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]",
+        border_style="dim white",
+        title="",
         title_align="center",
         expand=False
     )
@@ -459,7 +397,8 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             user_input = None
             try:
                 # 显示提示信息
-                console.print("[bold rgb(255,165,0)]您：[/bold rgb(255,165,0)]", )
+                console.print("\n")
+                console.print("[bold cyan]您：[bold cyan]")
                 console.print("[dim]💡 直接输入内容，回车执行请求（输入 'line' 进入多行编辑模式）[/dim]")
 
                 # 首先使用单行输入
@@ -481,8 +420,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                     console.print("💡 请输入您的问题或指令", style="dim")
                     continue
 
-                # 清理可能的编码问题
-                user_input = clean_text(user_input)
 
             except (UnicodeDecodeError, UnicodeError, KeyboardInterrupt) as e:
                 if isinstance(e, KeyboardInterrupt):
@@ -528,9 +465,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             if not user_input:
                 continue
 
-            # 清理用户输入
-            user_input = clean_text(user_input)
-
             # 创建用户消息
             user_message = HumanMessage(content=user_input)
 
@@ -540,163 +474,58 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 "llm_calls": conversation_state["llm_calls"]
             }
 
-            # 创建进度指示器
-            with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    TimeElapsedColumn(),
-                    refresh_per_second=20,
-                    console=console,
-            ) as progress:
-                # 添加任务进度
-                task_id = progress.add_task("🚀 正在处理您的请求...", total=None)
+            current_response_text = ""  # 当前流式响应的文本
+            need_point = True
+            has_response = False
+            async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
+                                                               config={"recursion_limit": 150}):
 
-                response_messages = []
-                current_response_text = ""  # 当前流式响应的文本
-                complete_responses = []  # 存储已完成的响应段落
+                # 1. 检查消息是否是 ToolMessage 类型
+                if isinstance(message_chunk, ToolMessage):
+                    continue
 
-                # 使用Live来实时更新显示
-                with Live(console=console, refresh_per_second=30) as live:
-                    # 收集完整的响应消息
-                    # 使用流式处理
-                    async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
-                                                                       config={"recursion_limit": 150}):
-                        # 更新进度状态
-                        if hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
-                            # 检测到工具调用，更新进度描述
-                            tool_names = [call['name'] for call in message_chunk.tool_calls]
-                            progress.update(task_id, description=f"🔧 正在执行工具: {', '.join(tool_names)}")
-                        elif message_chunk.content:
-                            # 检测到内容生成，更新进度描述
-                            progress.update(task_id, description="💭 正在生成回复...")
-
-                        # 1. 检查消息是否是 ToolMessage 类型
-                        if isinstance(message_chunk, ToolMessage):
-                            # 检查工具名称
-                            if hasattr(message_chunk, 'name') and message_chunk.name in ['execute_command', 'curl']:
-                                continue
-                            # 检查工具调用ID中是否包含这些工具
-                            elif hasattr(message_chunk, 'tool_call_id'):
-                                # 可以根据需要添加更多检查逻辑
-                                continue
-
-                        if message_chunk.content:
-                            # 收集响应消息
-                            response_messages.append(message_chunk)
-                            # 提取文本内容
-                            chunk_text = ""
-                            if isinstance(message_chunk.content, list):
-                                for content_item in message_chunk.content:
-                                    if isinstance(content_item, dict) and 'type' in content_item and content_item.get(
-                                            'type') == 'text':
-                                        text_content = content_item.get('text', '')
-                                        # 清理文本内容
-                                        text_content = clean_text(text_content)
-                                        chunk_text += text_content
-                            elif isinstance(message_chunk.content, str):
-                                text_content = message_chunk.content
-                                # 清理文本内容
-                                text_content = clean_text(text_content)
+                if message_chunk.content:
+                    # 提取文本内容
+                    chunk_text = ''
+                    if isinstance(message_chunk.content, list):
+                        for content_item in message_chunk.content:
+                            if isinstance(content_item, dict) and 'type' in content_item and content_item.get(
+                                    'type') == 'text':
+                                text_content = content_item.get('text', '')
                                 chunk_text += text_content
+                    elif isinstance(message_chunk.content, str):
+                        text_content = message_chunk.content
+                        chunk_text += text_content
 
-                            # 累积当前响应文本
-                            current_response_text += chunk_text
-                            # 实时更新显示
-                            if current_response_text:
-                                try:
-                                    # 构建完整的显示文本（包括之前完成的响应）
-                                    full_display_text = ""
-                                    # 添加已完成的响应
-                                    for i, completed_text in enumerate(complete_responses):
-                                        full_display_text += completed_text
-                                        if i < len(complete_responses) - 1:
-                                            full_display_text += "\n---\n"
+                    if chunk_text != '':
+                        has_response = True
+                        print(f"{CYAN}●{RESET} {chunk_text}" if need_point else chunk_text, end='')
+                        need_point = False
+                        current_response_text += chunk_text
 
-                                    # 添加当前正在流式的响应
-                                    if complete_responses and current_response_text:
-                                        full_display_text += "\n---\n"
-                                    full_display_text += current_response_text
+                if hasattr(message_chunk, 'response_metadata') and message_chunk.response_metadata:
+                    if 'finish_reason' in message_chunk.response_metadata:
+                        # need_point = True
+                        if has_response:
+                            print("\n", end='')
+                        has_response = False
+                        continue
 
-                                    updated_markdown = create_scrollable_markdown(full_display_text)
-                                    live.update(updated_markdown)
+                ai_response = AIMessage(content=current_response_text)
+                conversation_state["messages"].extend([user_message, ai_response])
+                conversation_state["llm_calls"] += 1
+                # todo 任务结束
+                local_sessions[session_id] = conversation_state
 
-                                except Exception as e:
-                                    # 如果更新失败，记录错误但继续处理
-                                    console.print(f"更新显示时出错: {str(e)}", style="red")
-
-                        if hasattr(message_chunk, 'response_metadata') and message_chunk.response_metadata:
-                            if 'finish_reason' in message_chunk.response_metadata:
-                                live.update("")
-                                # 将当前响应添加到完成列表
-                                complete_responses.append(current_response_text)
-
-                                # 构建包含所有已完成响应的显示文本
-                                all_completed_text = ""
-                                for i, completed_text in enumerate(complete_responses):
-                                    all_completed_text += completed_text
-                                    if i < len(complete_responses) - 1:
-                                        all_completed_text += "\n\n---\n\n"
-
-                                complete_markdown = Markdown(current_response_text, style="rgb(0,191,255)",
-                                                             justify="left",
-                                                             hyperlinks=True)
-                                console.print(complete_markdown)
-
-                                # 重置当前响应文本，准备接收下一段流式内容
-                                current_response_text = ""
-                                complete_responses = []
-
-                    # 最终处理：如果还有未完成的响应文本
-                    if current_response_text.strip():
-                        complete_responses.append(current_response_text)
-
-                    # 合并所有响应文本
-                    response_text = "\n\n---\n\n".join(complete_responses) if len(complete_responses) > 1 else (
-                        complete_responses[0] if complete_responses else "")
-
-                    # 显示最终的完整回复
-                    if response_text:
-                        from langchain_core.messages import AIMessage
-                        # 创建AI消息对象，只包含文本内容
-                        ai_response = AIMessage(content=response_text)
-                        # 更新对话状态，使用简化的响应消息
-                        conversation_state["messages"].extend([user_message, ai_response])
-                    else:
-                        # 如果没有文本内容，仍然保存原始响应
-                        conversation_state["messages"].extend([user_message] + response_messages)
-
-                    conversation_state["llm_calls"] += 1
-
-                    # 标记任务完成
-                    progress.update(task_id, description="✅ 任务完成", completed=True)
-
-                    # 实时保存状态到本地存储
-                    local_sessions[session_id] = conversation_state
 
         except KeyboardInterrupt:
             console.print("\n\n👋 程序被用户中断", style="yellow")
             # 保存状态到本地存储
             local_sessions[session_id] = conversation_state
             break
+
         except Exception as e:
             console.print(f"\n❌ 发生错误: {str(e)}", style="red")
-            # 如果是编码错误，尝试清理会话数据
-            if "utf-8" in str(e).lower() or "surrogate" in str(e).lower():
-                console.print("🔧 检测到编码问题，正在清理会话数据...", style="yellow")
-                # 清理所有历史消息
-                cleaned_messages = []
-                for msg in conversation_state.get("messages", []):
-                    try:
-                        cleaned_msg = clean_message(msg)
-                        cleaned_messages.append(cleaned_msg)
-                    except:
-                        console.print(f"⚠️  跳过无法清理的消息", style="dim yellow")
-                        continue
-                conversation_state["messages"] = cleaned_messages
-                local_sessions[session_id] = conversation_state
-                console.print("✅ 会话数据已清理，请重新输入", style="green")
-            else:
-                traceback.print_exc()
 
 
 async def start_chat_with_session(session_id: str = None, model_name: str = None):
@@ -733,7 +562,7 @@ def handleRun(model_name: str = None, session_id: str = None):
 
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）
-        with console.status("[bold green]正在初始化模型...", spinner="dots"):
+        with console.status("[bold cyan]正在初始化模型...", spinner="dots"):
             # 延迟导入以避免启动时加载模型相关重依赖
             from model_initializer import initialize_llm
             llm = initialize_llm(model_name)

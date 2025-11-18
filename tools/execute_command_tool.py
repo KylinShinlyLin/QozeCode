@@ -5,12 +5,17 @@ import time
 import json
 from typing import Optional, Dict, Any
 
+from halo import Halo
 from langchain_core.tools import tool
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.panel import Panel
 
 # 导入共享的 console 实例
 from shared_console import console
+
+# 定义颜色常量
+CYAN = "\033[36m"
+RESET = "\033[0m"
 
 
 @tool
@@ -56,102 +61,78 @@ def execute_command(command: str, timeout: int = 5400) -> str:
         timeout_thread = threading.Thread(target=kill_process_after_timeout, daemon=True)
         timeout_thread.start()
 
-        # 使用Progress显示执行状态
-        with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]{task.description}"),
-                TimeElapsedColumn(),
-                refresh_per_second=30,
-                console=console,
-                transient=False  # 保留进度条直到完成
-        ) as progress:
+        try:
+            # print(f"正在执行: {command[:66]}{'...' if len(command) > 66 else ''}")
+            spinner = Halo(text='正在处理...', spinner='dots')
+            spinner.start()
 
-            # 创建进度任务
-            task = progress.add_task(f"正在执行: {command[:50]}{'...' if len(command) > 50 else ''}", total=None)
+            while True:
+                current_time = time.time()
+                elapsed_time = current_time - start_time
 
-            try:
-                # 静默收集输出，不显示内容
-                while True:
-                    current_time = time.time()
-                    elapsed_time = current_time - start_time
+                # 检查是否超时
+                if elapsed_time > timeout:
+                    process.kill()
 
-                    # 检查是否超时
-                    if elapsed_time > timeout:
-                        progress.update(task,
-                                        description=f"[red]执行超时: {command[:40]}{'...' if len(command) > 40 else ''}")
-                        process.kill()
+                    # 显示超时结果Panel
+                    timeout_panel = Panel(
+                        f"⚠️ 命令执行超时 ({timeout}秒)\n"
+                        f"命令: [cyan]{command}[/cyan]",
+                        title="[bold red]执行超时[/bold red]",
+                        border_style="red",
+                        padding=(0, 1)
+                    )
+                    console.print(timeout_panel)
+                    return f"❌ 命令执行超时 ({timeout}秒)"
 
-                        # 显示超时结果Panel
-                        timeout_panel = Panel(
-                            f"⚠️ 命令执行超时 ({timeout}秒)\n"
-                            f"命令: [cyan]{command}[/cyan]",
-                            title="[bold red]执行超时[/bold red]",
-                            border_style="red",
-                            padding=(0, 1)
-                        )
-                        console.print(timeout_panel)
-                        return f"❌ 命令执行超时 ({timeout}秒)"
+                # 非阻塞读取输出（不显示）
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
 
-                    # 非阻塞读取输出（不显示）
-                    output = process.stdout.readline()
-                    if output == '' and process.poll() is not None:
-                        break
+                if output:
+                    output_lines.append(output.rstrip())
+            # 等待进程完成
+            return_code = process.wait()
 
-                    if output:
-                        output_lines.append(output.rstrip())
+            # 更新最终状态
+            if return_code == 0:
+                # print(f"执行成功: {command[:66]}{'...' if len(command) > 66 else ''}")
+                spinner.succeed(f"{CYAN}command: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}")
 
-                    # 更新进度描述
-                    progress.update(task,
-                                    description=f"  正在执行: [cyan]{command[:40]}{'...' if len(command) > 40 else ''}[cyan] ({len(output_lines)}行)")
+            else:
+                print(f"执行失败: {command[:66]}{'...' if len(command) > 66 else ''}")
 
-                # 等待进程完成
-                return_code = process.wait()
-                # execution_time = time.time() - start_time
+            # 收集完整输出
+            full_output = '\n'.join(output_lines)
+            return full_output
 
-                # 更新最终状态
-                if return_code == 0:
-                    progress.update(task,
-                                    description=f"  ✅ [cyan] {command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
-                else:
-                    progress.update(task,
-                                    description=f"  ❌ [cyan] {command[:40]}{'...' if len(command) > 40 else ''}[cyan]")
+        except KeyboardInterrupt:
+            process.terminate()
 
-                # 收集完整输出
-                full_output = '\n'.join(output_lines)
+            interrupt_panel = Panel(
+                f"⚠️ 用户中断命令执行\n"
+                f"命令: [cyan]{command}[/cyan]\n"
+                f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
+                title="[bold yellow]执行中断[/bold yellow]",
+                border_style="yellow",
+                padding=(0, 1)
+            )
+            console.print(interrupt_panel)
+            return "⚠️ 用户中断命令执行"
 
-                return full_output
-
-            except KeyboardInterrupt:
-                progress.update(task,
-                                description=f"[yellow]⚠️ 用户中断: {command[:40]}{'...' if len(command) > 40 else ''}")
-                process.terminate()
-
-                interrupt_panel = Panel(
-                    f"⚠️ 用户中断命令执行\n"
-                    f"命令: [cyan]{command}[/cyan]\n"
-                    f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
-                    title="[bold yellow]执行中断[/bold yellow]",
-                    border_style="yellow",
-                    padding=(0, 1)
-                )
-                console.print(interrupt_panel)
-                return "⚠️ 用户中断命令执行"
-
-            except Exception as e:
-                progress.update(task,
-                                description=f"[red]❌ 执行异常: {command[:40]}{'...' if len(command) > 40 else ''}")
-
-                error_panel = Panel(
-                    f"❌ 命令执行异常\n"
-                    f"命令: [cyan]{command}[/cyan]\n"
-                    f"错误: [red]{str(e)}[/red]\n"
-                    f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
-                    title="[bold red]执行异常[/bold red]",
-                    border_style="red",
-                    padding=(0, 1)
-                )
-                console.print(error_panel)
-                return f"❌ 命令执行异常: {str(e)}"
+        except Exception as e:
+            error_panel = Panel(
+                f"❌ 命令执行异常\n"
+                f"命令: [cyan]{command}[/cyan]\n"
+                f"错误: [red]{str(e)}[/red]\n"
+                f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
+                title="[bold red]执行异常[/bold red]",
+                border_style="red",
+                padding=(0, 1)
+            )
+            console.print(error_panel)
+            return f"❌ 命令执行异常: {str(e)}"
 
     except Exception as e:
         error_panel = Panel(
