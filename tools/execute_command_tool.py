@@ -1,14 +1,13 @@
+import json
 import signal
 import subprocess
 import threading
 import time
-import json
 from typing import Optional, Dict, Any
 
-from halo import Halo
 from langchain_core.tools import tool
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 # 导入共享的 console 实例
 from shared_console import console
@@ -62,50 +61,54 @@ def execute_command(command: str, timeout: int = 5400) -> str:
         timeout_thread.start()
 
         try:
-            # print(f"正在执行: {command[:66]}{'...' if len(command) > 66 else ''}")
-            spinner = Halo(text='正在处理...', spinner='dots')
-            spinner.start()
+            with Progress(
+                    TextColumn("[bold blue]{task.description}"),
+                    TimeElapsedColumn(),
+                    console=console,
+                    transient=False
+            ) as progress:
+                task = progress.add_task(f"正在执行: {command[:66]}{'...' if len(command) > 66 else ''}", total=None)
+                while True:
+                    current_time = time.time()
+                    elapsed_time = current_time - start_time
 
-            while True:
-                current_time = time.time()
-                elapsed_time = current_time - start_time
+                    # 检查是否超时
+                    if elapsed_time > timeout:
+                        process.kill()
 
-                # 检查是否超时
-                if elapsed_time > timeout:
-                    process.kill()
+                        # 显示超时结果Panel
+                        timeout_panel = Panel(
+                            f"⚠️ 命令执行超时 ({timeout}秒)\n"
+                            f"命令: [cyan]{command}[/cyan]",
+                            title="[bold red]执行超时[/bold red]",
+                            border_style="red",
+                            padding=(0, 1)
+                        )
+                        console.print(timeout_panel)
+                        return f"❌ 命令执行超时 ({timeout}秒)"
 
-                    # 显示超时结果Panel
-                    timeout_panel = Panel(
-                        f"⚠️ 命令执行超时 ({timeout}秒)\n"
-                        f"命令: [cyan]{command}[/cyan]",
-                        title="[bold red]执行超时[/bold red]",
-                        border_style="red",
-                        padding=(0, 1)
-                    )
-                    console.print(timeout_panel)
-                    return f"❌ 命令执行超时 ({timeout}秒)"
+                    # 非阻塞读取输出（不显示）
+                    output = process.stdout.readline()
+                    if output == '' and process.poll() is not None:
+                        break
 
-                # 非阻塞读取输出（不显示）
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
+                    if output:
+                        output_lines.append(output.rstrip())
+                # 等待进程完成
+                return_code = process.wait()
 
-                if output:
-                    output_lines.append(output.rstrip())
-            # 等待进程完成
-            return_code = process.wait()
+                # 更新最终状态
+                if return_code == 0:
+                    progress.update(task,
+                                    description=f"[bold green]✓ {CYAN}command: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}")
 
-            # 更新最终状态
-            if return_code == 0:
-                # print(f"执行成功: {command[:66]}{'...' if len(command) > 66 else ''}")
-                spinner.succeed(f"{CYAN}command: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}")
+                else:
+                    progress.update(task,
+                                    description=f"[bold red]✗ 执行失败: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}")
 
-            else:
-                print(f"执行失败: {command[:66]}{'...' if len(command) > 66 else ''}")
-
-            # 收集完整输出
-            full_output = '\n'.join(output_lines)
-            return full_output
+                # 收集完整输出
+                full_output = '\n'.join(output_lines)
+                return full_output
 
         except KeyboardInterrupt:
             process.terminate()

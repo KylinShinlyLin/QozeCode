@@ -15,11 +15,9 @@ class InputProcessor:
     def __init__(self, input_manager, local_sessions):
         self.input_manager = input_manager
         self.local_sessions = local_sessions
-        
+
     async def get_user_input(self, session_id):
         """获取并处理用户输入"""
-        user_input = None
-        
         try:
             # 显示提示信息
             console.print("\n")
@@ -50,7 +48,7 @@ class InputProcessor:
             if isinstance(e, KeyboardInterrupt):
                 raise e
             return ""
-    
+
     async def _handle_special_commands(self, user_input, session_id):
         """处理特殊命令"""
         # 处理 clear 命令
@@ -59,15 +57,6 @@ class InputProcessor:
                 self.local_sessions[session_id]["messages"] = []
                 self.local_sessions[session_id]["llm_calls"] = 0
             console.clear()
-            return ""
-
-        # 处理 browser 命令
-        if user_input.strip().lower() == 'browser':
-            from qoze_code_agent import load_browser_tools
-            if load_browser_tools():
-                console.print("🎉 浏览器工具已启用！", style="green")
-            else:
-                console.print("⚠️ 浏览器工具启用失败，请检查安装。", style="yellow")
             return ""
 
         # 处理 ! 命令
@@ -79,7 +68,7 @@ class InputProcessor:
 
             # 执行命令
             output = run_command(command)
-            
+
             # 创建用户消息
             combined_content = f"command:{command}\n\nresult:{output}"
             if session_id in self.local_sessions:

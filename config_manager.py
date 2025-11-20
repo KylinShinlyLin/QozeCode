@@ -69,7 +69,6 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
 
     def fail(missing_desc: str):
         current_cfg_path = get_config_path()
-        # current_cfg_dir = os.path.dirname(current_cfg_path)
         console.print(
             "\n".join([
                 f"🔑 未检测到 {missing_desc}。",

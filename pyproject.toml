@@ -30,7 +30,6 @@ dependencies = [
     "pyjwt>=2.10.1",
     "playwright>=1.55.0",
     "prompt_toolkit>=3.0.52",
-    "halo"
 ]
 #  langchain-google-vertexai
 [project.scripts]

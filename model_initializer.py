@@ -54,9 +54,10 @@ def initialize_llm(model_name: str):
             raise
     elif model_name == 'gemini':
         try:
+
             # 延迟导入重依赖
             from langchain_google_vertexai import ChatVertexAI
-            from google.oauth2 import service_account
+            # from google.oauth2 import service_account
             import os
             import logging
             import warnings
@@ -64,23 +65,21 @@ def initialize_llm(model_name: str):
             # 抑制 Gemini schema 相关的警告信息
             logging.getLogger('langchain_google_vertexai').setLevel(logging.ERROR)
             logging.getLogger('google.ai.generativelanguage_v1beta').setLevel(logging.ERROR)
-
             # 抑制 vertex_ai 参数警告
             warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
-            creds = ensure_model_credentials('gemini')
 
+            creds = ensure_model_credentials('gemini')
             # 仅构建客户端，不做网络验证
             llm = ChatVertexAI(
-                model_name="gemini-2.5-pro",
+                model_name="gemini-3-pro-preview",
                 project=creds["project"],
-                location=creds["location"],
+                # location=creds["location"],
+                location="global",  # gemini-3 只有全球节点
                 vertex_ai=True,
                 # 移除 credentials 参数，让它自动从环境变量读取
             )
+
             return llm
-        except ImportError:
-            print("❌ 缺少 langchain_google_vertexai 依赖，请安装: pip install langchain-google-vertexai")
-            raise
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
             raise
@@ -252,27 +251,7 @@ def verify_credentials(model_name: str):
     elif model_name == 'claude-4':
         import boto3
         from botocore.config import Config
-        creds = ensure_model_credentials(model_name)
-        # try:
-        #     # 配置代理 - 与initialize_llm函数保持一致
-        #     proxies = {
-        #         "http://": "socks5://us1-proxy.owll.ai:11800",
-        #         "https://": "socks5://us1-proxy.owll.ai:11800",
-        #     }
-        #
-        #     sts = boto3.client(
-        #         "sts",
-        #         aws_access_key_id=creds["aws_access_key_id"],
-        #         aws_secret_access_key=creds["aws_secret_access_key"],
-        #         region_name=creds["region_name"],
-        #         config=Config(
-        #             proxies=proxies,
-        #             retries={"max_attempts": 3}
-        #         )
-        #     )
-        #     sts.get_caller_identity()
-        # except Exception as e:
-        #     raise RuntimeError(f"AWS 凭证验证失败: {e}")
+        ensure_model_credentials(model_name)
 
     elif model_name == 'gemini':
         creds = ensure_model_credentials(model_name)

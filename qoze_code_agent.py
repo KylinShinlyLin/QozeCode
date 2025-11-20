@@ -20,16 +20,17 @@ import argparse
 import asyncio
 import operator
 # 屏蔽 absl 库的 STDERR 警告
-import os
+# import os
 import traceback
 import uuid
 from typing import Literal
-
-import nest_asyncio
-from halo import Halo
-from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
-from langchain_community.tools.playwright.utils import create_async_playwright_browser
-from langchain_core.messages import AnyMessage, AIMessage
+import platform
+import os
+import socket
+# import nest_asyncio
+# from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
+# from langchain_community.tools.playwright.utils import create_async_playwright_browser
+from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolMessage
@@ -46,8 +47,7 @@ from tools.common_tools import ask
 from tools.execute_command_tool import execute_command, curl
 from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, parse_webpage_to_markdown
-from utils.command_exec import run_command
-from utils.directory_config import EXCLUDE_DIRECTORIES
+from utils.directory_tree import get_directory_tree
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -65,7 +65,7 @@ base_tools = [add, multiply, divide, execute_command, tavily_search, parse_webpa
 
 # 初始时不加载浏览器工具
 tools = base_tools
-browser_tools = None
+# browser_tools = None
 browser_loaded = False
 
 # 本地会话存储
@@ -82,37 +82,37 @@ def get_terminal_display_lines():
         return 20
 
 
-def load_browser_tools():
-    """按需加载浏览器工具"""
-    global browser_tools, tools, browser_loaded
-
-    if browser_loaded:
-        return True
-
-    try:
-        # 导入 nest_asyncio 来处理异步事件循环冲突
-        nest_asyncio.apply()
-
-        # 直接调用 create_async_playwright_browser，它已经是同步函数
-        async_browser = create_async_playwright_browser(headless=False)
-
-        toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
-        browser_tools = toolkit.get_tools()
-
-        # 更新工具列表
-        tools = base_tools + browser_tools
-        tools_by_name.update({tool.name: tool for tool in browser_tools})
-        browser_loaded = True
-
-        console.print(f"✅ 已成功加载 {len(browser_tools)} 个浏览器工具", style="green")
-        console.print(f"🔧 当前工具总数: {len(tools)}", style="cyan")
-        return True
-
-    except ImportError as e:
-        console.print(f"❌ 浏览器工具加载失败: {str(e)}", style="red")
-        console.print("💡 要启用浏览器功能，请重新运行安装脚本: bash install.sh", style="yellow")
-        console.print("💡 或者手动安装: pip install -e .[browser] && playwright install", style="yellow")
-        return False
+# def load_browser_tools():
+#     """按需加载浏览器工具"""
+#     global browser_tools, tools, browser_loaded
+#
+#     if browser_loaded:
+#         return True
+#
+#     try:
+#         # 导入 nest_asyncio 来处理异步事件循环冲突
+#         nest_asyncio.apply()
+#
+#         # 直接调用 create_async_playwright_browser，它已经是同步函数
+#         async_browser = create_async_playwright_browser(headless=False)
+#
+#         toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
+#         browser_tools = toolkit.get_tools()
+#
+#         # 更新工具列表
+#         tools = base_tools + browser_tools
+#         tools_by_name.update({tool.name: tool for tool in browser_tools})
+#         browser_loaded = True
+#
+#         console.print(f"✅ 已成功加载 {len(browser_tools)} 个浏览器工具", style="green")
+#         console.print(f"🔧 当前工具总数: {len(tools)}", style="cyan")
+#         return True
+#
+#     except ImportError as e:
+#         console.print(f"❌ 浏览器工具加载失败: {str(e)}", style="red")
+#         console.print("💡 要启用浏览器功能，请重新运行安装脚本: bash install.sh", style="yellow")
+#         console.print("💡 或者手动安装: pip install -e .[browser] && playwright install", style="yellow")
+#         return False
 
 
 tools_by_name = {tool.name: tool for tool in tools}
@@ -127,13 +127,8 @@ class MessagesState(TypedDict):
 
 # Step 2: Define model node
 def llm_call(state: dict):
-    import platform
-    import os
-    import socket
-    import subprocess
-
     messages = state["messages"]
-
+    system_release = ''
     # 获取系统信息
     try:
         # 基本系统信息
@@ -156,70 +151,7 @@ def llm_call(state: dict):
         shell = os.getenv('SHELL', 'unknown')
         home_dir = os.getenv('HOME', 'unknown')
 
-        # 获取当前目录树结构（智能限制深度和长度）
-        try:
-
-            # 智能判断目录深度：根据当前目录路径决定扫描深度
-            path_depth = len(current_dir.split(os.sep))
-            if path_depth <= 3:  # 接近根目录
-                max_depth = 3
-            elif path_depth <= 5:  # 中等深度
-                max_depth = 4
-            else:  # 深层目录
-                max_depth = 5
-
-            # 设置最大输出长度限制（约2000个字符，避免token溢出）
-            MAX_TREE_LENGTH = 3000
-
-            if system_info == "Windows":
-                # Windows 使用 tree 命令，限制深度
-                tree_result = subprocess.run(['tree', '/F', '/A', f'/L:{max_depth}'],
-                                             capture_output=True, text=True, cwd=current_dir, timeout=10)
-            else:
-                # Unix-like 系统使用 tree 命令，如果没有则使用 find
-                try:
-                    # 使用 -I 参数排除指定目录，限制深度
-                    exclude_pattern = '|'.join(EXCLUDE_DIRECTORIES)
-                    tree_result = subprocess.run(['tree', '-L', str(max_depth), '-a', '-I', exclude_pattern],
-                                                 capture_output=True, text=True, cwd=current_dir, timeout=10)
-                except FileNotFoundError:
-                    # 如果没有 tree 命令，使用 find 作为备选，并手动过滤
-                    find_cmd = ['find', '.', '-maxdepth', str(max_depth)]
-                    # 为每个排除目录添加 -not -path 条件
-                    for exclude_dir in EXCLUDE_DIRECTORIES:
-                        find_cmd.extend(['-not', '-path', f'*/{exclude_dir}/*'])
-                        find_cmd.extend(['-not', '-name', exclude_dir])
-                    find_cmd.extend(['-type', 'd'])
-
-                    tree_result = subprocess.run(find_cmd, capture_output=True, text=True, cwd=current_dir, timeout=10)
-
-            if tree_result.returncode == 0:
-                raw_tree = tree_result.stdout.strip()
-
-                # 智能截断：如果输出过长，进行截断并添加提示
-                if len(raw_tree) > MAX_TREE_LENGTH:
-                    # 按行分割，保留前面的行
-                    lines = raw_tree.split('\n')
-                    truncated_lines = []
-                    current_length = 0
-
-                    for line in lines:
-                        if current_length + len(line) + 1 > MAX_TREE_LENGTH - 100:  # 预留空间给提示信息
-                            break
-                        truncated_lines.append(line)
-                        current_length += len(line) + 1
-
-                    directory_tree = '\n'.join(truncated_lines)
-                    directory_tree += f"\n\n... (目录结构过大，已截断显示前 {len(truncated_lines)} 行)"
-                    directory_tree += f"\n💡 提示: 当前在 {current_dir}，建议在具体项目目录中执行以获得更详细的结构信息"
-                else:
-                    directory_tree = raw_tree
-            else:
-                directory_tree = "无法获取目录结构"
-        except subprocess.TimeoutExpired:
-            directory_tree = "目录结构获取超时（目录过大）"
-        except Exception:
-            directory_tree = "无法获取目录结构"
+        directory_tree = get_directory_tree(current_dir)
 
     except Exception:
         # 如果获取系统信息失败，使用基本信息
@@ -271,9 +203,6 @@ def llm_call(state: dict):
 ## 当前目录结构
 {directory_tree}
 
-## 当前是否开启 playwright
-{browser_loaded}
-
 请根据用户的需求，充分利用你的工具和当前系统环境来提供最佳的帮助。
 ''')
 
@@ -281,7 +210,6 @@ def llm_call(state: dict):
     non_system_messages = []
     for msg in messages:
         if not isinstance(msg, SystemMessage):
-            # cleaned_msg = clean_message(msg)
             non_system_messages.append(msg)
 
     final_messages = [system_msg] + non_system_messages
@@ -300,7 +228,6 @@ async def tool_node(state: dict):
     for tool_call in state["messages"][-1].tool_calls:
         tool = tools_by_name[tool_call["name"]]
         try:
-
             # 检查是否是异步工具
             if tool_call["name"] in ["tavily_search", "parse_webpage_to_markdown"]:
                 observation = await tool.ainvoke(tool_call["args"])
@@ -324,7 +251,6 @@ def should_continue(state: MessagesState) -> Literal["tool_node", END]:
     # If the LLM makes a tool call, then perform an action
     if last_message.tool_calls:
         return "tool_node"
-    # Otherwise, we stop (reply to the user)
     return END
 
 
@@ -386,10 +312,8 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         try:
             # 设置自动补全
             setup_completion()
-
             # 输入处理
             user_input = await input_processor.get_user_input(session_id)
-
             # 退出信号
             if user_input is None:
                 local_sessions[session_id] = conversation_state
@@ -402,13 +326,11 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
             # 创建用户消息
             user_message = HumanMessage(content=user_input)
-
             # 更新对话状态
             current_state = {
                 "messages": conversation_state["messages"] + [user_message],
                 "llm_calls": conversation_state["llm_calls"]
             }
-
             # 流式输出
             await stream_output.stream_response(current_state, conversation_state)
 

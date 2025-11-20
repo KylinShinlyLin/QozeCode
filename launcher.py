@@ -70,10 +70,10 @@ def get_model_choice() -> Optional[str]:
     choices = [
         "DeepSeek      DeepSeek",
         "Qwen3         Alibaba Cloud",
+        "gemini-3      Google GCP",
         "GLM-4         智普",
         "gpt-5.1       OpenAI",
         "Claude-4      bedrock",
-        "Gemini        Google GCP",
         "[退出程序]"
     ]
 
@@ -94,7 +94,7 @@ def get_model_choice() -> Optional[str]:
         # 根据选择返回对应的模型名
         if "Claude-4" in selected:
             return 'claude-4'
-        elif "Gemini" in selected:
+        elif "gemini" in selected:
             return 'gemini'
         elif "gpt-5.1" in selected:
             return 'gpt-5.1'
