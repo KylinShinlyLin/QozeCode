@@ -39,7 +39,9 @@ from typing_extensions import TypedDict, Annotated
 
 from completion_handler import setup_completion
 from input_handler import input_manager
+from input_processor import InputProcessor
 from shared_console import console
+from stream_output import StreamOutput
 from tools.common_tools import ask
 from tools.execute_command_tool import execute_command, curl
 from tools.math_tools import multiply, add, divide
@@ -360,7 +362,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         # 清理历史消息中的无效字符
         cleaned_messages = []
         for msg in conversation_state["messages"]:
-            # cleaned_msg = clean_message(msg)
             cleaned_messages.append(msg)
         conversation_state["messages"] = cleaned_messages
 
@@ -377,93 +378,26 @@ async def chat_loop(session_id: str = None, model_name: str = None):
     )
     console.print(combined_panel)
 
+    # 初始化处理器
+    input_processor = InputProcessor(input_manager, local_sessions)
+    stream_output = StreamOutput(agent, local_sessions)
+
     while True:
         try:
-            # 使用更安全的输入方式，完全避免提示符被删除的问题
-            import readline
-            import sys
-            import glob
-
             # 设置自动补全
             setup_completion()
 
-            from completion_handler import create_completer, setup_readline_completion
+            # 输入处理
+            user_input = await input_processor.get_user_input(session_id)
 
-            # 创建自动补全函数
-            completer = create_completer()
-
-            # 配置readline自动补全
-            setup_readline_completion(completer)
-
-            user_input = None
-            try:
-                # 显示提示信息
-                console.print("\n")
-                console.print("[bold cyan]您：[bold cyan]")
-                console.print("[dim]💡 直接输入内容，回车执行请求（输入 'line' 进入多行编辑模式）[/dim]")
-
-                # 首先使用单行输入
-                user_input = input().strip()
-
-                # 如果用户输入 'line'，则切换到多行编辑模式
-                if user_input.lower() == 'line':
-                    console.print("[dim]💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交[/dim]")
-                    user_input = await input_manager.get_user_input()
-
-                if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                    # 保存最终状态到本地存储
-                    local_sessions[session_id] = conversation_state
-                    console.print("👋 再见！", style="bold cyan")
-                    return
-
-                # 如果没有任何输入，显示提示并继续
-                if not user_input:
-                    console.print("💡 请输入您的问题或指令", style="dim")
-                    continue
-
-
-            except (UnicodeDecodeError, UnicodeError, KeyboardInterrupt) as e:
-                if isinstance(e, KeyboardInterrupt):
-                    raise e  # 重新抛出键盘中断
-
-            if user_input.lower() == 'clear':
-                conversation_state["messages"] = []
-                conversation_state["llm_calls"] = 0
+            # 退出信号
+            if user_input is None:
                 local_sessions[session_id] = conversation_state
-                console.clear()
-                continue
+                console.print("👋 再见！", style="bold cyan")
+                return
 
-            # 处理 /browser 命令
-            if user_input.strip().lower() == 'browser':
-                if load_browser_tools():
-                    console.print("🎉 浏览器工具已启用！", style="green")
-                else:
-                    console.print("⚠️ 浏览器工具启用失败，请检查安装。", style="yellow")
-                continue
-
-            if user_input.startswith('!') or user_input.startswith('！'):
-                # 去掉所有开头的感叹号，避免多个感叹号导致命令执行失败
-                command = user_input.lstrip('!！').strip()
-                if not command:
-                    console.print("⚠️ 请输入要执行的命令，如: ! ls -la", style="yellow")
-                    continue
-
-                # 使用独立命令执行器，实时输出并返回完整内容
-                output = run_command(command)
-
-                # 合并为一条用户消息
-                combined_content = f"command:{command}\n\nresult:{output}"
-                conversation_state["messages"].extend([
-                    HumanMessage(content=combined_content)
-                ])
-                local_sessions[session_id] = conversation_state
-                continue
-
-            # 在有效输入后添加视觉分隔，提升可读性
-            console.print()
-
-            # 检查空输入 - 如果为空则直接继续循环，不显示任何提示
-            if not user_input:
+            # 空输入，继续循环
+            if user_input == "":
                 continue
 
             # 创建用户消息
@@ -475,56 +409,11 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 "llm_calls": conversation_state["llm_calls"]
             }
 
-            current_response_text = ""  # 当前流式响应的文本
-            need_point = True
-            has_response = False
-
-            async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
-                                                               config={"recursion_limit": 150}):
-
-                # 1. 检查消息是否是 ToolMessage 类型
-                if isinstance(message_chunk, ToolMessage):
-                    continue
-
-                if message_chunk.content:
-                    # 提取文本内容
-                    chunk_text = ''
-                    if isinstance(message_chunk.content, list):
-                        for content_item in message_chunk.content:
-                            if isinstance(content_item, dict) and 'type' in content_item and content_item.get(
-                                    'type') == 'text':
-                                text_content = content_item.get('text', '')
-                                chunk_text += text_content
-                    elif isinstance(message_chunk.content, str):
-                        text_content = message_chunk.content
-                        chunk_text += text_content
-
-                    if chunk_text != '':
-                        has_response = True
-                        print(f"{CYAN}●{RESET} {chunk_text}" if need_point else chunk_text, end='', file=sys.stderr)
-                        need_point = False
-                        current_response_text += chunk_text
-
-                if hasattr(message_chunk, 'response_metadata') and message_chunk.response_metadata:
-                    if 'finish_reason' in message_chunk.response_metadata:
-                        # need_point = True
-                        if has_response:
-                            print("\n", end='')
-                        has_response = False
-                        continue
-
-                ai_response = AIMessage(content=current_response_text)
-                conversation_state["messages"].extend([user_message, ai_response])
-                conversation_state["llm_calls"] += 1
-                # todo 任务结束
-                local_sessions[session_id] = conversation_state
-
-
-
+            # 流式输出
+            await stream_output.stream_response(current_state, session_id)
 
         except KeyboardInterrupt:
             console.print("\n\n👋 程序被用户中断", style="yellow")
-            # 保存状态到本地存储
             local_sessions[session_id] = conversation_state
             break
 
