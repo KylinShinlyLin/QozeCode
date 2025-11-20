@@ -410,7 +410,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             }
 
             # 流式输出
-            await stream_output.stream_response(current_state, session_id)
+            await stream_output.stream_response(current_state,conversation_state)
 
         except KeyboardInterrupt:
             console.print("\n\n👋 程序被用户中断", style="yellow")

@@ -15,7 +15,7 @@ class StreamOutput:
         self.agent = agent
         self.local_sessions = local_sessions
 
-    async def stream_response(self, current_state, session_id):
+    async def stream_response(self, current_state, conversation_state):
         """处理 AI 流式响应"""
         current_response_text = ""  # 当前流式响应的文本
         need_point = True
@@ -59,8 +59,10 @@ class StreamOutput:
 
         # 保存最终状态
         ai_response = AIMessage(content=current_response_text)
-        if session_id in self.local_sessions:
-            self.local_sessions[session_id]["messages"].extend([
-                current_state["messages"][-1], ai_response
-            ])
-            self.local_sessions[session_id]["llm_calls"] += 1
+        conversation_state["messages"].extend([ai_response])
+        conversation_state["llm_calls"] += 1
+        # if session_id in self.local_sessions:
+        #     self.local_sessions[session_id]["messages"].extend([
+        #         current_state["messages"][-1], ai_response
+        #     ])
+        #     self.local_sessions[session_id]["llm_calls"] += 1
