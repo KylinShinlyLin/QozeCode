@@ -26,6 +26,7 @@ import uuid
 from typing import Literal
 
 import nest_asyncio
+from halo import Halo
 from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
 from langchain_community.tools.playwright.utils import create_async_playwright_browser
 from langchain_core.messages import AnyMessage, AIMessage
@@ -477,6 +478,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             current_response_text = ""  # 当前流式响应的文本
             need_point = True
             has_response = False
+
             async for message_chunk, metadata in agent.astream(current_state, stream_mode="messages",
                                                                config={"recursion_limit": 150}):
 
@@ -499,7 +501,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
                     if chunk_text != '':
                         has_response = True
-                        print(f"{CYAN}●{RESET} {chunk_text}" if need_point else chunk_text, end='')
+                        print(f"{CYAN}●{RESET} {chunk_text}" if need_point else chunk_text, end='', file=sys.stderr)
                         need_point = False
                         current_response_text += chunk_text
 
@@ -516,6 +518,8 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 conversation_state["llm_calls"] += 1
                 # todo 任务结束
                 local_sessions[session_id] = conversation_state
+
+
 
 
         except KeyboardInterrupt:

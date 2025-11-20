@@ -67,11 +67,7 @@ def initialize_llm(model_name: str):
 
             # 抑制 vertex_ai 参数警告
             warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
-
             creds = ensure_model_credentials('gemini')
-
-            # 设置环境变量方式（推荐）
-            # os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds["credentials_path"]
 
             # 仅构建客户端，不做网络验证
             llm = ChatVertexAI(
@@ -88,7 +84,7 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
             raise
-    elif model_name in ('gpt-5', 'gpt-5-codex'):
+    elif model_name in ('gpt-5.1', 'gpt-5-codex'):
         try:
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
@@ -113,9 +109,9 @@ def initialize_llm(model_name: str):
                 "http_client": http_client,
             }
 
-            if model_name == 'gpt-5':
-                model_config["model"] = "gpt-5"
-                model_config["reasoning_effort"] = "minimal"
+            if model_name == 'gpt-5.1':
+                model_config["model"] = "gpt-5.1"
+                model_config["reasoning_effort"] = "low"
             else:  # gpt-5-codex
                 model_config["model"] = "gpt-5-codex"
 

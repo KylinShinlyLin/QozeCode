@@ -17,7 +17,7 @@ dependencies = [
     "langgraph>=1.0.0a3",
     "typing_extensions>=4.15.0",
     "langchain-deepseek>=0.1.4",
-    "langchain-google-vertexai>=2.1.2",
+    "langchain-google-vertexai",
     "langchain-aws>=0.2.33",
     "langchain-openai>=0.3.33",
     "langchain-qwq>=0.2.1",
@@ -29,9 +29,10 @@ dependencies = [
     "langchain-community>=0.3.30",
     "pyjwt>=2.10.1",
     "playwright>=1.55.0",
-    "prompt_toolkit>=3.0.52"
+    "prompt_toolkit>=3.0.52",
+    "halo"
 ]
-
+#  langchain-google-vertexai
 [project.scripts]
 qoze = "launcher:main"
 

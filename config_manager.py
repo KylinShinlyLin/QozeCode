@@ -80,7 +80,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         )
         raise RuntimeError(f"缺少模型凭证：{missing_desc}")
 
-    if model_name in ("gpt-5", "gpt-5-codex"):
+    if model_name in ("gpt-5", "gpt-5.1", "gpt-5-codex"):
         section = "openai"
         if not cfg.has_section(section):
             fail("OpenAI API Key (section [openai] -> api_key)")
@@ -112,9 +112,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             "aws_session_token": session_token,
             "region_name": region,
         }
-
         return credentials
-
     if model_name == "gemini":
         section = "vertexai"
         if not cfg.has_section(section):
