@@ -124,11 +124,11 @@ install_dependencies() {
     pip install -e .
     
     # 自动安装浏览器功能
-    log_info "安装浏览器自动化功能..."
-    pip install -e ".[browser]"
-    log_info "安装 Playwright 浏览器..."
-    playwright install
-    log_success "浏览器功能安装完成"
+#    log_info "安装浏览器自动化功能..."
+#    pip install -e ".[browser]"
+#    log_info "安装 Playwright 浏览器..."
+#    playwright install
+#    log_success "浏览器功能安装完成"
     
     # 预安装 PyInstaller（为二进制构建做准备）
     log_info "预安装 PyInstaller..."
