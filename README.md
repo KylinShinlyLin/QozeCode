@@ -2,7 +2,7 @@
 
 <img src="./assets/logo.png" alt="图片描述" style="padding: 5px 60px 5px 60px;">
 
-```QozeCode``` 是一个功能强大的命令行AI agent，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
+```QozeCode``` 是一个功能强大的命令行AI agent，基于 langGraph 进行开发设计，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
 
 <div align="center">
   <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
@@ -73,9 +73,11 @@
 [//]: # (### 多窗口 agent 同时运行)
 
 [//]: # ()
+
 [//]: # (- **并发处理**: 支持在多个终端窗口中同时启动不同的 QozeCode Agent 实例，每个实例拥有独立的会话ID和上下文记忆)
 
 [//]: # ()
+
 [//]: # (<div align="center">)
 
 [//]: # (  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">)
@@ -93,6 +95,7 @@
 [//]: # (### 🌐 浏览器自动化（计划中）)
 
 [//]: # ()
+
 [//]: # (- **网页操作**: 智能浏览器控制功能，可以自动化网页操作和数据抓取)
 
 ### 🔧 扩展能力 (未来支持)
