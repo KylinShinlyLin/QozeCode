@@ -16,13 +16,18 @@ class InputProcessor:
         self.input_manager = input_manager
         self.local_sessions = local_sessions
 
-    async def get_user_input(self, session_id):
+    async def get_user_input(self, session_id, plan_mode: bool):
         """获取并处理用户输入"""
         try:
             # 显示提示信息
             console.print("\n")
             console.print("[bold cyan]您：[bold cyan]")
-            console.print("[dim]💡 直接输入内容，回车执行请求（输入 'line' 进入多行编辑模式）[/dim]")
+            # console.print(f"[dim]💡 回车执行请求（输入 'line' 进入多行编辑[/dim]")
+            # 根据 plane_mode 显示不同的提示信息
+            if plan_mode:
+                console.print(f"[dim]💡 计划模式 - 回车执行请求（输入 'line' 进入多行编辑）[/dim]")
+            else:
+                console.print(f"[dim]💡 回车执行请求（输入 'line' 进入多行编辑）[/dim]")
 
             # 首先使用单行输入
             user_input = input().strip()
@@ -31,10 +36,6 @@ class InputProcessor:
             if user_input.lower() == 'line':
                 console.print("[dim]💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交[/dim]")
                 user_input = await self.input_manager.get_user_input()
-
-            # 处理退出命令
-            if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                return None
 
             # 处理空输入
             if not user_input:

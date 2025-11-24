@@ -44,10 +44,11 @@ from input_processor import InputProcessor
 from shared_console import console
 from stream_output import StreamOutput
 from tools.common_tools import ask
-from tools.execute_command_tool import execute_command, curl
+from tools.execute_command_tool import execute_command
 from tools.math_tools import multiply, add, divide
-from tools.search_tool import tavily_search, parse_webpage_to_markdown
+from tools.search_tool import tavily_search, get_webpage_to_markdown
 from utils.directory_tree import get_directory_tree
+from utils.system_prompt import get_system_prompt
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -61,13 +62,12 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, parse_webpage_to_markdown, ask, curl]
+base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown, ask]
 
 # 初始时不加载浏览器工具
 tools = base_tools
-# browser_tools = None
 browser_loaded = False
-
+plan_mode = False
 # 本地会话存储
 local_sessions = {}
 
@@ -80,39 +80,6 @@ def get_terminal_display_lines():
     except:
         # 如果获取终端大小失败，使用默认值
         return 20
-
-
-# def load_browser_tools():
-#     """按需加载浏览器工具"""
-#     global browser_tools, tools, browser_loaded
-#
-#     if browser_loaded:
-#         return True
-#
-#     try:
-#         # 导入 nest_asyncio 来处理异步事件循环冲突
-#         nest_asyncio.apply()
-#
-#         # 直接调用 create_async_playwright_browser，它已经是同步函数
-#         async_browser = create_async_playwright_browser(headless=False)
-#
-#         toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
-#         browser_tools = toolkit.get_tools()
-#
-#         # 更新工具列表
-#         tools = base_tools + browser_tools
-#         tools_by_name.update({tool.name: tool for tool in browser_tools})
-#         browser_loaded = True
-#
-#         console.print(f"✅ 已成功加载 {len(browser_tools)} 个浏览器工具", style="green")
-#         console.print(f"🔧 当前工具总数: {len(tools)}", style="cyan")
-#         return True
-#
-#     except ImportError as e:
-#         console.print(f"❌ 浏览器工具加载失败: {str(e)}", style="red")
-#         console.print("💡 要启用浏览器功能，请重新运行安装脚本: bash install.sh", style="yellow")
-#         console.print("💡 或者手动安装: pip install -e .[browser] && playwright install", style="yellow")
-#         return False
 
 
 tools_by_name = {tool.name: tool for tool in tools}
@@ -129,6 +96,15 @@ class MessagesState(TypedDict):
 def llm_call(state: dict):
     messages = state["messages"]
     system_release = ''
+    system_info = platform.system()
+    system_version = "unknown"
+    current_dir = os.getcwd()
+    username = os.getenv('USER', 'unknown')
+    hostname = socket.gethostname()
+
+    shell = home_dir = "unknown"
+    machine_type = processor = "unknown"
+    directory_tree = "无法获取目录结构"
     # 获取系统信息
     try:
         # 基本系统信息
@@ -137,74 +113,24 @@ def llm_call(state: dict):
         system_release = platform.release()
         machine_type = platform.machine()
         processor = platform.processor()
-
         # 当前工作目录
         current_dir = os.getcwd()
-
         # 用户信息
         username = os.getenv('USER') or os.getenv('USERNAME') or 'unknown'
-
         # 主机名
         hostname = socket.gethostname()
-
         # 环境变量中的重要信息
         shell = os.getenv('SHELL', 'unknown')
         home_dir = os.getenv('HOME', 'unknown')
-
         directory_tree = get_directory_tree(current_dir)
 
     except Exception:
-        # 如果获取系统信息失败，使用基本信息
-        system_info = platform.system()
-        system_version = "unknown"
-        current_dir = os.getcwd()
-        username = os.getenv('USER', 'unknown')
-        hostname = socket.gethostname()
+        print("获取设备信息异常")
 
-        shell = home_dir = "unknown"
-        machine_type = processor = "unknown"
-        directory_tree = "无法获取目录结构"
-
-    # 确保 SystemMessage 在开头
-    system_msg = SystemMessage(
-        content=f'''
-你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中
-- 你需要根据我的诉求，利用当前支持的tools帮我完成复杂的任务
-- parse_webpage_to_markdown 可以用来解析一个url 页面的内容，且响应速度很快
-- 在你的认知中 playwright == 浏览器
-
-## 系统环境信息
-**操作系统**: {system_info} {system_release} ({system_version})
-**架构**: {machine_type}
-**处理器**: {processor}
-**主机名**: {hostname}
-**用户**: {username}
-**Shell**: {shell}
-
-## 当前环境
-**工作目录**: {current_dir}
-**用户主目录**: {home_dir}
-
-## 工作原则
-- 不要去虚构不存在的内容
-- 为了加快回复速度，可以一个命令执行多个操作节约时间
-- 或者避免大量 token 的浪费，需要查找的内容，尽量避免读取整个文件
-- 写入修改文件的时候也避免整个文件重写，可以使用 grep + sed 组合来定位和修改特定内容
-- 始终考虑当前的系统环境和资源限制
-- 文件编辑尽量有限使用提供个工具方式操作
-- 在执行可能影响系统的操作前，先评估风险
-- 优先使用适合当前操作系统的命令和工具
-- 提供准确、实用的建议和解决方案
-- 保持对用户数据和隐私的尊重
-- 我为了保证任务完成质量，需要对执行结果进行检查
-- 你可以使用python脚本，帮我处理Excel相关的任务
-- 针对浏览器场景的操作需要，如果 playwright 已经启动你可以使用 playwright 完成这些任务
-
-## 当前目录结构
-{directory_tree}
-
-请根据用户的需求，充分利用你的工具和当前系统环境来提供最佳的帮助。
-''')
+    system_msg = get_system_prompt(system_info=system_info, system_release=system_release,
+                                   system_version=system_version, machine_type=machine_type, processor=processor,
+                                   hostname=hostname, username=username, shell=shell, current_dir=current_dir,
+                                   home_dir=home_dir, directory_tree=directory_tree, plan_mode=plan_mode)
 
     # 过滤掉之前的 SystemMessage，只保留最新的，并清理文本
     non_system_messages = []
@@ -229,7 +155,7 @@ async def tool_node(state: dict):
         tool = tools_by_name[tool_call["name"]]
         try:
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "parse_webpage_to_markdown"]:
+            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
@@ -278,6 +204,7 @@ agent = agent_builder.compile()
 # 多轮对话函数
 async def chat_loop(session_id: str = None, model_name: str = None):
     # 如果没有提供 session_id，生成一个新的
+    global plan_mode
     if not session_id:
         session_id = str(uuid.uuid4())
 
@@ -313,12 +240,17 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             # 设置自动补全
             setup_completion()
             # 输入处理
-            user_input = await input_processor.get_user_input(session_id)
-            # 退出信号
-            if user_input is None:
+            user_input = await input_processor.get_user_input(session_id, plan_mode)
+
+            if user_input.lower() in ['quit', 'exit', '退出', 'q']:
                 local_sessions[session_id] = conversation_state
                 console.print("👋 再见！", style="bold cyan")
                 return
+
+            if user_input.lower() in ['plan']:
+                plan_mode = True
+                console.print("进入计划模式")
+                continue
 
             # 空输入，继续循环
             if user_input == "":
@@ -340,6 +272,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             break
 
         except Exception as e:
+            traceback.print_exc()
             console.print(f"\n❌ 发生错误: {str(e)}", style="red")
 
 
