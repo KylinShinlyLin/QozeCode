@@ -5,11 +5,10 @@
 - 首次选择模型时若缺少密钥，交互式提示输入并保存
 """
 
-import os
 import configparser
+import os
 from typing import Tuple, Dict
 
-from rich.prompt import Prompt
 from shared_console import console
 
 CONFIG_DIR = "/etc/conf"
