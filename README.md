@@ -1,8 +1,8 @@
-# 🚀 QozeCode
+# QozeCode
 
 <img src="./assets/logo.png" alt="图片描述" style="padding: 5px 60px 5px 60px;">
 
-```QozeCode Agent``` 是一个功能强大的AI编程助手，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
+```QozeCode``` 是一个功能强大的命令行AI agent，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
 
 <div align="center">
   <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
@@ -26,15 +26,15 @@
 
 #### 📦 目前集成模型厂商
 
-| 模型名称     | 厂商                      | 状态     | 说明                           |
-|----------|-------------------------|--------|------------------------------|
-| DeepSeek | DeepSeek 官方             | 🟢 可用  | 支持 DeepSeek Exp V3.2         |
-| Qwen Max | Qwen 官方                 | 🟢 可用  | 支持 Qwen Max                  |
-| Claude-4 | Anthropic (AWS Bedrock) | 🟢 可用  | 通过 AWS Bedrock 集成            |
-| GPT-5    | OpenAI 官方               | 🟢 可用  | OpenAI GPT-5                 |
-| Gemini   | Google Vertex AI        | 🟢 可用  | 通过 Google Cloud Vertex AI 集成 |
-| GLM-4    | 智谱AI 官方                 | 🟢 可用  | 支持 GLM-4.6 模型                |
-| Ollama   | 自建模型                    | 🔴 计划中 | 未来支持                         |
+| 模型名称         | 厂商                      | 状态     | 说明                           |
+|--------------|-------------------------|--------|------------------------------|
+| DeepSeek     | DeepSeek 官方             | 🟢 可用  | 支持 DeepSeek Exp V3.2         |
+| Qwen Max     | Qwen 官方                 | 🟢 可用  | 支持 Qwen Max                  |
+| Claude-4     | Anthropic (AWS Bedrock) | 🟢 可用  | 通过 AWS Bedrock 集成            |
+| gpt-5.1      | OpenAI 官方               | 🟢 可用  | OpenAI GPT-5                 |
+| gemini-3-pro | Google Vertex AI        | 🟢 可用  | 通过 Google Cloud Vertex AI 集成 |
+| glm-4.6      | 智谱AI 官方                 | 🟢 可用  | 支持 GLM-4.6 模型                |
+| Ollama       | 自建模型                    | 🔴 计划中 | 未来支持                         |
 
 > ## 🤔 为什么不全模型集成？
 >
@@ -55,13 +55,17 @@
 
 ## 核心功能特性
 
-### 多窗口 agent 同时运行
+[//]: # (### 多窗口 agent 同时运行)
 
-- **并发处理**: 支持在多个终端窗口中同时启动不同的 QozeCode Agent 实例，每个实例拥有独立的会话ID和上下文记忆
+[//]: # ()
+[//]: # (- **并发处理**: 支持在多个终端窗口中同时启动不同的 QozeCode Agent 实例，每个实例拥有独立的会话ID和上下文记忆)
 
-<div align="center">
-  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">
-</div>
+[//]: # ()
+[//]: # (<div align="center">)
+
+[//]: # (  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">)
+
+[//]: # (</div>)
 
 ### 在IDE 中随时唤起执行
 
@@ -71,9 +75,10 @@
   <img src="./assets/idea.png" alt="唤起执行" style="padding: 5px 60px 5px 60px;">
 </div>
 
-### 🌐 浏览器自动化（计划中）
+[//]: # (### 🌐 浏览器自动化（计划中）)
 
-- **网页操作**: 智能浏览器控制功能，可以自动化网页操作和数据抓取
+[//]: # ()
+[//]: # (- **网页操作**: 智能浏览器控制功能，可以自动化网页操作和数据抓取)
 
 ### 🔧 扩展能力 (未来支持)
 
