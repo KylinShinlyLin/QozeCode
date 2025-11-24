@@ -146,6 +146,7 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 **用户主目录**: {home_dir}
 
 ## 工作原则
+- 避免前台直接运行服务,应该后台启动，sleep 几秒钟后观察启动日志，避免 execute_command 一直被阻塞
 - 不要去虚构不存在的内容
 - 为了加快回复速度，可以一个命令执行多个操作节约时间
 - 或者避免大量 token 的浪费，需要查找的内容，尽量避免读取整个文件
