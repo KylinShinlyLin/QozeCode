@@ -43,7 +43,7 @@ from input_handler import input_manager
 from input_processor import InputProcessor
 from shared_console import console
 from stream_output import StreamOutput
-from tools.common_tools import ask
+# from tools.common_tools import ask
 from tools.execute_command_tool import execute_command
 from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, get_webpage_to_markdown
@@ -62,7 +62,7 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown, ask]
+base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown]
 
 # 初始时不加载浏览器工具
 tools = base_tools
