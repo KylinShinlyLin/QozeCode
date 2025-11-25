@@ -59,24 +59,25 @@ def get_config_path() -> str:
     return path
 
 
+def fail(missing_desc: str):
+    current_cfg_path = get_config_path()
+    console.print(
+        "\n".join([
+            f"🔑 未检测到 {missing_desc}。",
+            "请在当前机器的配置文件中添加必要的 key：",
+            f"- 配置文件: {current_cfg_path}",
+        ]),
+        style="yellow"
+    )
+    raise RuntimeError(f"缺少模型凭证：{missing_desc}")
+
+
 def ensure_model_credentials(model_name: str) -> Dict[str, str]:
     """
     确保对应模型的密钥存在：
     - 若缺失则提示用户去配置文件添加
     """
     cfg, _ = _load_config()
-
-    def fail(missing_desc: str):
-        current_cfg_path = get_config_path()
-        console.print(
-            "\n".join([
-                f"🔑 未检测到 {missing_desc}。",
-                "请在当前机器的配置文件中添加必要的 key：",
-                f"- 配置文件: {current_cfg_path}",
-            ]),
-            style="yellow"
-        )
-        raise RuntimeError(f"缺少模型凭证：{missing_desc}")
 
     if model_name in ("gpt-5", "gpt-5.1", "gpt-5-codex"):
         section = "openai"

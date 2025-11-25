@@ -28,15 +28,16 @@ dependencies = [
     "beautifulsoup4>=4.14.2",
     "langchain-community>=0.3.30",
     "pyjwt>=2.10.1",
-#    "playwright>=1.55.0",
+    #    "playwright>=1.55.0",
     "prompt_toolkit>=3.0.52",
+    "google-auth"
 ]
 #  langchain-google-vertexai
 [project.scripts]
 qoze = "launcher:main"
 
 [tool.setuptools]
-py-modules = ["launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant", "input_handler", "completion_handler","stream_output","input_processor"]
+py-modules = ["launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant", "input_handler", "completion_handler", "stream_output", "input_processor"]
 packages = ["tools", "utils"]
 
 [project.optional-dependencies]

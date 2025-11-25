@@ -57,7 +57,7 @@ def initialize_llm(model_name: str):
 
             # 延迟导入重依赖
             from langchain_google_vertexai import ChatVertexAI
-            # from google.oauth2 import service_account
+            from google.oauth2 import service_account
             import os
             import logging
             import warnings
@@ -69,16 +69,19 @@ def initialize_llm(model_name: str):
             warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
 
             creds = ensure_model_credentials('gemini')
-            # 仅构建客户端，不做网络验证
-            llm = ChatVertexAI(
-                model_name="gemini-3-pro-preview",
-                project=creds["project"],
-                # location=creds["location"],
-                location="global",  # gemini-3 只有全球节点
-                vertex_ai=True,
-                # 移除 credentials 参数，让它自动从环境变量读取
+            credentials = service_account.Credentials.from_service_account_file(
+                creds['credentials_path'],
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
 
+            # 仅构建客户端，不做网络验证
+            llm = ChatVertexAI(
+                credentials=credentials,
+                model_name="gemini-3-pro-preview",
+                project=creds["project"],
+                location="global",  # gemini-3 只有全球节点
+                vertex_ai=True,
+            )
             return llm
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
@@ -94,14 +97,12 @@ def initialize_llm(model_name: str):
                 "http://": "socks5://us1-proxy.owll.ai:11800",
                 "https://": "socks5://us1-proxy.owll.ai:11800",
             }
-
             # 使用 httpx.Client
             http_client = httpx.Client(proxy=proxies["https://"])
 
             # 读取 OpenAI 密钥
             creds = ensure_model_credentials(model_name)
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
-
             model_config = {
                 "temperature": 0.1,
                 "api_key": creds["api_key"],
