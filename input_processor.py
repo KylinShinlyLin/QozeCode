@@ -12,9 +12,8 @@ from utils.command_exec import run_command
 
 
 class InputProcessor:
-    def __init__(self, input_manager, local_sessions):
+    def __init__(self, input_manager):
         self.input_manager = input_manager
-        self.local_sessions = local_sessions
 
     async def get_user_input(self, session_id, plan_mode: bool):
         """获取并处理用户输入"""
@@ -22,7 +21,6 @@ class InputProcessor:
             # 显示提示信息
             console.print("\n")
             console.print("[bold cyan]您：[bold cyan]")
-            # console.print(f"[dim]💡 回车执行请求（输入 'line' 进入多行编辑[/dim]")
             # 根据 plane_mode 显示不同的提示信息
             if plan_mode:
                 console.print(f"[dim]💡 计划模式 - 回车执行请求（输入 'line' 进入多行编辑）[/dim]")
@@ -54,9 +52,9 @@ class InputProcessor:
         """处理特殊命令"""
         # 处理 clear 命令
         if user_input.lower() == 'clear':
-            if session_id in self.local_sessions:
-                self.local_sessions[session_id]["messages"] = []
-                self.local_sessions[session_id]["llm_calls"] = 0
+            # if session_id in self.local_sessions:
+            #     self.local_sessions[session_id]["messages"] = []
+            #     self.local_sessions[session_id]["llm_calls"] = 0
             console.clear()
             return ""
 
@@ -71,11 +69,11 @@ class InputProcessor:
             output = run_command(command)
 
             # 创建用户消息
-            combined_content = f"command:{command}\n\nresult:{output}"
-            if session_id in self.local_sessions:
-                self.local_sessions[session_id]["messages"].extend([
-                    HumanMessage(content=combined_content)
-                ])
+            # combined_content = f"command:{command}\n\nresult:{output}"
+            # if session_id in self.local_sessions:
+            #     self.local_sessions[session_id]["messages"].extend([
+            #         HumanMessage(content=combined_content)
+            #     ])
             return ""
 
         # 在有效输入后添加视觉分隔

@@ -30,7 +30,7 @@ import socket
 # import nest_asyncio
 # from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
 # from langchain_community.tools.playwright.utils import create_async_playwright_browser
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, AIMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolMessage
@@ -68,8 +68,8 @@ base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage
 tools = base_tools
 browser_loaded = False
 plan_mode = False
-# 本地会话存储
-local_sessions = {}
+# 当前会话
+conversation_state = {"messages": [], "llm_calls": 0}
 
 
 def get_terminal_display_lines():
@@ -94,7 +94,7 @@ class MessagesState(TypedDict):
 
 # Step 2: Define model node
 def llm_call(state: dict):
-    messages = state["messages"]
+    # messages = state["messages"]
     system_release = ''
     system_info = platform.system()
     system_version = "unknown"
@@ -132,16 +132,53 @@ def llm_call(state: dict):
                                    hostname=hostname, username=username, shell=shell, current_dir=current_dir,
                                    home_dir=home_dir, directory_tree=directory_tree, plan_mode=plan_mode)
 
-    # 过滤掉之前的 SystemMessage，只保留最新的，并清理文本
-    non_system_messages = []
-    for msg in messages:
-        if not isinstance(msg, SystemMessage):
-            non_system_messages.append(msg)
+    # # 过滤掉之前的 SystemMessage，只保留最新的，并清理文本
+    # non_system_messages = []
+    # for msg in messages:
+    #     if not isinstance(msg, SystemMessage):
+    #         non_system_messages.append(msg)
+    #
+    # final_messages = [system_msg] + non_system_messages
+    # print(f"请求AI上下文:{final_messages}")
 
-    final_messages = [system_msg] + non_system_messages
+    # converted_messages = []
+    # for msg in state["messages"]:
+    #     if isinstance(msg, AIMessage):
+    #         # 根据您的需求构建 JSON 对象
+    #         json_msg = msg.model_dump()
+    #         json_msg['reasoning_content'] = msg.additional_kwargs['reasoning_content']
+    #         print(f"AIMessage={json_msg}")
+    #         converted_messages.append(json_msg)
+    #     else:
+    #         converted_messages.append(msg)  # 其他类型消息保持不变
+    #
+    # # 然后使用 converted_messages
+    #
+    # return {
+    #     "messages": [
+    #         llm_with_tools.invoke([SystemMessage(content=system_msg)] + converted_messages)
+    #     ],
+    #     "llm_calls": state.get('llm_calls', 0) + 1
+    # }
 
+    # print(f"messages={[
+    #                       SystemMessage(
+    #                           content=system_msg
+    #                       )
+    #                   ]
+    #                   + state["messages"]}")
+    # print(f"llm_with_tools={llm_with_tools}")
     return {
-        "messages": [llm_with_tools.invoke(final_messages)],
+        "messages": [
+            llm_with_tools.invoke(
+                [
+                    SystemMessage(
+                        content=system_msg
+                    )
+                ]
+                + state["messages"]
+            )
+        ],
         "llm_calls": state.get('llm_calls', 0) + 1
     }
 
@@ -203,37 +240,23 @@ agent = agent_builder.compile()
 
 # 多轮对话函数
 async def chat_loop(session_id: str = None, model_name: str = None):
-    # 如果没有提供 session_id，生成一个新的
     global plan_mode
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    # 尝试从本地存储加载历史上下文
-    conversation_state = {"messages": [], "llm_calls": 0}
-    if session_id in local_sessions:
-        conversation_state = local_sessions[session_id]
-        # 清理历史消息中的无效字符
-        cleaned_messages = []
-        for msg in conversation_state["messages"]:
-            cleaned_messages.append(msg)
-        conversation_state["messages"] = cleaned_messages
-
+    os.system('cls' if os.name == 'nt' else 'clear')
     combined_panel = Panel(
-        f"[bold cyan]✦ Welcome to QozeCode 0.2.1[/bold cyan]\n"
+        f"[bold dim cyan]✦ Welcome to QozeCode 0.2.3[/bold dim cyan]\n\n"
         f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'}[bold cyan]\n"
         f"[bold white]使用提示:[/bold white]\n"
         f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
         f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]",
         border_style="dim white",
-        title="",
         title_align="center",
         expand=False
     )
     console.print(combined_panel)
 
     # 初始化处理器
-    input_processor = InputProcessor(input_manager, local_sessions)
-    stream_output = StreamOutput(agent, local_sessions)
+    input_processor = InputProcessor(input_manager)
+    stream_output = StreamOutput(agent)
 
     while True:
         try:
@@ -243,7 +266,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             user_input = await input_processor.get_user_input(session_id, plan_mode)
 
             if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                local_sessions[session_id] = conversation_state
                 console.print("👋 再见！", style="bold cyan")
                 return
 
@@ -264,11 +286,10 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 "llm_calls": conversation_state["llm_calls"]
             }
             # 流式输出
-            await stream_output.stream_response(current_state, conversation_state)
+            await stream_output.stream_response(model_name, current_state, conversation_state)
 
         except KeyboardInterrupt:
             console.print("\n\n👋 程序被用户中断", style="yellow")
-            local_sessions[session_id] = conversation_state
             break
 
         except Exception as e:
@@ -278,6 +299,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
 async def start_chat_with_session(session_id: str = None, model_name: str = None):
     """启动带会话 ID 的聊天"""
+    console.clear()
     await chat_loop(session_id, model_name)
 
 
@@ -302,17 +324,12 @@ def handleRun(model_name: str = None, session_id: str = None):
     """主函数 - 支持直接传入参数或从命令行解析"""
     global llm, llm_with_tools
 
-    # 如果没有直接传入参数，则解析命令行参数
-    if model_name is None or session_id is None:
-        args = parse_arguments()
-        model_name = model_name or args.model
-        session_id = session_id or args.session_id
-
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）
         with console.status("[bold cyan]正在初始化模型...", spinner="dots"):
             # 延迟导入以避免启动时加载模型相关重依赖
             from model_initializer import initialize_llm
+            print(f"model_name={model_name}")
             llm = initialize_llm(model_name)
             # 初始化带工具的 LLM
             llm_with_tools = llm.bind_tools(tools)

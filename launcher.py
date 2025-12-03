@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import traceback
+import uuid
 from typing import Optional
 
 from constant import template_content
@@ -68,12 +69,12 @@ def get_model_choice() -> Optional[str]:
 
     # 定义选项 - 简洁对齐
     choices = [
-        "DeepSeek      DeepSeek",
-        "Qwen3         Alibaba Cloud",
-        "gemini-3      Google GCP",
-        "GLM-4         智普",
-        "gpt-5.1       OpenAI",
-        "Claude-4      bedrock",
+        "deepseek-chat               DeepSeek",
+        "gemini-3-pro  (think)       Google GCP",
+        "qwen3-max  (think)          Alibaba Cloud",
+        "glm-4.6                     智普",
+        "gpt-5.1                     OpenAI",
+        "claude-4                    bedrock",
         "[退出程序]"
     ]
 
@@ -92,20 +93,20 @@ def get_model_choice() -> Optional[str]:
             return None
         selected = answers['model']
         # 根据选择返回对应的模型名
-        if "Claude-4" in selected:
+        if "claude-4" in selected:
             return 'claude-4'
-        elif "gemini" in selected:
-            return 'gemini'
+        elif "gemini-3-pro" in selected:
+            return 'gemini-3-pro'
         elif "gpt-5.1" in selected:
             return 'gpt-5.1'
-        elif "DeepSeek" in selected:
-            return 'DeepSeek'
-        elif "GLM-4" in selected:
-            return 'GLM-4'
-        elif "kimi-k2" in selected:
-            return 'Kimi'
-        elif "Qwen3" in selected:
-            return 'Qwen3'
+        elif "deepseek-chat" in selected:
+            return 'deepseek-chat'
+        elif "glm-4.6" in selected:
+            return 'glm-4.6'
+        # elif "kimi-k2" in selected:
+        #     return 'Kimi'
+        elif "qwen3-max" in selected:
+            return 'qwen3-max'
         elif "退出" in selected:
             console.print("\n👋 再见", style="dim")
             return None
@@ -148,7 +149,7 @@ def launch_agent(model: str):
     console.clear()
     from qoze_code_agent import handleRun
     # 直接调用 handleRun 并传入选择的模型
-    handleRun(model_name=model, session_id='123')
+    handleRun(model_name=model, session_id=str(uuid.uuid4()))
 
 
 # 函数 main（记录各阶段耗时）
@@ -158,13 +159,10 @@ def main():
         ensure_config()
         # 获取模型选择
         model = get_model_choice()
-
         if model is None:
             return
-
         # 启动 agent
         launch_agent(model)
-
     except KeyboardInterrupt:
         console.print("\n👋 再见", style="dim")
     except Exception as e:

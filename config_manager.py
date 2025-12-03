@@ -71,7 +71,7 @@ def fail(missing_desc: str):
     )
     raise RuntimeError(f"缺少模型凭证：{missing_desc}")
 
-
+# 确认配置是否存在，如果不存在提示用户
 def ensure_model_credentials(model_name: str) -> Dict[str, str]:
     """
     确保对应模型的密钥存在：
@@ -88,7 +88,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             fail("OpenAI API Key (section [openai] -> api_key)")
         return {"api_key": api_key}
 
-    if model_name == "DeepSeek":
+    if model_name == "deepseek-chat":
         section = "deepseek"
         if not cfg.has_section(section):
             fail("DeepSeek API Key (section [deepseek] -> api_key)")
@@ -112,7 +112,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             "region_name": region,
         }
         return credentials
-    if model_name == "gemini":
+    if model_name == "gemini-3-pro":
         section = "vertexai"
         if not cfg.has_section(section):
             fail("Gemini/Vertex AI 凭证 (section [vertexai])")
@@ -123,24 +123,24 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             fail("Gemini/Vertex AI 凭证 (project/credentials_path)")
         return {"project": project, "location": location, "credentials_path": cred_path}
 
-    if model_name == "GLM-4":
+    if model_name == "glm-4.6":
         section = "ZHIPU"
         if not cfg.has_section(section):
-            fail("GLM-4 AI 凭证 (section [ZHIPU])")
+            fail("GLM-4.6 AI 凭证 (section [ZHIPU])")
         api_key = cfg.get(section, "api_key", fallback=None)
         if not api_key:
-            fail("GLM-4 AI 凭证")
+            fail("GLM-4.6 AI 凭证")
         return {"api_key": api_key}
-    if model_name == "Kimi":
-        section = "Kimi"
-        if not cfg.has_section(section):
-            fail("Kimi AI 凭证 (section [Kimi])")
-        api_key = cfg.get(section, "api_key", fallback=None)
-        if not api_key:
-            fail("Kimi AI 凭证")
-        return {"api_key": api_key}
+    # if model_name == "Kimi":
+    #     section = "Kimi"
+    #     if not cfg.has_section(section):
+    #         fail("Kimi AI 凭证 (section [Kimi])")
+    #     api_key = cfg.get(section, "api_key", fallback=None)
+    #     if not api_key:
+    #         fail("Kimi AI 凭证")
+    #     return {"api_key": api_key}
 
-    if model_name == "Qwen3":
+    if model_name == "qwen3-max":
         section = "Qwen3"
         if not cfg.has_section(section):
             fail("Qwen3 AI 凭证 (section [Qwen3])")

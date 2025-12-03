@@ -3,13 +3,14 @@ import signal
 import subprocess
 import threading
 import time
+import traceback
 
 from langchain_core.tools import tool
 from rich.panel import Panel
-from rich.progress import Progress, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, TextColumn, TimeElapsedColumn, SpinnerColumn
 
 # 导入共享的 console 实例
-from shared_console import console
+from shared_console import console, CustomTimeElapsedColumn
 
 # 定义颜色常量
 CYAN = "\033[36m"
@@ -30,6 +31,7 @@ def execute_command(command: str, timeout: int = 5400) -> str:
 
     try:
         # 使用 subprocess.Popen 来实时获取输出
+        command_str = command[:66]
         process = subprocess.Popen(
             command,
             shell=True,
@@ -59,15 +61,18 @@ def execute_command(command: str, timeout: int = 5400) -> str:
         timeout_thread = threading.Thread(target=kill_process_after_timeout, daemon=True)
         timeout_thread.start()
 
-        try:
-            with Progress(
-                    TextColumn("[bold blue]{task.description}"),
-                    TimeElapsedColumn(),
-                    console=console,
-                    transient=False
-            ) as progress:
-                task = progress.add_task(f"{CYAN}正在执行: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}",
-                                         total=None)
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                CustomTimeElapsedColumn(style="rgb(65,170,65)"),
+                console=console,
+                transient=False
+        ) as progress:
+            task = progress.add_task(
+                f"[bold dim cyan] 正在执行: {command[:66]}{'...' if len(command) > 66 else ''} [/bold dim cyan]",
+                total=None)
+            try:
+
                 while True:
                     current_time = time.time()
                     elapsed_time = current_time - start_time
@@ -76,15 +81,7 @@ def execute_command(command: str, timeout: int = 5400) -> str:
                     if elapsed_time > timeout:
                         process.kill()
 
-                        # 显示超时结果Panel
-                        timeout_panel = Panel(
-                            f"⚠️ 命令执行超时 ({timeout}秒)\n"
-                            f"命令: [cyan]{command}[/cyan]",
-                            title="[bold red]执行超时[/bold red]",
-                            border_style="red",
-                            padding=(0, 1)
-                        )
-                        console.print(timeout_panel)
+                        progress.update(task, description=f"[bold red]✗ ⚠️ 命令执行超时 ({timeout}秒) {command_str} [/bold red]")
                         return f"❌ 命令执行超时 ({timeout}秒)"
 
                     # 非阻塞读取输出（不显示）
@@ -97,45 +94,18 @@ def execute_command(command: str, timeout: int = 5400) -> str:
                 # 等待进程完成
                 return_code = process.wait()
 
-                # 更新最终状态
                 if return_code == 0:
                     progress.update(task,
-                                    description=f"[bold green]✓[/bold green] [dim white]  {CYAN}command: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}")
-
+                                    description=f"[bold green]✓[/bold green] [bold dim cyan] command: {command_str} [/bold dim cyan]")
                 else:
-                    progress.update(task,
-                                    description=f"[bold red]✗ 执行失败: {command[:66]}{'...' if len(command) > 66 else ''}{RESET}")
-
-                # 收集完整输出
+                    progress.update(task, description=f"[bold red]✗ 执行失败: {command_str} [/bold red]")
                 full_output = '\n'.join(output_lines)
                 return full_output
 
-        except KeyboardInterrupt:
-            process.terminate()
-
-            interrupt_panel = Panel(
-                f"⚠️ 用户中断命令执行\n"
-                f"命令: [cyan]{command}[/cyan]\n"
-                f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
-                title="[bold yellow]执行中断[/bold yellow]",
-                border_style="yellow",
-                padding=(0, 1)
-            )
-            console.print(interrupt_panel)
-            return "⚠️ 用户中断命令执行"
-
-        except Exception as e:
-            error_panel = Panel(
-                f"❌ 命令执行异常\n"
-                f"命令: [cyan]{command}[/cyan]\n"
-                f"错误: [red]{str(e)}[/red]\n"
-                f"耗时: [yellow]{time.time() - start_time:.2f}秒[/yellow]",
-                title="[bold red]执行异常[/bold red]",
-                border_style="red",
-                padding=(0, 1)
-            )
-            console.print(error_panel)
-            return f"❌ 命令执行异常: {str(e)}"
+            except Exception as e:
+                progress.update(task, description=f"[bold red]✗ 命令执行异常: {command_str} [/bold red]")
+                traceback.print_exc()  # 打印完整堆栈到控制台
+                return f"❌ 命令执行异常: {str(e)}"
 
     except Exception as e:
         error_panel = Panel(

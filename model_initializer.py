@@ -26,7 +26,7 @@ def initialize_llm(model_name: str):
             import boto3
 
             # 读取 AWS 凭证（不做网络验证）
-            creds = ensure_model_credentials('claude-4')
+            creds = ensure_model_credentials(model_name)
 
             # 创建带代理的 boto3 配置
             config = Config(
@@ -52,7 +52,7 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Claude-4 初始化失败: {str(e)}")
             raise
-    elif model_name == 'gemini':
+    elif model_name == 'gemini-3-pro':
         try:
 
             # 延迟导入重依赖
@@ -68,7 +68,7 @@ def initialize_llm(model_name: str):
             # 抑制 vertex_ai 参数警告
             warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
 
-            creds = ensure_model_credentials('gemini')
+            creds = ensure_model_credentials(model_name)
             credentials = service_account.Credentials.from_service_account_file(
                 creds['credentials_path'],
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
@@ -81,6 +81,7 @@ def initialize_llm(model_name: str):
                 project=creds["project"],
                 location="global",  # gemini-3 只有全球节点
                 vertex_ai=True,
+                include_thoughts=True,
             )
             return llm
         except Exception as e:
@@ -123,14 +124,13 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ {model_name} 初始化失败: {str(e)}")
             raise
-    elif model_name == 'DeepSeek':
+    elif model_name == 'deepseek-chat':
         try:
             # 延迟导入重依赖
             from langchain_deepseek import ChatDeepSeek
 
             # 读取 DeepSeek 密钥
-            creds = ensure_model_credentials('DeepSeek')
-            # os.environ["DEEPSEEK_API_KEY"] = creds["api_key"]
+            creds = ensure_model_credentials(model_name)
 
             llm = ChatDeepSeek(
                 model="deepseek-chat",
@@ -143,19 +143,19 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ DeepSeek 初始化失败: {str(e)}")
             raise
-    elif model_name == 'GLM-4':
+    elif model_name == 'glm-4.6':
         try:
             # 延迟导入重依赖
             from langchain_community.chat_models import ChatZhipuAI
 
             # 读取 DeepSeek 密钥
-            creds = ensure_model_credentials('GLM-4')
+            creds = ensure_model_credentials(model_name)
 
             llm = ChatZhipuAI(
                 model="GLM-4.6",
                 api_key=creds["api_key"],
                 temperature=0.3,
-                thinking={"type": "disabled"}
+                # thinking={"type": "enable"}
             )
             return llm
         except ImportError:
@@ -165,39 +165,41 @@ def initialize_llm(model_name: str):
             print(f"❌ GLM 初始化失败: {str(e)}")
             raise
 
-    elif model_name == 'Kimi':
-        try:
-            # 延迟导入重依赖
-            from langchain_community.chat_models.moonshot import MoonshotChat
-
-            # 读取 DeepSeek 密钥
-            creds = ensure_model_credentials('Kimi')
-
-            llm = MoonshotChat(
-                model="kimi-k2-0905-preview",
-                temperature=0.3,
-                api_key=creds["api_key"],
-            )
-            return llm
-        except ImportError:
-            print("❌ 缺少 GLM 依赖")
-            raise
-        except Exception as e:
-            print(f"❌ GLM 初始化失败: {str(e)}")
-            raise
-    elif model_name == 'Qwen3':
+    # elif model_name == 'Kimi':
+    #     try:
+    #         # 延迟导入重依赖
+    #         from langchain_community.chat_models.moonshot import MoonshotChat
+    #
+    #         # 读取 DeepSeek 密钥
+    #         creds = ensure_model_credentials('Kimi')
+    #
+    #         llm = MoonshotChat(
+    #             model="kimi-k2-0905-preview",
+    #             temperature=0.3,
+    #             api_key=creds["api_key"],
+    #         )
+    #         return llm
+    #     except ImportError:
+    #         print("❌ 缺少 GLM 依赖")
+    #         raise
+    #     except Exception as e:
+    #         print(f"❌ GLM 初始化失败: {str(e)}")
+    #         raise
+    elif model_name == 'qwen3-max':
         try:
             # 延迟导入重依赖
             from langchain_qwq import ChatQwen
 
             # 读取 DeepSeek 密钥
-            creds = ensure_model_credentials('Qwen3')
+            creds = ensure_model_credentials(model_name)
 
             llm = ChatQwen(
-                model="qwen3-max",
+                model="qwen3-max-preview",
                 temperature=0.3,
                 api_key=creds["api_key"],
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                enable_thinking=True,
+                thinking_budget=2048,
             )
             return llm
         except ImportError:
