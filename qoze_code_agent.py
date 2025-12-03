@@ -94,7 +94,6 @@ class MessagesState(TypedDict):
 
 # Step 2: Define model node
 def llm_call(state: dict):
-    # messages = state["messages"]
     system_release = ''
     system_info = platform.system()
     system_version = "unknown"
@@ -132,42 +131,6 @@ def llm_call(state: dict):
                                    hostname=hostname, username=username, shell=shell, current_dir=current_dir,
                                    home_dir=home_dir, directory_tree=directory_tree, plan_mode=plan_mode)
 
-    # # 过滤掉之前的 SystemMessage，只保留最新的，并清理文本
-    # non_system_messages = []
-    # for msg in messages:
-    #     if not isinstance(msg, SystemMessage):
-    #         non_system_messages.append(msg)
-    #
-    # final_messages = [system_msg] + non_system_messages
-    # print(f"请求AI上下文:{final_messages}")
-
-    # converted_messages = []
-    # for msg in state["messages"]:
-    #     if isinstance(msg, AIMessage):
-    #         # 根据您的需求构建 JSON 对象
-    #         json_msg = msg.model_dump()
-    #         json_msg['reasoning_content'] = msg.additional_kwargs['reasoning_content']
-    #         print(f"AIMessage={json_msg}")
-    #         converted_messages.append(json_msg)
-    #     else:
-    #         converted_messages.append(msg)  # 其他类型消息保持不变
-    #
-    # # 然后使用 converted_messages
-    #
-    # return {
-    #     "messages": [
-    #         llm_with_tools.invoke([SystemMessage(content=system_msg)] + converted_messages)
-    #     ],
-    #     "llm_calls": state.get('llm_calls', 0) + 1
-    # }
-
-    # print(f"messages={[
-    #                       SystemMessage(
-    #                           content=system_msg
-    #                       )
-    #                   ]
-    #                   + state["messages"]}")
-    # print(f"llm_with_tools={llm_with_tools}")
     return {
         "messages": [
             llm_with_tools.invoke(
@@ -238,10 +201,7 @@ agent_builder.add_edge("tool_node", "llm_call")
 agent = agent_builder.compile()
 
 
-# 多轮对话函数
-async def chat_loop(session_id: str = None, model_name: str = None):
-    global plan_mode
-    os.system('cls' if os.name == 'nt' else 'clear')
+def print_panel(model_name):
     combined_panel = Panel(
         f"[bold dim cyan]✦ Welcome to QozeCode 0.2.3[/bold dim cyan]\n\n"
         f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'}[bold cyan]\n"
@@ -256,6 +216,13 @@ async def chat_loop(session_id: str = None, model_name: str = None):
     )
     console.print(combined_panel)
 
+
+# 多轮对话函数
+async def chat_loop(session_id: str = None, model_name: str = None):
+    global plan_mode, conversation_state
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print_panel(model_name)
+
     # 初始化处理器
     input_processor = InputProcessor(input_manager)
     stream_output = StreamOutput(agent)
@@ -265,11 +232,17 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             # 设置自动补全
             setup_completion()
             # 输入处理
-            user_input = await input_processor.get_user_input(session_id, plan_mode)
+            user_input = await input_processor.get_user_input(plan_mode)
 
             if user_input.lower() in ['quit', 'exit', '退出', 'q']:
                 console.print("👋 再见！", style="bold cyan")
-                return
+                continue
+
+            if user_input.lower() == 'clear':
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print_panel(model_name)
+                conversation_state = {"messages": [], "llm_calls": 0}
+                continue
 
             if user_input.lower() in ['plan']:
                 plan_mode = True

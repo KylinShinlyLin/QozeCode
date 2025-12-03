@@ -15,7 +15,7 @@ class InputProcessor:
     def __init__(self, input_manager):
         self.input_manager = input_manager
 
-    async def get_user_input(self, session_id, plan_mode: bool):
+    async def get_user_input(self, plan_mode: bool):
         """获取并处理用户输入"""
         try:
             # 显示提示信息
@@ -41,22 +41,19 @@ class InputProcessor:
                 return ""
 
             # 处理特殊命令
-            return await self._handle_special_commands(user_input, session_id)
+            return await self._handle_special_commands(user_input)
 
         except (UnicodeDecodeError, UnicodeError, KeyboardInterrupt) as e:
             if isinstance(e, KeyboardInterrupt):
                 raise e
             return ""
 
-    async def _handle_special_commands(self, user_input, session_id):
+    async def _handle_special_commands(self, user_input):
         """处理特殊命令"""
-        # 处理 clear 命令
-        if user_input.lower() == 'clear':
-            # if session_id in self.local_sessions:
-            #     self.local_sessions[session_id]["messages"] = []
-            #     self.local_sessions[session_id]["llm_calls"] = 0
-            console.clear()
-            return ""
+        # # 处理 clear 命令
+        # if user_input.lower() == 'clear':
+        #     console.clear()
+        #     return ""
 
         # 处理 ! 命令
         if user_input.startswith('!') or user_input.startswith('！'):
