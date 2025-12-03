@@ -4,10 +4,6 @@
 
 ```QozeCode``` 是一个功能强大的命令行AI agent，基于 langGraph 进行开发设计，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
 
-<div align="center">
-  <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
-</div>
-
 ## 📚 目录
 
 - [📦 目前集成模型厂商](#-目前集成模型厂商)
@@ -23,6 +19,12 @@
         - [Gemini](#5-gemini-google-vertex-ai)
     - [使用方法](#使用方法)
 - [许可证](#许可证)
+
+
+<div align="center">
+  <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
+</div>
+
 
 #### 📦 目前集成模型厂商
 
