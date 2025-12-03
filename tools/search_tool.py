@@ -121,7 +121,7 @@ async def get_webpage_to_markdown(url: str) -> str:
                     result = f"# 网页内容解析\n\n**来源URL**: {url}\n\n---\n\n{markdown_content}"
 
                     progress.update(task,
-                                    description=f"[bold green]✓ {CYAN}阅读完成: {url[:66]}{'...' if len(url) > 66 else ''}{RESET}")
+                                    description=f"[bold green]✓[/bold green] [bold dim cyan] 阅读完成: {url[:66]}{'...' if len(url) > 66 else ''}[/bold dim cyan]")
                     return result
                 else:
                     error_msg = f"❌ Jina Reader API 返回错误: {response.status_code} - {response.text}"
