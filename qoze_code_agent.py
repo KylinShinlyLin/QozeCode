@@ -236,7 +236,7 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
             if user_input.lower() in ['quit', 'exit', '退出', 'q']:
                 console.print("👋 再见！", style="bold cyan")
-                continue
+                return
 
             if user_input.lower() == 'clear':
                 os.system('cls' if os.name == 'nt' else 'clear')
