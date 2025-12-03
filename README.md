@@ -110,7 +110,7 @@
 - 优化过高效 token 缓存利用
 - 运行一天需要 1 块钱人民币
 
-<img src="./assets/cache_token.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
+<img src="./assets/cache_token.png" alt="图片描述" style="padding: 50px 50px 50px 50px;">
 
 #### 最佳使用建议
 
