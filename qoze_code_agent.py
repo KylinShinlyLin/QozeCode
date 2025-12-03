@@ -247,7 +247,9 @@ async def chat_loop(session_id: str = None, model_name: str = None):
         f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'}[bold cyan]\n"
         f"[bold white]使用提示:[/bold white]\n"
         f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
-        f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]",
+        f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]\n"
+        f"[dim][bold white]  • 输入 'clear' 清理上下文 [/dim] [bold white]",
+
         border_style="dim white",
         title_align="center",
         expand=False
