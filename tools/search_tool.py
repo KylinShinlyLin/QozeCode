@@ -103,7 +103,7 @@ async def get_webpage_to_markdown(url: str) -> str:
                 console=console,
                 transient=False
         ) as progress:
-            task = progress.add_task(f"{CYAN}访问页面: {url[:66]}{'...' if len(url) > 66 else ''}{RESET}", total=None)
+            task = progress.add_task(f"[bold dim cyan]访问页面: {url[:66]}{'...' if len(url) > 66 else ''}[/bold dim cyan]", total=None)
             # 调用 Jina Reader API
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(api_url, headers=headers, follow_redirects=True)
