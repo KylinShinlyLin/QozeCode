@@ -299,7 +299,6 @@ async def chat_loop(session_id: str = None, model_name: str = None):
 
 async def start_chat_with_session(session_id: str = None, model_name: str = None):
     """启动带会话 ID 的聊天"""
-    console.clear()
     await chat_loop(session_id, model_name)
 
 
@@ -329,7 +328,6 @@ def handleRun(model_name: str = None, session_id: str = None):
         with console.status("[bold cyan]正在初始化模型...", spinner="dots"):
             # 延迟导入以避免启动时加载模型相关重依赖
             from model_initializer import initialize_llm
-            print(f"model_name={model_name}")
             llm = initialize_llm(model_name)
             # 初始化带工具的 LLM
             llm_with_tools = llm.bind_tools(tools)

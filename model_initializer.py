@@ -18,7 +18,6 @@ def initialize_llm(model_name: str):
     import os
     from config_manager import ensure_model_credentials
     if model_name == 'claude-4':
-        # 使用 Claude-4 (通过 Bedrock)
         try:
             # 延迟导入重依赖
             from langchain_aws import ChatBedrock
