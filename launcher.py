@@ -146,7 +146,6 @@ def ensure_config():
 # 函数 launch_agent（记录启动与返回耗时）
 def launch_agent(model: str):
     """启动 QozeCode Agent"""
-    console.clear()
     from qoze_code_agent import handleRun
     # 直接调用 handleRun 并传入选择的模型
     handleRun(model_name=model, session_id=str(uuid.uuid4()))

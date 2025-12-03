@@ -321,13 +321,12 @@ def parse_arguments():
 
 def handleRun(model_name: str = None, session_id: str = None):
     """主函数 - 支持直接传入参数或从命令行解析"""
-    global llm, llm_with_tools
-
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）
         with console.status("[bold cyan]正在初始化模型...", spinner="dots"):
             # 延迟导入以避免启动时加载模型相关重依赖
             from model_initializer import initialize_llm
+            global llm, llm_with_tools
             llm = initialize_llm(model_name)
             # 初始化带工具的 LLM
             llm_with_tools = llm.bind_tools(tools)
