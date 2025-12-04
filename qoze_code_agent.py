@@ -49,6 +49,7 @@ from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, get_webpage_to_markdown
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_system_prompt
+from utils.mcp_manager import McpManager  # Added
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -62,9 +63,12 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown]
+# 初始化 MCP Manager
+mcp_manager = McpManager() # Added
 
-# 初始时不加载浏览器工具
+# base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown]
+base_tools = [add, multiply, divide, execute_command, get_webpage_to_markdown]
+# 初始工具列表
 tools = base_tools
 browser_loaded = False
 plan_mode = False
@@ -82,6 +86,7 @@ def get_terminal_display_lines():
         return 20
 
 
+# Tools mapping will be updated dynamically
 tools_by_name = {tool.name: tool for tool in tools}
 
 
@@ -152,14 +157,28 @@ async def tool_node(state: dict):
 
     result = []
     for tool_call in state["messages"][-1].tool_calls:
+        if tool_call["name"] not in tools_by_name:
+            result.append(ToolMessage(content=f"Error: Tool {tool_call['name']} not found", tool_call_id=tool_call["id"]))
+            continue
+            
         tool = tools_by_name[tool_call["name"]]
         try:
-            # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown"]:
+            # 动态判断是否应该使用 ainvoke (异步调用)
+            # 1. 如果工具名在已知的异步列表中
+            # 2. 或者工具本身定义了 coroutine (这是 StructuredTool 的特性)
+            # 3. 或者 tool 是 LangChain 的 BaseTool 且 .is_async 为 True
+            is_async_tool = (
+                tool_call["name"] in ["tavily_search", "get_webpage_to_markdown"] or
+                getattr(tool, "coroutine", None) is not None or 
+                getattr(tool, "is_async", False)
+            )
+
+            if is_async_tool:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
-            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+            
+            result.append(ToolMessage(content=str(observation), tool_call_id=tool_call["id"]))
         except Exception as e:
             traceback.print_exc()
             error_msg = f"  ❌ '{tool_call['name']}' 调用失败，错误信息:{e}"
@@ -220,56 +239,60 @@ def print_panel(model_name):
 # 多轮对话函数
 async def chat_loop(session_id: str = None, model_name: str = None):
     global plan_mode, conversation_state
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print_panel(model_name)
+    # os.system('cls' if os.name == 'nt' else 'clear')
+    # print_panel(model_name)
 
     # 初始化处理器
     input_processor = InputProcessor(input_manager)
     stream_output = StreamOutput(agent)
 
-    while True:
-        try:
-            # 设置自动补全
-            setup_completion()
-            # 输入处理
-            user_input = await input_processor.get_user_input(plan_mode)
+    try:
+        while True:
+            try:
+                # 设置自动补全
+                setup_completion()
+                # 输入处理
+                user_input = await input_processor.get_user_input(plan_mode)
 
-            if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                console.print("👋 再见！", style="bold cyan")
-                return
+                if user_input.lower() in ['quit', 'exit', '退出', 'q']:
+                    console.print("👋 再见！", style="bold cyan")
+                    return
 
-            if user_input.lower() == 'clear':
-                os.system('cls' if os.name == 'nt' else 'clear')
-                print_panel(model_name)
-                conversation_state = {"messages": [], "llm_calls": 0}
-                continue
+                if user_input.lower() == 'clear':
+                    os.system('cls' if os.name == 'nt' else 'clear')
+                    print_panel(model_name)
+                    conversation_state = {"messages": [], "llm_calls": 0}
+                    continue
 
-            if user_input.lower() in ['plan']:
-                plan_mode = True
-                console.print("进入计划模式")
-                continue
+                if user_input.lower() in ['plan']:
+                    plan_mode = True
+                    console.print("进入计划模式")
+                    continue
 
-            # 空输入，继续循环
-            if user_input == "":
-                continue
+                # 空输入，继续循环
+                if user_input == "":
+                    continue
 
-            # 创建用户消息
-            user_message = HumanMessage(content=user_input)
-            # 更新对话状态
-            current_state = {
-                "messages": conversation_state["messages"] + [user_message],
-                "llm_calls": conversation_state["llm_calls"]
-            }
-            # 流式输出
-            await stream_output.stream_response(model_name, current_state, conversation_state)
+                # 创建用户消息
+                user_message = HumanMessage(content=user_input)
+                # 更新对话状态
+                current_state = {
+                    "messages": conversation_state["messages"] + [user_message],
+                    "llm_calls": conversation_state["llm_calls"]
+                }
+                # 流式输出
+                await stream_output.stream_response(model_name, current_state, conversation_state)
 
-        except KeyboardInterrupt:
-            console.print("\n\n👋 程序被用户中断", style="yellow")
-            break
+            except KeyboardInterrupt:
+                console.print("\n\n👋 程序被用户中断", style="yellow")
+                break
 
-        except Exception as e:
-            traceback.print_exc()
-            console.print(f"\n❌ 发生错误: {str(e)}", style="red")
+            except Exception as e:
+                traceback.print_exc()
+                console.print(f"\n❌ 发生错误: {str(e)}", style="red")
+    finally:
+        # 程序退出时清理资源
+        await mcp_manager.cleanup()
 
 
 async def start_chat_with_session(session_id: str = None, model_name: str = None):
@@ -294,6 +317,27 @@ def parse_arguments():
     return parser.parse_args()
 
 
+async def initialize_agent_resources():
+    """辅助函数：初始化动态工具"""
+    global tools, tools_by_name, llm_with_tools
+    
+    # 1. 获取 MCP 工具
+    try:
+        print("正在加载 Playwright 工具...")
+        playwright_tools = await mcp_manager.get_tools()
+        # 合并工具
+        tools = base_tools + playwright_tools
+    except Exception as e:
+        console.print(f"[yellow]警告: Playwright 工具加载失败，将仅使用基础工具。错误: {e}[/yellow]")
+        tools = base_tools
+
+    # 2. 更新工具映射
+    tools_by_name = {tool.name: tool for tool in tools}
+    
+    # 3. 重新绑定 LLM
+    if llm:
+        llm_with_tools = llm.bind_tools(tools)
+
 def handleRun(model_name: str = None, session_id: str = None):
     """主函数 - 支持直接传入参数或从命令行解析"""
     try:
@@ -303,8 +347,13 @@ def handleRun(model_name: str = None, session_id: str = None):
             from model_initializer import initialize_llm
             global llm, llm_with_tools
             llm = initialize_llm(model_name)
-            # 初始化带工具的 LLM
-            llm_with_tools = llm.bind_tools(tools)
+            
+            # --- Added: 初始化动态资源 ---
+            # 创建临时的 event loop 来加载工具 (因为 handleRun 是入口)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(initialize_agent_resources())
+            
         # 启动聊天循环
         asyncio.run(start_chat_with_session(session_id, model_name))
 
