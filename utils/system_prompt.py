@@ -156,9 +156,8 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 - 提供准确、实用的建议和解决方案
 - 保持对用户数据和隐私的尊重
 - 你可以使用python脚本，帮我处理Excel相关的任务
-
-## 其它注意
-- 读取文件注意避免这种问题 "'utf-8' codec can't decode bytes in position 0-1: unexpected end of data"
+- 使用 manage_cron_job 维护和管理定时任务
+- manage_cron_job 会使用 python-crontab 维护这些任务
 
 ## 当前目录结构
 {directory_tree}'''

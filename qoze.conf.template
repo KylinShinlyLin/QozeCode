@@ -12,3 +12,6 @@ region_name=us-east-1
 project= #你的项目id
 location=global
 credentials_path= #你的gcp credentials 文件路径
+
+[tavily]
+tavily_key=

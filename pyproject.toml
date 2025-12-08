@@ -31,7 +31,8 @@ dependencies = [
     #    "playwright>=1.55.0",
     "prompt_toolkit>=3.0.52",
     "google-auth",
-    "colorama"
+    "colorama",
+    "python-crontab"
 ]
 #  langchain-google-vertexai
 [project.scripts]

@@ -17,6 +17,23 @@ FALLBACK_DIR = os.path.expanduser("~/.qoze")
 FALLBACK_FILE = os.path.join(FALLBACK_DIR, "qoze.conf")
 
 
+def get_tavily_key() -> str:
+    """
+    获取 Tavily API Key
+    """
+    cfg, _ = _load_config()
+
+    section = "tavily"
+    if not cfg.has_section(section):
+        fail("Tavily API Key (section [tavily] -> tavily_key)")
+
+    tavily_key = cfg.get(section, "tavily_key", fallback=None)
+    if not tavily_key:
+        fail("Tavily API Key (section [tavily] -> tavily_key)")
+
+    return tavily_key
+
+
 def _ensure_dir(path: str):
     try:
         os.makedirs(path, exist_ok=True)
@@ -70,6 +87,7 @@ def fail(missing_desc: str):
         style="yellow"
     )
     raise RuntimeError(f"缺少模型凭证：{missing_desc}")
+
 
 # 确认配置是否存在，如果不存在提示用户
 def ensure_model_credentials(model_name: str) -> Dict[str, str]:

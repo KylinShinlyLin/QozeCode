@@ -1,17 +1,18 @@
+import getpass
+import uuid
+
+from crontab import CronTab
 from langchain_core.tools import tool
 from rich.markdown import Markdown
 from rich.panel import Panel
 
 # 导入共享的 console 实例
 from shared_console import console
-from crontab import CronTab
-import getpass
-import subprocess
-import platform
 
 
 @tool
-def manage_cron_job(action: str, command: str = None, schedule: str = None, comment: str = None) -> str:
+def manage_cron_job(action: str, command: str = None, schedule: str = None, comment: str = None,
+                    is_one_time: bool = False) -> str:
     """Manage macOS system cron jobs (scheduled tasks).
 
     Use this tool to list, add, or remove scheduled tasks in the system's crontab.
@@ -24,6 +25,7 @@ def manage_cron_job(action: str, command: str = None, schedule: str = None, comm
         command: The shell command to run. Required for 'add'.
         schedule: The cron schedule expression (e.g., '*/5 * * * *' for every 5 mins, '0 9 * * 1' for every Monday at 9am). Required for 'add'.
         comment: A unique identifier for the job. Highly recommended for 'add' and 'remove' to easily identify tasks.
+        is_one_time: If True, the job will remove itself after running once (only applies to 'add').
 
     Returns:
         A status message describing the outcome of the operation.
@@ -51,8 +53,26 @@ def manage_cron_job(action: str, command: str = None, schedule: str = None, comm
             if not command or not schedule:
                 return "❌ Error: 'command' and 'schedule' are required for adding a job."
 
+            # 处理一次性任务逻辑
+            final_command = command
+            final_comment = comment
+
+            if is_one_time:
+                # 如果没有提供注释，生成一个随机的唯一ID，确保删除逻辑能精确定位
+                if not final_comment:
+                    final_comment = f"onetime_{uuid.uuid4().hex[:8]}"
+
+                # 构建自删除命令
+                # 逻辑：执行原命令 ; 读取当前crontab | 过滤掉包含该comment的行 | 写回crontab
+                # 使用 ; 确保即使原命令失败，删除逻辑也会执行
+                removal_cmd = f"crontab -l | grep -v '{final_comment}' | crontab -"
+                final_command = f"{command} ; {removal_cmd}"
+            else:
+                if not final_comment:
+                    final_comment = ""
+
             # 创建新任务
-            job = cron.new(command=command, comment=comment if comment else "")
+            job = cron.new(command=final_command, comment=final_comment)
 
             # 设置时间
             try:
@@ -64,7 +84,9 @@ def manage_cron_job(action: str, command: str = None, schedule: str = None, comm
                 return "❌ Error: Job configuration is invalid."
 
             cron.write()
-            result_msg = f"✅ Successfully added cron job:\nCommand: `{command}`\nSchedule: `{schedule}`\nComment: {comment}"
+
+            type_str = "One-time" if is_one_time else "Recurring"
+            result_msg = f"✅ Successfully added {type_str} cron job:\nCommand: `{final_command}`\nSchedule: `{schedule}`\nComment: {final_comment}"
 
         elif action == "remove":
             if not comment and not command:
@@ -103,69 +125,6 @@ def manage_cron_job(action: str, command: str = None, schedule: str = None, comm
         console.print(panel)
 
         return result_msg
-
-    except Exception as e:
-        error_msg = f"❌ System Error: {str(e)}"
-        console.print(Panel(error_msg, style="red"))
-        return error_msg
-
-
-@tool
-def schedule_one_off_task(command: str, time_str: str) -> str:
-    """Schedule a one-off (one-time) task using the system's 'at' command.
-
-    Use this tool to execute a command once at a specific future time.
-    This ensures the task runs even if the main program exits.
-    Supports macOS and Linux.
-
-    Args:
-        command: The shell command to run.
-        time_str: Time specification string supported by 'at'.
-                  Examples: 'now + 30 minutes', '17:00', 'tomorrow', 'now + 2 days'.
-
-    Returns:
-        Confirmation message from the 'at' command.
-    """
-    try:
-        # Check if 'at' is installed
-        if subprocess.call(["which", "at"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
-            return "❌ Error: 'at' command not found. Please install it (e.g., 'brew install at' on macOS or 'apt install at' on Linux)."
-
-        # MacOS specific check
-        warning = ""
-        if platform.system() == "Darwin":
-            try:
-                # Check if atrun is loaded using launchctl
-                check = subprocess.run("launchctl list | grep atrun", shell=True, stdout=subprocess.PIPE)
-                if check.returncode != 0:
-                    warning = "\n\n⚠️ **Warning for macOS users**: The `atrun` service appears to be disabled.\n"                               "The task is scheduled but **will not execute** until you enable the service.\n"                               "Run this in terminal: `sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.atrun.plist`"
-            except Exception:
-                pass  # Ignore check failures
-
-        # Construct the command
-        # echo "command" | at time_str
-        process = subprocess.Popen(['at', time_str], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True)
-        stdout, stderr = process.communicate(input=command)
-
-        if process.returncode == 0:
-            # stderr often contains the "job X at Y" confirmation message for 'at'
-            msg = f"✅ Task scheduled.\n**Command**: `{command}`\n**Time**: `{time_str}`\n**System Output**: {stderr.strip() or stdout.strip()}"
-            if warning:
-                msg += warning
-
-            panel = Panel(
-                Markdown(msg),
-                title="[bold blue]One-off Task Scheduler[/bold blue]",
-                border_style="blue",
-                padding=(0, 2)
-            )
-            console.print(panel)
-            return msg
-        else:
-            err_msg = f"❌ Failed to schedule task.\nError: {stderr.strip()}"
-            console.print(Panel(err_msg, style="red"))
-            return err_msg
 
     except Exception as e:
         error_msg = f"❌ System Error: {str(e)}"

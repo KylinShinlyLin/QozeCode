@@ -19,18 +19,18 @@ limitations under the License.
 import argparse
 import asyncio
 import operator
+import os
+import platform
+import socket
 # 屏蔽 absl 库的 STDERR 警告
 # import os
 import traceback
-import uuid
 from typing import Literal
-import platform
-import os
-import socket
+
 # import nest_asyncio
 # from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
 # from langchain_community.tools.playwright.utils import create_async_playwright_browser
-from langchain_core.messages import AnyMessage, AIMessage
+from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolMessage
@@ -43,6 +43,7 @@ from input_handler import input_manager
 from input_processor import InputProcessor
 from shared_console import console
 from stream_output import StreamOutput
+from tools.common_tools import manage_cron_job
 # from tools.common_tools import ask
 from tools.execute_command_tool import execute_command
 from tools.math_tools import multiply, add, divide
@@ -62,7 +63,7 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown]
+base_tools = [add, multiply, divide, execute_command, tavily_search, manage_cron_job, get_webpage_to_markdown]
 
 # 初始时不加载浏览器工具
 tools = base_tools

@@ -1,12 +1,13 @@
 import httpx
 from langchain_core.tools import tool
-from rich.progress import Progress, TimeElapsedColumn, TextColumn
+from rich.progress import Progress, TimeElapsedColumn, TextColumn, SpinnerColumn
 from tavily import AsyncTavilyClient
 
+import config_manager
 from shared_console import console
 
 # 初始化 Tavily 客户端
-tavily_client = AsyncTavilyClient(api_key="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")
+tavily_client = AsyncTavilyClient(api_key=config_manager.get_tavily_key())
 
 # 定义颜色常量
 CYAN = "\033[36m"
@@ -28,44 +29,54 @@ async def tavily_search(query: str, max_results: int = 5) -> str:
     Returns:
         Formatted search results with titles, URLs, and content snippets for further AI analysis
     """
+
     try:
-        print(f"\n🔍 正在搜索: {query}")
+        # print(f"\n🔍 正在搜索: {query}")
+        with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False
+        ) as progress:
+            task = progress.add_task(f"[bold dim cyan]正在搜索: {query} [/bold dim cyan]",
+                                     total=None)
+            # 使用 Tavily 进行搜索
+            response = await tavily_client.search(
+                query=query,
+                max_results=max_results,
+                include_answer=True,
+                include_raw_content=False
+            )
 
-        # 使用 Tavily 进行搜索
-        response = await tavily_client.search(
-            query=query,
-            max_results=max_results,
-            include_answer=True,
-            include_raw_content=False
-        )
+            # 格式化搜索结果
+            results = []
 
-        # 格式化搜索结果
-        results = []
+            # 添加 Tavily 的答案摘要（如果有）
+            if response.get('answer'):
+                results.append(f"📝 摘要答案: {response['answer']}\n")
 
-        # 添加 Tavily 的答案摘要（如果有）
-        if response.get('answer'):
-            results.append(f"📝 摘要答案: {response['answer']}\n")
+            # 添加搜索结果
+            if response.get('results'):
+                results.append("🔍 搜索结果:")
+                for i, result in enumerate(response['results'], 1):
+                    title = result.get('title', '无标题')
+                    url = result.get('url', '无链接')
+                    content = result.get('content', '无内容')
 
-        # 添加搜索结果
-        if response.get('results'):
-            results.append("🔍 搜索结果:")
-            for i, result in enumerate(response['results'], 1):
-                title = result.get('title', '无标题')
-                url = result.get('url', '无链接')
-                content = result.get('content', '无内容')
+                    # # 限制内容长度
+                    # if len(content) > 300:
+                    #     content = content[:300] + "..."
 
-                # # 限制内容长度
-                # if len(content) > 300:
-                #     content = content[:300] + "..."
+                    results.append(f"\n{i}. **{title}**")
+                    results.append(f"   🔗 {url}")
+                    results.append(f"   📄 {content}")
 
-                results.append(f"\n{i}. **{title}**")
-                results.append(f"   🔗 {url}")
-                results.append(f"   📄 {content}")
+            formatted_results = "\n".join(results)
+            progress.update(task,
+                            description=f"[bold green]✓[/bold green] [bold dim cyan] 搜索完成:找到 {len(response.get('results', []))} 个结果 [/bold dim cyan]")
 
-        formatted_results = "\n".join(results)
-        print(f"✅ 搜索完成，找到 {len(response.get('results', []))} 个结果")
-
-        return formatted_results
+            return formatted_results
 
     except Exception as e:
         error_msg = f"❌ Tavily 搜索失败: {str(e)}"
@@ -98,12 +109,14 @@ async def get_webpage_to_markdown(url: str) -> str:
         }
 
         with Progress(
+                SpinnerColumn(),
                 TextColumn("[bold blue]{task.description}"),
                 TimeElapsedColumn(),
                 console=console,
                 transient=False
         ) as progress:
-            task = progress.add_task(f"[bold dim cyan]访问页面: {url[:66]}{'...' if len(url) > 66 else ''}[/bold dim cyan]", total=None)
+            task = progress.add_task(
+                f"[bold dim cyan]访问页面: {url[:66]}{'...' if len(url) > 66 else ''}[/bold dim cyan]", total=None)
             # 调用 Jina Reader API
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(api_url, headers=headers, follow_redirects=True)
