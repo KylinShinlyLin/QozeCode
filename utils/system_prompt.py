@@ -105,6 +105,7 @@ requirements.md → plan.md → tasks.md → verify.md → summary.md
 def get_system_prompt(system_info, system_release, system_version, machine_type,
                       processor, hostname, username, shell, current_dir,
                       home_dir, directory_tree, plan_mode: bool):
+    # print(f"当前目录:{directory_tree}")
     """
     获取系统提示词模板
 
@@ -156,9 +157,12 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 - 优先使用适合当前操作系统的命令和工具.
 - 保持对用户数据和隐私的尊重.
 - 你可以使用python脚本，帮我处理Excel相关的任务.
+- 所有的临时文件和脚本都放到当前目录的 qoze 临时文件夹中.
 
-## 当前目录结构
-{directory_tree}'''
+## 当前项目目录
+{directory_tree}
+
+'''
 
     if plan_mode:
         base_prompt += f"\n\n{plan_mode_prompt}"

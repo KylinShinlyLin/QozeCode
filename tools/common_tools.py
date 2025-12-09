@@ -1,8 +1,13 @@
+import base64
 import getpass
+import os
 import uuid
+import mimetypes
 
 from crontab import CronTab
-from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage
+from langchain.tools import tool
+from pydantic import BaseModel, Field
 from rich.markdown import Markdown
 from rich.panel import Panel
 
@@ -130,3 +135,38 @@ def manage_cron_job(action: str, command: str = None, schedule: str = None, comm
         error_msg = f"❌ System Error: {str(e)}"
         console.print(Panel(error_msg, style="red"))
         return error_msg
+
+#
+# class ReadImageFileSchema(BaseModel):
+#     file_path: str = Field(..., description="The absolute path to the image file.")
+#
+#
+# @tool(args_schema=ReadImageFileSchema)
+# def read_image_file(file_path: str) -> str:
+#     """Reads a local image file and returns base64 encoded image data.
+#
+#     Args:
+#         file_path: The absolute path to the image file.
+#
+#     Returns:
+#         A string containing the base64 encoded image data.
+#     """
+#     try:
+#         console.print(f"[cyan]Reading image file... {file_path}[/cyan]")
+#         if not os.path.exists(file_path):
+#             return f"Error: File not found at {file_path}"
+#
+#         import mimetypes
+#         mime_type, _ = mimetypes.guess_type(file_path)
+#         if not mime_type:
+#             mime_type = "image/png"
+#
+#         with open(file_path, "rb") as image_file:
+#             import base64
+#             encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+#
+#         # Return as a single string to avoid LangChain list parsing errors
+#         return f"Image data successfully read. Data URI: data:{mime_type};base64,{encoded_string}"
+#
+#     except Exception as e:
+#         return f"Error reading image: {str(e)}"

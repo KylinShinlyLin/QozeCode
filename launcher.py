@@ -148,7 +148,7 @@ def launch_agent(model: str):
     """启动 QozeCode Agent"""
     from qoze_code_agent import handleRun
     # 直接调用 handleRun 并传入选择的模型
-    handleRun(model_name=model, session_id=str(uuid.uuid4()))
+    handleRun(model_name=model)
 
 
 # 函数 main（记录各阶段耗时）

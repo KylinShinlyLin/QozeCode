@@ -18,6 +18,7 @@ limitations under the License.
 
 import argparse
 import asyncio
+import base64
 import operator
 import os
 import platform
@@ -25,7 +26,8 @@ import socket
 # 屏蔽 absl 库的 STDERR 警告
 # import os
 import traceback
-from typing import Literal
+from pathlib import Path
+from typing import Literal, List
 
 # import nest_asyncio
 # from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
@@ -218,15 +220,84 @@ def print_panel(model_name):
     console.print(combined_panel)
 
 
+def get_image_files(folder_path: str) -> List[str]:
+    """获取文件夹中的所有图片文件"""
+    if not os.path.exists(folder_path):
+        return []
+
+    image_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
+    image_files = []
+
+    try:
+        for file in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, file)
+            if os.path.isfile(file_path):
+                _, ext = os.path.splitext(file.lower())
+                if ext in image_extensions:
+                    image_files.append(file_path)
+    except Exception as e:
+        console.print(f"读取图片文件时出错: {str(e)}", style="red")
+
+    return image_files
+
+
+def image_to_base64(image_path: str) -> str:
+    """将图片文件转换为base64编码"""
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        console.print(f"转换图片 {image_path} 为base64时出错: {str(e)}", style="yellow")
+        return None
+
+
+def create_message_with_images(text_content: str, image_folder: str = "qoze/image") -> HumanMessage:
+    """创建包含文本和图片的消息"""
+    # 基础消息内容
+    message_content = [{"type": "text", "text": text_content}]
+
+    # 检查图片文件夹
+    if os.path.exists(image_folder):
+        image_files = get_image_files(image_folder)
+
+        if image_files:
+            # 添加图片到消息内容
+            for image_path in image_files[:5]:  # 限制最多5张图片，避免请求过大
+                base64_data = image_to_base64(image_path)
+                if base64_data:
+                    # 获取图片文件名用于标识
+                    image_name = os.path.basename(image_path)
+                    # 添加图片数据
+                    message_content.append({
+                        "mime_type": "image/jpeg",
+                        "type": "image",
+                        "source_type": "base64",
+                        "data": base64_data
+                    })
+
+            if len(image_files) > 5:
+                console.print(f"⚠️  图片数量超过5张，只发送前5张", style="yellow")
+
+    return HumanMessage(content=message_content)
+
+
 # 多轮对话函数
-async def chat_loop(session_id: str = None, model_name: str = None):
+async def chat_loop(model_name: str = None):
     global plan_mode, conversation_state
     os.system('cls' if os.name == 'nt' else 'clear')
     print_panel(model_name)
 
+    Path("qoze/image").mkdir(parents=True, exist_ok=True)
     # 初始化处理器
     input_processor = InputProcessor(input_manager)
     stream_output = StreamOutput(agent)
+
+    # 检查图片文件夹状态
+    image_folder = "qoze/image"
+    if os.path.exists(image_folder):
+        image_count = len(get_image_files(image_folder))
+        if image_count > 0:
+            console.print(f"📁 检测到图片文件: {image_folder} (包含 {image_count} 张图片)", style="green")
 
     while True:
         try:
@@ -255,7 +326,11 @@ async def chat_loop(session_id: str = None, model_name: str = None):
                 continue
 
             # 创建用户消息
-            user_message = HumanMessage(content=user_input)
+            # user_message = HumanMessage(content=user_input)
+
+            # 创建用户消息（包含文本和图片）
+            user_message = create_message_with_images(user_input, image_folder)
+
             # 更新对话状态
             current_state = {
                 "messages": conversation_state["messages"] + [user_message],
@@ -273,9 +348,9 @@ async def chat_loop(session_id: str = None, model_name: str = None):
             console.print(f"\n❌ 发生错误: {str(e)}", style="red")
 
 
-async def start_chat_with_session(session_id: str = None, model_name: str = None):
+async def start_chat_with_session(model_name: str = None):
     """启动带会话 ID 的聊天"""
-    await chat_loop(session_id, model_name)
+    await chat_loop(model_name)
 
 
 def parse_arguments():
@@ -295,7 +370,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def handleRun(model_name: str = None, session_id: str = None):
+def handleRun(model_name: str = None):
     """主函数 - 支持直接传入参数或从命令行解析"""
     try:
         # 初始化选择的模型（仅构建客户端，不做网络验证）
@@ -307,7 +382,7 @@ def handleRun(model_name: str = None, session_id: str = None):
             # 初始化带工具的 LLM
             llm_with_tools = llm.bind_tools(tools)
         # 启动聊天循环
-        asyncio.run(start_chat_with_session(session_id, model_name))
+        asyncio.run(start_chat_with_session(model_name))
 
     except KeyboardInterrupt:
         console.print("\n\n👋 程序被用户中断", style="yellow")
