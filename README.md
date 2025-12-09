@@ -105,6 +105,12 @@
 - **MCP 工具支持**: 即将支持更多 Model Context Protocol 工具（coming soon）
 - **API 集成**: 跟多高效有价值的工具会通过API持续集成
 
+### 支持命令行多模态
+如果有ui 等方面的需求，可以将图片文件放到当前目录自动生成的 ``` qoze/image ``` 下面，会自动携带到上下文中
+
+<img src="./assets/visiual.png" alt="图片描述" style="padding: 10px 100px 10px 100px;">
+
+
 ### 💰 高效缓存利用
 
 - 优化过高效 token 缓存利用
