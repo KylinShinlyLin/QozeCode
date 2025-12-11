@@ -65,7 +65,7 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [add, multiply, divide, execute_command, tavily_search, manage_cron_job, get_webpage_to_markdown]
+base_tools = [add, multiply, divide, execute_command, tavily_search, get_webpage_to_markdown]
 
 # 初始时不加载浏览器工具
 tools = base_tools
