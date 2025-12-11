@@ -106,7 +106,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             fail("OpenAI API Key (section [openai] -> api_key)")
         return {"api_key": api_key}
 
-    if model_name == "deepseek-chat":
+    if model_name == "deepseek-reasoner":
         section = "deepseek"
         if not cfg.has_section(section):
             fail("DeepSeek API Key (section [deepseek] -> api_key)")

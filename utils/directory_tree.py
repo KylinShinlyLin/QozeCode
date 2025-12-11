@@ -112,9 +112,18 @@ def _generate_tree_structure(directory, max_depth=4, current_depth=0, prefix="")
     try:
         path = Path(directory)
         # 获取所有项目并过滤排除目录
+        # all_items = [
+        #     item for item in path.iterdir()
+        #     if item.name not in EXCLUDE_DIRECTORIES and not item.name.startswith('.')
+        # ]
+        # 在文件顶部或配置中定义允许显示的隐藏目录
+        ALLOWED_HIDDEN_DIRS = {'.bmad','.qoze','.cursor'}  # 可以根据需要添加
+
+        # 修改过滤条件
         all_items = [
             item for item in path.iterdir()
-            if item.name not in EXCLUDE_DIRECTORIES and not item.name.startswith('.')
+            if item.name not in EXCLUDE_DIRECTORIES and
+               (not item.name.startswith('.') or item.name in ALLOWED_HIDDEN_DIRS)
         ]
 
         # 分离目录和文件，目录优先显示
@@ -147,12 +156,6 @@ def _generate_tree_structure(directory, max_depth=4, current_depth=0, prefix="")
 def get_directory_tree(current_dir=None):
     """
     获取当前目录树结构（智能限制深度和长度）
-
-    Args:
-        current_dir: 目标目录，默认为当前工作目录
-
-    Returns:
-        str: 格式化的目录树结构字符串
     """
     if current_dir is None:
         current_dir = os.getcwd()
@@ -167,46 +170,11 @@ def get_directory_tree(current_dir=None):
         else:
             max_depth = 4
 
-        MAX_TREE_LENGTH = 3000
-        system_info = platform.system()
-
-        # 先尝试使用系统 tree 命令
-        if system_info == "Windows":
-            try:
-                tree_result = subprocess.run(
-                    ['tree', '/F', '/A'],
-                    capture_output=True,
-                    text=True,
-                    cwd=current_dir,
-                    timeout=8
-                )
-                if tree_result.returncode == 0 and tree_result.stdout.strip():
-                    raw_tree = tree_result.stdout.strip()
-                    if len(raw_tree) <= MAX_TREE_LENGTH:
-                        return f"{os.path.basename(current_dir) or 'Root'}\n{raw_tree}"
-            except:
-                pass
-        else:
-            try:
-                exclude_pattern = '|'.join(EXCLUDE_DIRECTORIES + ['.git', '.svn', '__pycache__', 'node_modules'])
-                tree_result = subprocess.run(
-                    ['tree', '-L', str(max_depth), '-a', '-I', exclude_pattern],
-                    capture_output=True,
-                    text=True,
-                    cwd=current_dir,
-                    timeout=8
-                )
-                if tree_result.returncode == 0 and tree_result.stdout.strip():
-                    raw_tree = tree_result.stdout.strip()
-                    if len(raw_tree) <= MAX_TREE_LENGTH:
-                        return raw_tree
-            except:
-                pass
-
+        MAX_TREE_LENGTH = 5000
         # 使用 Python 实现
         directory_tree = f"{os.path.basename(current_dir) or 'Root'}/\n"
-        directory_tree += _generate_tree_structure(current_dir, max_depth)
-
+        directory_tree += _generate_tree_structure(current_dir, max_depth)  # 传递允许的隐藏目录
+        # print(f"directory_tree:{directory_tree}")
         # 截断过长输出
         if len(directory_tree) > MAX_TREE_LENGTH:
             lines = directory_tree.split('\n')

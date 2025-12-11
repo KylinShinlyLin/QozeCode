@@ -251,7 +251,7 @@ def image_to_base64(image_path: str) -> str:
         return None
 
 
-def create_message_with_images(text_content: str, image_folder: str = "qoze/image") -> HumanMessage:
+def create_message_with_images(text_content: str, image_folder: str = ".qoze/image") -> HumanMessage:
     """创建包含文本和图片的消息"""
     # 基础消息内容
     message_content = [{"type": "text", "text": text_content}]
@@ -287,13 +287,14 @@ async def chat_loop(model_name: str = None):
     os.system('cls' if os.name == 'nt' else 'clear')
     print_panel(model_name)
 
-    Path("qoze/image").mkdir(parents=True, exist_ok=True)
+    Path(".qoze/image").mkdir(parents=True, exist_ok=True)
+    Path(".qoze/rules").mkdir(parents=True, exist_ok=True)
     # 初始化处理器
     input_processor = InputProcessor(input_manager)
     stream_output = StreamOutput(agent)
 
     # 检查图片文件夹状态
-    image_folder = "qoze/image"
+    image_folder = ".qoze/image"
     if os.path.exists(image_folder):
         image_count = len(get_image_files(image_folder))
         if image_count > 0:

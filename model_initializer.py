@@ -123,11 +123,26 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ {model_name} 初始化失败: {str(e)}")
             raise
-    elif model_name == 'deepseek-chat':
+    elif model_name == 'deepseek-reasoner':
         try:
             # 延迟导入重依赖
             from langchain_deepseek import ChatDeepSeek
 
+            # # PATCH: 修复 DeepSeek 推理内容丢失问题
+            # from langchain_openai.chat_models import base as openai_chat_base
+            # from langchain_core.messages import AIMessage
+            #
+            # if not hasattr(openai_chat_base, '_original_convert_message_to_dict'):
+            #     openai_chat_base._original_convert_message_to_dict = openai_chat_base._convert_message_to_dict
+            #
+            #     def _patched_convert_message_to_dict(message):
+            #         message_dict = openai_chat_base._original_convert_message_to_dict(message)
+            #         if isinstance(message, AIMessage):
+            #             if 'reasoning_content' in message.additional_kwargs:
+            #                 message_dict['reasoning_content'] = message.additional_kwargs['reasoning_content']
+            #         return message_dict
+            #
+            #     openai_chat_base._convert_message_to_dict = _patched_convert_message_to_dict
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
 
@@ -154,7 +169,7 @@ def initialize_llm(model_name: str):
                 model="GLM-4.6",
                 api_key=creds["api_key"],
                 temperature=0.3,
-                # thinking={"type": "enable"}
+                thinking={"type": "enable"}
             )
             return llm
         except ImportError:

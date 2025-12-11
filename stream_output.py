@@ -35,7 +35,7 @@ class StreamOutput:
         with (Progress(
                 SpinnerColumn(),  # 添加旋转动画
                 TextColumn("[bold blue]{task.description}"),
-                CustomTimeElapsedColumn(style="rgb(65,170,65)") ,
+                CustomTimeElapsedColumn(style="rgb(65,170,65)"),
                 console=console,
                 transient=False
         ) as progress):
@@ -46,6 +46,7 @@ class StreamOutput:
                 # 跳过 ToolMessage 类型
                 if isinstance(message_chunk, ToolMessage):
                     continue
+                # print(message_chunk)
 
                 # 处理 DeepSeek 推理内容
                 if hasattr(message_chunk, 'additional_kwargs') and message_chunk.additional_kwargs:

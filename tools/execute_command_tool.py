@@ -18,7 +18,7 @@ RESET = "\033[0m"
 
 
 @tool
-def execute_command(command: str, timeout: int = 5400) -> str:
+def execute_command(command: str, timeout: int = 360) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
     
     Args:
@@ -81,7 +81,8 @@ def execute_command(command: str, timeout: int = 5400) -> str:
                     if elapsed_time > timeout:
                         process.kill()
 
-                        progress.update(task, description=f"[bold red]✗ ⚠️ 命令执行超时 ({timeout}秒) {command_str} [/bold red]")
+                        progress.update(task,
+                                        description=f"[bold red]✗ ⚠️ 命令执行超时 ({timeout}秒) {command_str} [/bold red]")
                         return f"❌ 命令执行超时 ({timeout}秒)"
 
                     # 非阻塞读取输出（不显示）
