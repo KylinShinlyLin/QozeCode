@@ -169,7 +169,7 @@ def initialize_llm(model_name: str):
                 model="GLM-4.6",
                 api_key=creds["api_key"],
                 temperature=0.3,
-                thinking={"type": "enable"}
+                # thinking={"type": "enable"}
             )
             return llm
         except ImportError:
@@ -209,6 +209,7 @@ def initialize_llm(model_name: str):
 
             llm = ChatQwen(
                 model="qwen3-max-preview",
+                # model="qwen3-max",
                 temperature=0.3,
                 api_key=creds["api_key"],
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
