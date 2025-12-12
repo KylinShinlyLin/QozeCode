@@ -69,11 +69,11 @@ def get_model_choice() -> Optional[str]:
 
     # 定义选项 - 简洁对齐
     choices = [
-        "deepseek-reasoner           DeepSeek",
+        "gpt-5.2                     OpenAI",
         "gemini-3-pro  (think)       Google GCP",
         "qwen3-max  (think)          Alibaba Cloud",
+        "deepseek-reasoner           DeepSeek",
         "glm-4.6                     智普",
-        "gpt-5.1                     OpenAI",
         "claude-4                    bedrock",
         "[退出程序]"
     ]
@@ -97,8 +97,8 @@ def get_model_choice() -> Optional[str]:
             return 'claude-4'
         elif "gemini-3-pro" in selected:
             return 'gemini-3-pro'
-        elif "gpt-5.1" in selected:
-            return 'gpt-5.1'
+        elif "gpt-5.2" in selected:
+            return 'gpt-5.2'
         elif "deepseek-reasoner" in selected:
             return 'deepseek-reasoner'
         elif "glm-4.6" in selected:

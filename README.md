@@ -33,7 +33,7 @@
 | DeepSeek     | DeepSeek 官方             | 🟢 可用  | 支持 DeepSeek Exp V3.2         |
 | Qwen Max     | Qwen 官方                 | 🟢 可用  | 支持 Qwen Max                  |
 | Claude-4     | Anthropic (AWS Bedrock) | 🟢 可用  | 通过 AWS Bedrock 集成            |
-| gpt-5.1      | OpenAI 官方               | 🟢 可用  | OpenAI GPT-5                 |
+| gpt-5.2      | OpenAI 官方               | 🟢 可用  | OpenAI GPT-5                 |
 | gemini-3-pro | Google Vertex AI        | 🟢 可用  | 通过 Google Cloud Vertex AI 集成 |
 | glm-4.6      | 智谱AI 官方                 | 🟢 可用  | 支持 GLM-4.6 模型                |
 | Ollama       | 自建模型                    | 🔴 计划中 | 未来支持                         |

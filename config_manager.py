@@ -97,7 +97,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
     """
     cfg, _ = _load_config()
 
-    if model_name in ("gpt-5", "gpt-5.1", "gpt-5-codex"):
+    if model_name in ("gpt-5.2", "gpt-5.1", "gpt-5-codex"):
         section = "openai"
         if not cfg.has_section(section):
             fail("OpenAI API Key (section [openai] -> api_key)")

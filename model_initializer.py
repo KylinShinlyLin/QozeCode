@@ -86,7 +86,7 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
             raise
-    elif model_name in ('gpt-5.1', 'gpt-5-codex'):
+    elif model_name in ('gpt-5.1', 'gpt-5.2', 'gpt-5-codex'):
         try:
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
@@ -104,16 +104,10 @@ def initialize_llm(model_name: str):
             creds = ensure_model_credentials(model_name)
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
             model_config = {
-                "temperature": 0.1,
                 "api_key": creds["api_key"],
                 "http_client": http_client,
+                "model": "gpt-5.2"
             }
-
-            if model_name == 'gpt-5.1':
-                model_config["model"] = "gpt-5.1"
-                model_config["reasoning_effort"] = "low"
-            else:  # gpt-5-codex
-                model_config["model"] = "gpt-5-codex"
 
             llm = ChatOpenAI(**model_config)
             return llm
@@ -127,22 +121,6 @@ def initialize_llm(model_name: str):
         try:
             # 延迟导入重依赖
             from langchain_deepseek import ChatDeepSeek
-
-            # # PATCH: 修复 DeepSeek 推理内容丢失问题
-            # from langchain_openai.chat_models import base as openai_chat_base
-            # from langchain_core.messages import AIMessage
-            #
-            # if not hasattr(openai_chat_base, '_original_convert_message_to_dict'):
-            #     openai_chat_base._original_convert_message_to_dict = openai_chat_base._convert_message_to_dict
-            #
-            #     def _patched_convert_message_to_dict(message):
-            #         message_dict = openai_chat_base._original_convert_message_to_dict(message)
-            #         if isinstance(message, AIMessage):
-            #             if 'reasoning_content' in message.additional_kwargs:
-            #                 message_dict['reasoning_content'] = message.additional_kwargs['reasoning_content']
-            #         return message_dict
-            #
-            #     openai_chat_base._convert_message_to_dict = _patched_convert_message_to_dict
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
 
@@ -164,7 +142,6 @@ def initialize_llm(model_name: str):
 
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
-
             llm = ChatZhipuAI(
                 model="GLM-4.6",
                 api_key=creds["api_key"],
@@ -179,26 +156,6 @@ def initialize_llm(model_name: str):
             print(f"❌ GLM 初始化失败: {str(e)}")
             raise
 
-    # elif model_name == 'Kimi':
-    #     try:
-    #         # 延迟导入重依赖
-    #         from langchain_community.chat_models.moonshot import MoonshotChat
-    #
-    #         # 读取 DeepSeek 密钥
-    #         creds = ensure_model_credentials('Kimi')
-    #
-    #         llm = MoonshotChat(
-    #             model="kimi-k2-0905-preview",
-    #             temperature=0.3,
-    #             api_key=creds["api_key"],
-    #         )
-    #         return llm
-    #     except ImportError:
-    #         print("❌ 缺少 GLM 依赖")
-    #         raise
-    #     except Exception as e:
-    #         print(f"❌ GLM 初始化失败: {str(e)}")
-    #         raise
     elif model_name == 'qwen3-max':
         try:
             # 延迟导入重依赖
@@ -206,7 +163,6 @@ def initialize_llm(model_name: str):
 
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
-
             llm = ChatQwen(
                 model="qwen3-max-preview",
                 # model="qwen3-max",
@@ -240,16 +196,6 @@ def verify_credentials(model_name: str):
         creds = ensure_model_credentials(model_name)
         api_key = creds["api_key"]
         os.environ["OPENAI_API_KEY"] = api_key
-        try:
-            with httpx.Client(timeout=5.0) as client:
-                r = client.get(
-                    "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-            if r.status_code != 200:
-                raise RuntimeError(f"OpenAI 验证失败: {r.status_code} {r.text[:200]}")
-        except Exception as e:
-            raise RuntimeError(f"OpenAI 验证失败: {e}")
 
     elif model_name == 'DeepSeek':
         creds = ensure_model_credentials(model_name)
@@ -276,7 +222,6 @@ def verify_credentials(model_name: str):
         cred_path = creds.get("credentials_path")
         if not cred_path or not os.path.exists(cred_path):
             raise RuntimeError("Gemini 凭证验证失败: 凭证文件不存在")
-        # 轻量验证到此为止，避免耗时的 API 调用
 
     else:
         raise ValueError(f"不支持的模型: {model_name}")

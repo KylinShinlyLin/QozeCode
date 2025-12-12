@@ -85,10 +85,10 @@ class StreamOutput:
 
                     if chunk_text != '':
                         if need_point and "qwen" in model_name:
-                            print(f"{self.CYAN}\n● {self.RESET}", end='')
+                            print(f"{self.CYAN}换行\n● {self.RESET}", end='')
                             need_point = False
                         elif need_point:
-                            print(f"{self.CYAN}\n● {self.RESET}", end='')
+                            print(f"{self.CYAN}● {self.RESET}", end='')
                             need_point = False
 
                         has_response = True
