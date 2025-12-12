@@ -22,7 +22,7 @@ def run_command(command: str) -> str:
             bufsize=1
         )
 
-        start_time = time.time()
+        # start_time = time.time()
         output_lines = []
 
         # 流式读取输出

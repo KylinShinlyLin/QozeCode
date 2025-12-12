@@ -50,6 +50,7 @@ from tools.common_tools import manage_cron_job
 from tools.execute_command_tool import execute_command
 from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, get_webpage_to_markdown
+from utils.constants import init_prompt
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_system_prompt
 
@@ -323,12 +324,12 @@ async def chat_loop(model_name: str = None):
                 console.print("进入计划模式")
                 continue
 
+            if user_input in ["qoze init"]:
+                user_input = init_prompt
+
             # 空输入，继续循环
             if user_input == "":
                 continue
-
-            # 创建用户消息
-            # user_message = HumanMessage(content=user_input)
 
             # 创建用户消息（包含文本和图片）
             user_message = create_message_with_images(user_input, image_folder)
