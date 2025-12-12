@@ -208,7 +208,7 @@ def print_panel(model_name):
     combined_panel = Panel(
         f"[bold dim cyan]✦ Welcome to QozeCode 0.2.3[/bold dim cyan]\n\n"
         f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'} [bold cyan]\n"
-        f"[bold dim white]当前目录:[/bold dim white][bold dim cyan] {os.getcwd() or 'Unknown'} [bold dim cyan]\n"
+        f"[bold white]当前目录:[/bold white][bold cyan]{os.getcwd() or 'Unknown'} [bold cyan]\n"
         f"[bold white]使用提示:[/bold white]\n"
         f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
         f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]\n"
