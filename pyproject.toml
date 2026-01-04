@@ -13,12 +13,13 @@ authors = [{ name = "QozeCode" }]
 dependencies = [
     "rich>=14.1.0",
     "inquirer>=3.4.0",
-    "langchain-core",
     "langgraph",
     "typing_extensions>=4.15.0",
+    "langchain-core",
     "langchain-deepseek",
     "langchain-google-vertexai",
     "langchain-aws",
+    "langchain-community",
     "langchain-openai",
     "langchain-qwq",
     "boto3",
@@ -26,13 +27,13 @@ dependencies = [
     "tavily-python>=0.7.12",
     "lxml>=6.0.2",
     "beautifulsoup4>=4.14.2",
-    "langchain-community>=0.3.30",
     "pyjwt>=2.10.1",
     #    "playwright>=1.55.0",
     "prompt_toolkit>=3.0.52",
     "google-auth",
     "colorama",
-    "python-crontab"
+    "python-crontab",
+    "hnswlib"
 ]
 #  langchain-google-vertexai
 [project.scripts]
