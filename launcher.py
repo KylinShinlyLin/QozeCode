@@ -9,7 +9,6 @@ import os
 import sys
 import time
 import traceback
-import uuid
 from typing import Optional
 
 from constant import template_content
@@ -165,6 +164,7 @@ def main():
     except KeyboardInterrupt:
         console.print("\n👋 再见", style="dim")
     except Exception as e:
+        traceback.print_exc()
         console.print(f"\n❌ 错误: {str(e)}", style="red", markup=False)
 
 

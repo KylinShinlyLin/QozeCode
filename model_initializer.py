@@ -126,7 +126,8 @@ def initialize_llm(model_name: str):
 
             llm = ChatDeepSeek(
                 model="deepseek-chat",
-                api_key=creds["api_key"]
+                api_key=creds["api_key"],
+                # extra_body={"reasoning": {"enabled": True}},
             )
             return llm
         except ImportError:
@@ -143,10 +144,9 @@ def initialize_llm(model_name: str):
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatZhipuAI(
-                model="GLM-4.6",
+                model="glm-4.7",
                 api_key=creds["api_key"],
                 temperature=0.3,
-                # thinking={"type": "enable"}
             )
             return llm
         except ImportError:
@@ -161,7 +161,7 @@ def initialize_llm(model_name: str):
             # 延迟导入重依赖
             from langchain_qwq import ChatQwen
 
-            # 读取 DeepSeek 密钥
+            # 读取密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatQwen(
                 model="qwen3-max-preview",

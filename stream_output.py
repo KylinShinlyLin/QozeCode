@@ -3,6 +3,7 @@
 """
 流式输出模块 - 负责 AI 响应的流式输出和状态管理
 """
+import json
 
 from langchain_core.messages import AIMessage, ToolMessage
 from rich.progress import Progress, TextColumn, TimeElapsedColumn, SpinnerColumn
@@ -46,7 +47,9 @@ class StreamOutput:
                 # 跳过 ToolMessage 类型
                 if isinstance(message_chunk, ToolMessage):
                     continue
-                # print(message_chunk)
+                # print(f"message_chunk={message_chunk} metadata={metadata}")
+                # json_str = json.dumps(vars(message_chunk), ensure_ascii=False, indent=6)
+                # print(json_str)
 
                 # 处理 DeepSeek 推理内容
                 if hasattr(message_chunk, 'additional_kwargs') and message_chunk.additional_kwargs:
@@ -85,7 +88,7 @@ class StreamOutput:
 
                     if chunk_text != '':
                         if need_point and "qwen" in model_name:
-                            print(f"{self.CYAN}换行\n● {self.RESET}", end='')
+                            print(f"{self.CYAN}\n● {self.RESET}", end='')
                             need_point = False
                         elif need_point:
                             print(f"{self.CYAN}● {self.RESET}", end='')

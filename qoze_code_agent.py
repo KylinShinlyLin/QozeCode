@@ -26,12 +26,13 @@ import socket
 # 屏蔽 absl 库的 STDERR 警告
 # import os
 import traceback
+from playwright.async_api import async_playwright
 from pathlib import Path
 from typing import Literal, List
 
+from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
 # import nest_asyncio
 # from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
-# from langchain_community.tools.playwright.utils import create_async_playwright_browser
 from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -45,10 +46,8 @@ from input_handler import input_manager
 from input_processor import InputProcessor
 from shared_console import console
 from stream_output import StreamOutput
-from tools.common_tools import manage_cron_job
 # from tools.common_tools import ask
 from tools.execute_command_tool import execute_command
-from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, get_webpage_to_markdown
 from utils.constants import init_prompt
 from utils.directory_tree import get_directory_tree
@@ -64,11 +63,16 @@ RESET = "\033[0m"
 # 全局 LLM 变量，将在 main 函数中初始化
 llm = None
 llm_with_tools = None
-browser_tools = None
+# browser_tools = None
 
 base_tools = [execute_command, tavily_search, get_webpage_to_markdown]
 
-# 初始时不加载浏览器工具
+# 全局变量定义（延迟初始化）
+async_browser = None
+playwright_context = None
+toolkit = None
+browser_tools = []
+# 初始时只加载基础工具
 tools = base_tools
 browser_loaded = False
 plan_mode = False
@@ -87,6 +91,8 @@ def get_terminal_display_lines():
 
 
 tools_by_name = {tool.name: tool for tool in tools}
+
+tools_by_name_browser = {tool.name: tool for tool in browser_tools}
 
 
 # Step 1: Define state
@@ -153,14 +159,17 @@ def llm_call(state: dict):
 # Step 3: Define tool node
 async def tool_node(state: dict):
     """Performs the tool call"""
-
+    # print(f"browser_tools={browser_tools}")
     result = []
     for tool_call in state["messages"][-1].tool_calls:
         tool = tools_by_name[tool_call["name"]]
         try:
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown"]:
+            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown"] or tool_call[
+                "name"] in tools_by_name_browser:
+                # print(f"tool_call={tool_call["name"]}")
                 observation = await tool.ainvoke(tool_call["args"])
+                # print("tool call end")
             else:
                 observation = tool.invoke(tool_call["args"])
             result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
@@ -351,8 +360,62 @@ async def chat_loop(model_name: str = None):
             console.print(f"\n❌ 发生错误: {str(e)}", style="red")
 
 
+
+async def init_browser_env():
+    """在异步循环中初始化浏览器和工具"""
+    global async_browser, toolkit, browser_tools, tools, tools_by_name, tools_by_name_browser, llm_with_tools, playwright_context
+
+    if async_browser is None:
+        console.print("[dim]正在初始化浏览器环境...[/dim]")
+        try:
+            playwright_context = await async_playwright().start()
+            async_browser = await playwright_context.chromium.launch(
+                headless=False, 
+                args=[
+                    "--start-maximized",
+                    "--disable-web-security",
+                    "--disable-features=VizDisplayCompositor"
+                ]
+            )
+            toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
+            browser_tools = toolkit.get_tools()
+
+            # 更新工具列表
+            tools = base_tools + browser_tools
+
+            # 更新工具字典
+            tools_by_name.clear()
+            tools_by_name.update({tool.name: tool for tool in tools})
+
+            tools_by_name_browser.clear()
+            tools_by_name_browser.update({tool.name: tool for tool in browser_tools})
+
+            # 绑定 LLM 工具
+            if llm:
+                llm_with_tools = llm.bind_tools(tools)
+                console.print("[dim]LLM 工具绑定更新完成[/dim]")
+        except Exception as e:
+            console.print(f"[red]❌ 浏览器初始化失败: {str(e)}[/red]")
+            # 如果初始化失败，确保不会导致程序崩溃，而是继续使用基础工具
+            pass
+
+
 async def start_chat_with_session(model_name: str = None):
     """启动带会话 ID 的聊天"""
+    # 初始化环境
+    await init_browser_env()
+    # 预热浏览器，确保有头模式下可见
+    try:
+        if async_browser:
+            console.print("[dim]正在启动浏览器窗口...[/dim]")
+            # 创建一个新的上下文和页面
+            # 注意：Playwright 默认不会打开页面，除非显式调用
+            page = await async_browser.new_page()
+            await page.goto("https://www.google.com")
+            console.print("[green]🌐 浏览器已启动并就绪[/green]")
+    except Exception as e:
+        console.print(f"[yellow]⚠️ 浏览器启动提示: {str(e)}[/yellow]")
+
     await chat_loop(model_name)
 
 
@@ -383,7 +446,7 @@ def handleRun(model_name: str = None):
             global llm, llm_with_tools
             llm = initialize_llm(model_name)
             # 初始化带工具的 LLM
-            llm_with_tools = llm.bind_tools(tools)
+            # llm_with_tools = llm.bind_tools(tools)  # 移至异步初始化
         # 启动聊天循环
         asyncio.run(start_chat_with_session(model_name))
 
