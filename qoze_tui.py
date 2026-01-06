@@ -9,7 +9,7 @@ from datetime import datetime
 
 from textual.app import App, ComposeResult, on
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label
+from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget
 from textual.binding import Binding
 from rich.text import Text
 from rich.rule import Rule
@@ -149,7 +149,7 @@ class StatusBar(Static):
 class TUIStreamOutput:
     """流式输出适配器 - 适配 Textual (真流式)"""
 
-    def __init__(self, main_log: RichLog, stream_display: Static):
+    def __init__(self, main_log: RichLog, stream_display: MarkdownWidget):
         self.main_log = main_log
         self.stream_display = stream_display
 
@@ -172,9 +172,6 @@ class TUIStreamOutput:
         # 用于 State 记录的完整累积
         total_response_text = ""
         total_reasoning_content = ""
-
-        # # 标记 AI 回复开始
-        # self.main_log.write(Rule(style="dim cyan"))
 
         # 激活流式显示区域
         self.stream_display.styles.display = "block"
@@ -248,37 +245,28 @@ class TUIStreamOutput:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
 
-                # 5. 更新流式显示 (True Streaming)
+                # 5. 更新流式显示 (True Streaming with Markdown Widget)
                 if current_reasoning_content or current_response_text:
-                    renderables = []
+                    md_content = ""
 
                     if current_reasoning_content:
-                        renderables.append(
-                            Text(current_reasoning_content, style="italic dim #565f89")
-                        )
+                        # 格式化推理内容为引用块，模拟 dim 效果
+                        # 注意：需要 CSS 配合 BlockQuote 样式
+                        lines = current_reasoning_content.split('\n')
+                        quoted_lines = [f"> {line}" for line in lines]
+                        md_content += "\n".join(quoted_lines) + "\n\n"
 
                     if current_response_text:
-                        if current_reasoning_content:
-                            renderables.append(Text(" "))  # Spacer
+                        md_content += current_response_text
 
-                        # 尝试渲染 Markdown，如果失败退回文本，避免未闭合标签报错
-                        try:
-                            renderables.append(Markdown(current_response_text))
-                        except:
-                            renderables.append(Text(current_response_text))
-
-                    self.stream_display.update(Group(*renderables))
+                    self.stream_display.update(md_content)
+                    # Markdown Widget 继承自 VerticalScroll，支持 scroll_end
                     self.stream_display.scroll_end(animate=False)
 
             # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
 
-            # self.main_log.write(Text("✓ Completed", style="bold green"))
-            # self.main_log.write(Text(" ", style="dim"))  # Spacer
-
             # 保存到历史记录
-            # 注意：这里只保存累积的文本和推理。如果是多轮工具调用，中间过程已被 LangChain 内部状态管理了吗？
-            # 这里的 conversation_state 是手动管理的列表。为了简单起见，我们添加最终的 AI Message。
             if total_response_text or total_reasoning_content:
                 additional_kwargs = {'reasoning_content': total_reasoning_content}
                 ai_response = AIMessage(
@@ -298,25 +286,35 @@ class Qoze(App):
     CSS = """
     Screen { background: #1a1b26; color: #a9b1d6; }
     TopBar { dock: top; height: 1; background: #1a1b26; color: #c0caf5; }
-    
+
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
-    
+
     /* 聊天区域布局调整 */
     #chat-area { width: 75%; height: 100%; }
     #main-output { width: 100%; height: 1fr; background: #1a1b26; border: none; padding: 1 2; }
-    
-    /* 流式输出区域 - 初始隐藏 */
-    #stream-output { 
-        width: 100%; 
-        height: auto; 
-        max-height: 60%; 
-        background: #1a1b26; 
-        padding: 0 2; 
+
+    /* 流式输出区域 - 使用 Markdown Widget */
+    #stream-output {
+        width: 100%;
+        height: auto;
+        max-height: 60%;
+        background: #1a1b26;
+        padding: 0 2;
         border-top: solid #414868;
         display: none;
-        overflow-y: auto;
+        overflow-y: auto; /* 确保可滚动 */
     }
     
+    /* 自定义 Markdown 样式以匹配主题 */
+    #stream-output > BlockQuote {
+        border-left: solid #565f89;
+        color: #787c99;
+        background: #1a1b26;
+        text-style: italic;
+        margin: 0 0 1 0;
+        padding: 0 1;
+    }
+
     #sidebar { width: 25%; height: 100%; background: #16161e; padding: 1 2; color: #787c99; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #1a1b26; }
     #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #1a1b26; }
@@ -343,7 +341,8 @@ class Qoze(App):
             # 使用 Vertical 容器包含历史记录和流式输出
             with Vertical(id="chat-area"):
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
-                yield Static(id="stream-output")
+                # 使用 Textual Markdown Widget 替代 Static
+                yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar")
         with Vertical(id="bottom-container"):
             with Horizontal(id="input-line"):
@@ -353,7 +352,7 @@ class Qoze(App):
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
-        self.stream_output = self.query_one("#stream-output", Static)
+        self.stream_output = self.query_one("#stream-output", MarkdownWidget)
         self.input_box = self.query_one("#input-box", Input)
         self.status_bar = self.query_one(StatusBar)
 
