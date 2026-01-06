@@ -236,7 +236,7 @@ class QozeTui(App):
         background: #111111;
         border: none;
         padding: 1 2;
-        scrollbar-gutter: stable;
+        scrollbar-size: 0 0;
     }
 
     #sidebar {
@@ -245,7 +245,7 @@ class QozeTui(App):
         background: #111111;
         padding: 2;
         color: #888888;
-        border-left: vkey #333333; /* Optional subtle border */
+        border: none;
     }
 
     #bottom-container {
