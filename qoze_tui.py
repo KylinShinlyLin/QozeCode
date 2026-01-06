@@ -6,12 +6,13 @@ from datetime import datetime
 
 from textual.app import App, ComposeResult, on
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label, Header
+from textual.widgets import Input, RichLog, Static, Label
 from textual.binding import Binding
 from rich.text import Text
 from rich.rule import Rule
 from rich.panel import Panel
 from rich.console import Group
+from rich.align import Align
 
 # Add current directory to path
 sys.path.append(os.getcwd())
@@ -48,11 +49,33 @@ def get_modified_files():
         for line in status.split('\n'):
             parts = line.split()
             if len(parts) >= 2:
-                # status is first part, filename is last part
                 files.append((parts[0], parts[-1]))
         return files
     except:
         return []
+
+
+class TopBar(Static):
+    """自定义顶部栏，替代默认 Header"""
+
+    def on_mount(self):
+        self.update_clock()
+        self.set_interval(1, self.update_clock)
+
+    def update_clock(self):
+        time_str = datetime.now().strftime("%H:%M:%S")
+        # 左侧标题，右侧时间
+        left = Text(" ⚡ Qoze Code ", style="bold white on #d75f00")
+        left.append(" v0.2.3 ", style="bold white on #005faf")
+
+        right = Text(f" {time_str} ", style="bold white on #333333")
+
+        # 计算中间空格
+        total_width = self.content_size.width or 80
+        spacer_width = max(0, total_width - len(left) - len(right))
+
+        content = left + Text(" " * spacer_width, style="on #1a1b26") + right
+        self.update(content)
 
 
 class Sidebar(Static):
@@ -65,42 +88,46 @@ class Sidebar(Static):
         repo_url = get_git_info()
         modified = get_modified_files()
 
-        # Build Sidebar Content
         text = Text()
 
-        # Header
-        text.append("○ QozeCode v0.2.3\n", style="bold dim white")
-        text.append(f"{repo_url}\n\n", style="dim white")
+        # Project Info
+        text.append("\nPROJECT INFO\n", style="bold #7aa2f7 underline")
+        text.append(f"Repo: ", style="dim white")
+        text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
 
-        # CWD
-        text.append("cwd: ", style="dim")
-        text.append(f"{cwd}\n\n", style="dim white")
+        # CWD (Shortened)
+        path_parts = cwd.split('/')
+        short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
+        text.append("Path: ", style="dim white")
+        text.append(f".../{short_cwd}\n\n", style="cyan")
 
         # Session
-        text.append("Session: ", style="bold #d75f00")  # Orange
-        text.append("Interactive Development\n\n", style="dim white")
-
-        # Configuration
-        text.append("LSP Configuration\n\n", style="bold #d75f00")
+        text.append("SESSION\n", style="bold #bb9af7 underline")
+        text.append("Status: ", style="dim white")
+        text.append("Active\n", style="green")
+        text.append("Mode:   ", style="dim white")
+        text.append("Interactive\n\n", style="yellow")
 
         # Modified Files
-        text.append("Modified Files:\n", style="bold #d75f00")
+        text.append("GIT STATUS\n", style="bold #f7768e underline")
         if modified:
             for status, filename in modified:
-                # Color logic based on git status
                 if 'M' in status:
-                    color = "#d75f00"  # Orange for modified
+                    icon = "✹"
+                    style = "yellow"
                 elif 'A' in status or '?' in status:
-                    color = "green"
+                    icon = "+"
+                    style = "green"
                 elif 'D' in status:
-                    color = "red"
+                    icon = "x"
+                    style = "red"
                 else:
-                    color = "yellow"
+                    icon = "•"
+                    style = "white"
 
-                text.append(f"{filename} ", style="white")
-                text.append(f"{status}\n", style=f"bold {color}")
+                text.append(f"{icon} {filename[:20]}\n", style=style)
         else:
-            text.append("No changes\n", style="dim")
+            text.append("Clean working tree\n", style="dim green")
 
         self.update(text)
 
@@ -118,24 +145,16 @@ class StatusBar(Static):
         self.refresh()
 
     def render(self):
-        # Left side
-        # left = Text(" ctrl+? help ", style="bold black on white")
-        left = Text(f" Context: {self.context_tokens / 1000:.1f}K, Cost: ${self.cost:.2f}",
-                    style="dim white on #1e1e1e")
+        left = Text(" Context: ", style="dim white on #1a1b26")
+        left.append(f"{self.context_tokens / 1000:.1f}K", style="bold cyan on #1a1b26")
+        left.append(" | Cost: ", style="dim white on #1a1b26")
+        left.append(f"${self.cost:.4f}", style="bold green on #1a1b26")
+        right = Text(f"{self.model_name} ", style="bold white on #414868")
 
-        # Right side
-        right = Text(" No diagnostics ", style="dim white on #1e1e1e")
-        right.append(f" {self.model_name} ", style="bold white on #005faf")  # Blue background
-
-        # Calculate spacing
         total_width = self.content_size.width or 100
-        left_len = len(left)
-        right_len = len(right)
+        spacer_width = max(0, total_width - len(left) - len(right))
 
-        spacer_width = max(0, total_width - left_len - right_len)
-
-        final_text = left + Text(" " * spacer_width, style="on #1e1e1e") + right
-        return final_text
+        return left + Text(" " * spacer_width, style="on #1a1b26") + right
 
 
 class TUIStreamOutput:
@@ -180,18 +199,15 @@ class TUIStreamOutput:
 
                 if isinstance(message_chunk, AIMessage) and message_chunk.tool_calls:
                     for tool_call in message_chunk.tool_calls:
-                        self.main_log.write(Text(f"⚙ Executing {tool_call['name']}...", style="yellow"))
+                        self.main_log.write(Text(f"⚙ Executing {tool_call['name']}...", style="bold yellow"))
 
-                # DeepSeek Reasoning
                 if hasattr(message_chunk, 'additional_kwargs') and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get('reasoning_content', '')
                     if reasoning:
                         current_reasoning_content += reasoning
-                        # Display reasoning in italic dim
-                        self.write_main(reasoning, style="italic dim bright_black")
+                        self.write_main(reasoning, style="italic dim #565f89")
                         continue
 
-                # Content
                 content = message_chunk.content
                 chunk_text = ""
                 if isinstance(content, str):
@@ -207,7 +223,6 @@ class TUIStreamOutput:
 
             self.flush_main()
 
-            # Update State
             additional_kwargs = {'reasoning_content': current_reasoning_content}
             ai_response = AIMessage(
                 content=current_response_text,
@@ -219,40 +234,53 @@ class TUIStreamOutput:
             self.main_log.write(f"[red]Error: {e}[/]")
 
 
-class QozeTui(App):
+class Qoze(App):
     CSS = """
+    /* Tokyo Night Theme Inspired */
     Screen {
-        background: #111111;
-        color: #e0e0e0;
+        background: #1a1b26;
+        color: #a9b1d6;
     }
 
+    /* Top Bar */
+    TopBar {
+        dock: top;
+        height: 1;
+        background: #1a1b26;
+        color: #c0caf5;
+    }
+
+    /* Main Layout */
     #main-container {
         height: 1fr;
         width: 100%;
+        layout: horizontal;
     }
 
     #main-output {
         height: 100%;
-        width: 70%;
-        background: #111111;
+        width: 75%;
+        background: #1a1b26;
         border: none;
         padding: 1 2;
-        scrollbar-size: 0 0;
+        scrollbar-size: 1 1;
+        scrollbar-color: #565f89;
     }
 
     #sidebar {
-        width: 30%;
+        width: 25%;
         height: 100%;
-        background: #111111;
-        padding: 2;
-        color: #888888;
-        border: none;
+        background: #16161e; /* Slightly darker */
+        padding: 1 2;
+        color: #787c99;
+        border-left: solid #2f334d;
     }
 
+    /* Bottom Area */
     #bottom-container {
         height: auto;
         dock: bottom;
-        background: #111111;
+        background: #1a1b26;
     }
 
     #input-line {
@@ -260,11 +288,12 @@ class QozeTui(App):
         width: 100%;
         align-vertical: middle;
         padding: 0 1;
-        border-top: solid #333333;
+        border-top: solid #414868;
+        background: #1a1b26;
     }
 
     .prompt-symbol {
-        color: #d75f00;
+        color: #bb9af7;
         text-style: bold;
         width: 2;
         content-align: center middle;
@@ -272,30 +301,29 @@ class QozeTui(App):
 
     Input {
         width: 1fr;
-        background: #111111;
+        background: #1a1b26;
         border: none;
-        color: white;
+        color: #c0caf5;
         padding: 0;
     }
-    
+
     Input:focus {
         border: none;
     }
-    
-    /* Remove default Input styles */
+
     Input > .input--placeholder {
-        color: #555555;
+        color: #565f89;
     }
-    
+
     Input > .input--cursor {
-        background: #d75f00;
-        color: black;
+        background: #bb9af7;
+        color: #1a1b26;
     }
 
     StatusBar {
         height: 1;
         width: 100%;
-        background: #1e1e1e;
+        background: #1a1b26;
         dock: bottom;
     }
     """
@@ -306,15 +334,19 @@ class QozeTui(App):
     ]
 
     def compose(self) -> ComposeResult:
+        # 1. Top Bar
+        yield TopBar()
+
+        # 2. Main Content (Log + Sidebar)
         with Horizontal(id="main-container"):
-            yield Header(id="header", name="Qoze Code", icon=None)
             yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
             yield Sidebar(id="sidebar")
 
+        # 3. Bottom Controls
         with Vertical(id="bottom-container"):
             with Horizontal(id="input-line"):
-                yield Label(">", classes="prompt-symbol")
-                yield Input(placeholder="Type a message...", id="input-box", select_on_focus=False)
+                yield Label("❯", classes="prompt-symbol")
+                yield Input(placeholder="Ask Qoze anything...", id="input-box", select_on_focus=False)
             yield StatusBar(model_name="Claude 3.7 Sonnet")
 
     def on_mount(self):
@@ -322,17 +354,20 @@ class QozeTui(App):
         self.input_box = self.query_one("#input-box", Input)
         self.status_bar = self.query_one(StatusBar)
 
-        self.main_log.write(Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"))
-        self.main_log.write(Text("模型: ", style="bold white").append(Text("deepseek-r1", style="bold cyan")))
-        self.main_log.write(
-            Text("当前目录:", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")))
-        self.main_log.write(Text("使用提示:", style="bold white"))
-        self.main_log.write(Text("• 输入 'q' 或 'exit' 退出", style="bold white dim"))
-        self.main_log.write(Text("• !开头会直接执行例如：!ls ", style="bold white dim"))
-        self.main_log.write(Text("• 输入 'clear' 清理上下文", style="bold white dim"))
-        self.main_log.write(Rule("Ready", style="bold green"))
-        self.main_log.write(Text("\nReady.", style="bold green"))
+        # Welcome Message
+        welcome = Text()
+        welcome.append("╭──────────────────────────────────────────────╮\n", style="bold #7aa2f7")
+        welcome.append("│           Welcome to QozeCode v0.2.3         │\n", style="bold #7aa2f7")
+        welcome.append("╰──────────────────────────────────────────────╯\n", style="bold #7aa2f7")
 
+        self.main_log.write(welcome)
+        self.main_log.write(Text("Current Agent: ", style="bold white").append("DeepSeek-R1", style="bold cyan"))
+        self.main_log.write(Text("Environment:   ", style="bold white").append(f"{os.getcwd()}", style="cyan"))
+        self.main_log.write(Text("\nTips:", style="bold white"))
+        self.main_log.write(Text(" • Type 'exit' to quit", style="dim white"))
+        self.main_log.write(Text(" • Start with '!' to execute commands (e.g., !ls)", style="dim white"))
+        self.main_log.write(Text(" • Type 'clear' to reset view", style="dim white"))
+        self.main_log.write(Rule(style="#414868"))
         self.tui_stream = TUIStreamOutput(self.main_log)
         self.current_model = "deepseek-r1:14b"
         self.input_box.focus()
@@ -345,7 +380,8 @@ class QozeTui(App):
 
         self.input_box.value = ""
 
-        self.main_log.write(Text(f"> {user_input}", style="bold white"))
+        # User message style
+        self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
 
         if user_input.lower() in ['quit', 'exit', 'q']:
             self.exit()
@@ -371,5 +407,5 @@ class QozeTui(App):
 
 
 if __name__ == "__main__":
-    app = QozeTui()
+    app = Qoze()
     app.run()
