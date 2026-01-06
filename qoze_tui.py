@@ -273,8 +273,8 @@ class TUIStreamOutput:
             # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
 
-            self.main_log.write(Text("✓ Completed", style="bold green"))
-            self.main_log.write(Text(" ", style="dim"))  # Spacer
+            # self.main_log.write(Text("✓ Completed", style="bold green"))
+            # self.main_log.write(Text(" ", style="dim"))  # Spacer
 
             # 保存到历史记录
             # 注意：这里只保存累积的文本和推理。如果是多轮工具调用，中间过程已被 LangChain 内部状态管理了吗？
