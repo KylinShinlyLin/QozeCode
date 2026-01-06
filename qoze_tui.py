@@ -1,37 +1,38 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import asyncio
 import os
 import sys
 import subprocess
+import traceback
 from datetime import datetime
 
 from textual.app import App, ComposeResult, on
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label
+from textual.widgets import Input, RichLog, Static, Label, LoadingIndicator
 from textual.binding import Binding
 from rich.text import Text
 from rich.rule import Rule
 from rich.panel import Panel
 from rich.console import Group
 from rich.align import Align
+from rich.markdown import Markdown
 
 # Add current directory to path
 sys.path.append(os.getcwd())
 
 # Import agent components
 try:
-    from qoze_code_agent import agent, conversation_state, create_message_with_images
+    import launcher
+    import model_initializer
+    import qoze_code_agent
     from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 except ImportError as e:
-    # Fallback for development/testing without full agent setup
-    print(f"Warning: Could not import agent components: {e}")
-    agent = None
-    conversation_state = {"messages": [], "llm_calls": 0}
+    print(f"Critical Error: Could not import agent components: {e}")
+    sys.exit(1)
 
 
-    def create_message_with_images(text):
-        return HumanMessage(content=text)
-
-
+# 获取 Git 信息
 def get_git_info():
     try:
         repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True).strip()
@@ -56,7 +57,7 @@ def get_modified_files():
 
 
 class TopBar(Static):
-    """自定义顶部栏，替代默认 Header"""
+    """自定义顶部栏"""
 
     def on_mount(self):
         self.update_clock()
@@ -64,16 +65,11 @@ class TopBar(Static):
 
     def update_clock(self):
         time_str = datetime.now().strftime("%H:%M:%S")
-        # 左侧标题，右侧时间
         left = Text(" Qoze Code ", style="bold white on #d75f00")
         left.append(" v0.2.3 ", style="bold white on #005faf")
-
         right = Text(f" {time_str} ", style="bold white on #333333")
-
-        # 计算中间空格
         total_width = self.content_size.width or 80
         spacer_width = max(0, total_width - len(left) - len(right))
-
         content = left + Text(" " * spacer_width, style="on #1a1b26") + right
         self.update(content)
 
@@ -89,26 +85,20 @@ class Sidebar(Static):
         modified = get_modified_files()
 
         text = Text()
-
-        # Project Info
         text.append("\nPROJECT INFO\n", style="bold #7aa2f7 underline")
         text.append(f"Repo: ", style="dim white")
         text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
 
-        # CWD (Shortened)
         path_parts = cwd.split('/')
         short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
         text.append("Path: ", style="dim white")
         text.append(f".../{short_cwd}\n\n", style="cyan")
 
-        # Session
         text.append("SESSION\n", style="bold #bb9af7 underline")
         text.append("Status: ", style="dim white")
         text.append("Active\n", style="green")
-        text.append("Mode:   ", style="dim white")
-        text.append("Interactive\n\n", style="yellow")
 
-        # Modified Files
+        # Git Status
         text.append("GIT STATUS\n", style="bold #f7768e underline")
         if modified:
             for status, filename in modified:
@@ -124,7 +114,6 @@ class Sidebar(Static):
                 else:
                     icon = "•"
                     style = "white"
-
                 text.append(f"{icon} {filename[:20]}\n", style=style)
         else:
             text.append("Clean working tree\n", style="dim green")
@@ -133,22 +122,22 @@ class Sidebar(Static):
 
 
 class StatusBar(Static):
-    def __init__(self, model_name="deepseek-r1"):
+    def __init__(self, model_name="Unknown"):
         super().__init__()
         self.model_name = model_name
         self.context_tokens = 0
-        self.cost = 0.0
+        self.state_desc = "Idle"
 
-    def update_stats(self, tokens=0, cost=0.0):
-        self.context_tokens = tokens
-        self.cost = cost
+    def update_state(self, state):
+        self.state_desc = state
         self.refresh()
 
     def render(self):
-        left = Text(" Context: ", style="dim white on #1a1b26")
-        left.append(f"{self.context_tokens / 1000:.1f} tokens", style="bold cyan on #1a1b26")
-        # left.append(" | Cost: ", style="dim white on #1a1b26")
-        # left.append(f"${self.cost:.4f}", style="bold green on #1a1b26")
+        left = Text(" Status: ", style="dim white on #1a1b26")
+
+        status_style = "bold green" if self.state_desc == "Idle" else "bold yellow"
+        left.append(f"{self.state_desc}", style=f"{status_style} on #1a1b26")
+
         right = Text(f"{self.model_name} ", style="bold white on #414868")
 
         total_width = self.content_size.width or 100
@@ -158,56 +147,83 @@ class StatusBar(Static):
 
 
 class TUIStreamOutput:
+    """流式输出适配器 - 适配 Textual"""
+
     def __init__(self, main_log: RichLog):
         self.main_log = main_log
         self.buffer = ""
+        # Styles
+        self.CYAN = "#00ffff"
+        self.LIGHT_BLUE = "#00afff"
+        self.LIGHT_GRAY = "#8a8a8a"
+        self.GREEN = "#00ff00"
 
-    def log_event(self, message, style="dim"):
-        pass
-
-    def write_main(self, text: str, style=None):
+    def write_chunk(self, text: str, style=None):
+        """写入普通文本块"""
         self.buffer += text
         if '\n' in self.buffer:
             lines = self.buffer.split('\n')
+            # 写入完整的行
             for line in lines[:-1]:
                 self.main_log.write(Text(line, style=style))
+            # 剩下的留在 buffer
             self.buffer = lines[-1]
 
-    def flush_main(self, style=None):
+    def flush(self, style=None):
         if self.buffer:
             self.main_log.write(Text(self.buffer, style=style))
             self.buffer = ""
 
     async def stream_response(self, model_name, current_state, conversation_state):
+        """核心流式处理逻辑"""
         current_response_text = ""
         current_reasoning_content = ""
 
-        self.write_main(f"\n", style="")
+        # 标记 AI 回复开始
+        self.main_log.write(Rule(style="dim cyan"))
 
         try:
-            if not agent:
-                self.write_main("Agent not initialized. Mocking response...", "red")
-                return
-
-            async for message_chunk, metadata in agent.astream(
+            async for message_chunk, metadata in qoze_code_agent.agent.astream(
                     current_state, stream_mode="messages", config={"recursion_limit": 150}
             ):
+                # 1. 处理 ToolMessage (工具执行结果)
                 if isinstance(message_chunk, ToolMessage):
                     tool_name = message_chunk.name if hasattr(message_chunk, 'name') else "Tool"
-                    self.main_log.write(Text(f"✓ {tool_name} completed", style="green"))
+                    content_preview = str(message_chunk.content)[:200] + "..." if len(
+                        str(message_chunk.content)) > 200 else str(message_chunk.content)
+
+                    panel = Panel(
+                        Text(content_preview, style="dim white"),
+                        title=f"🔧 Tool Output: {tool_name}",
+                        border_style="dim yellow",
+                        expand=False
+                    )
+                    self.main_log.write(panel)
                     continue
 
+                # 2. 处理 Tool Calls (AI 决定调用工具)
                 if isinstance(message_chunk, AIMessage) and message_chunk.tool_calls:
                     for tool_call in message_chunk.tool_calls:
-                        self.main_log.write(Text(f"⚙ Executing {tool_call['name']}...", style="bold yellow"))
+                        self.main_log.write(Text(f"⚙  Invoking tool: {tool_call['name']}...", style="bold yellow"))
 
+                # 3. 处理 DeepSeek / Gemini 的思考过程 (Reasoning)
+                reasoning = ""
                 if hasattr(message_chunk, 'additional_kwargs') and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get('reasoning_content', '')
-                    if reasoning:
-                        current_reasoning_content += reasoning
-                        self.write_main(reasoning, style="italic dim #565f89")
-                        continue
 
+                # Gemini thinking
+                if isinstance(message_chunk.content, list):
+                    for content_item in message_chunk.content:
+                        if isinstance(content_item, dict) and content_item.get('type') == 'thinking':
+                            reasoning += content_item.get('thinking', '')
+
+                if reasoning:
+                    current_reasoning_content += reasoning
+                    # self.main_log.write(Text(reasoning, style="italic dim #565f89"))
+                    self.write_chunk(reasoning, style="italic dim #565f89")
+                    continue
+
+                # 4. 处理普通文本内容
                 content = message_chunk.content
                 chunk_text = ""
                 if isinstance(content, str):
@@ -218,114 +234,45 @@ class TUIStreamOutput:
                             chunk_text += item.get('text', '')
 
                 if chunk_text:
-                    self.write_main(chunk_text)
+                    self.write_chunk(chunk_text)
                     current_response_text += chunk_text
 
-            self.flush_main()
+            # 循环结束后，刷新 buffer
+            self.flush()
 
+            # 保存到历史记录
             additional_kwargs = {'reasoning_content': current_reasoning_content}
             ai_response = AIMessage(
                 content=current_response_text,
                 additional_kwargs=additional_kwargs)
-            conversation_state["messages"].extend([ai_response])
-            conversation_state["llm_calls"] += 1
+
+            # 只有当确实有回复时才添加
+            if current_response_text or current_reasoning_content or ai_response.tool_calls:
+                conversation_state["messages"].append(ai_response)
+                conversation_state["llm_calls"] += 1
+
+            self.main_log.write(Text("✓ Completed", style="bold green"))
+            self.main_log.write(Text(" ", style="dim"))  # Spacer
 
         except Exception as e:
-            self.main_log.write(f"[red]Error: {e}[/]")
+            traceback.print_exc()
+            self.main_log.write(f"[red]Stream Error: {e}[/]")
 
 
 class Qoze(App):
     CSS = """
-    /* Tokyo Night Theme Inspired */
-    Screen {
-        background: #1a1b26;
-        color: #a9b1d6;
-    }
-
-    /* Top Bar */
-    TopBar {
-        dock: top;
-        height: 1;
-        background: #1a1b26;
-        color: #c0caf5;
-    }
-
-    /* Main Layout */
-    #main-container {
-        height: 1fr;
-        width: 100%;
-        layout: horizontal;
-    }
-
-    #main-output {
-        height: 100%;
-        width: 75%;
-        background: #1a1b26;
-        border: none;
-        padding: 1 2;
-        scrollbar-size: 1 1;
-        scrollbar-color: #565f89;
-    }
-
-    #sidebar {
-        width: 25%;
-        height: 100%;
-        background: #16161e; /* Slightly darker */
-        padding: 1 2;
-        color: #787c99;
-        border-left: solid #2f334d;
-    }
-
-    /* Bottom Area */
-    #bottom-container {
-        height: auto;
-        dock: bottom;
-        background: #1a1b26;
-    }
-
-    #input-line {
-        height: 3;
-        width: 100%;
-        align-vertical: middle;
-        padding: 0 1;
-        border-top: solid #414868;
-        background: #1a1b26;
-    }
-
-    .prompt-symbol {
-        color: #bb9af7;
-        text-style: bold;
-        width: 2;
-        content-align: center middle;
-    }
-
-    Input {
-        width: 1fr;
-        background: #1a1b26;
-        border: none;
-        color: #c0caf5;
-        padding: 0;
-    }
-
-    Input:focus {
-        border: none;
-    }
-
-    Input > .input--placeholder {
-        color: #565f89;
-    }
-
-    Input > .input--cursor {
-        background: #bb9af7;
-        color: #1a1b26;
-    }
-
-    StatusBar {
-        height: 1;
-        width: 100%;
-        background: #1a1b26;
-        dock: bottom;
-    }
+    Screen { background: #1a1b26; color: #a9b1d6; }
+    TopBar { dock: top; height: 1; background: #1a1b26; color: #c0caf5; }
+    #main-container { height: 1fr; width: 100%; layout: horizontal; }
+    #main-output { height: 100%; width: 75%; background: #1a1b26; border: none; padding: 1 2; }
+    #sidebar { width: 25%; height: 100%; background: #16161e; padding: 1 2; color: #787c99; border-left: solid #2f334d; }
+    #bottom-container { height: auto; dock: bottom; background: #1a1b26; }
+    #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #1a1b26; }
+    .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
+    Input { width: 1fr; background: #1a1b26; border: none; color: #c0caf5; padding: 0; }
+    Input:focus { border: none; }
+    StatusBar { height: 1; width: 100%; background: #1a1b26; dock: bottom; }
+    LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
     """
 
     BINDINGS = [
@@ -333,54 +280,80 @@ class Qoze(App):
         Binding("ctrl+l", "clear_screen", "Clear"),
     ]
 
-    def compose(self) -> ComposeResult:
-        # 1. Top Bar
-        yield TopBar()
+    def __init__(self, model_name):
+        super().__init__()
+        self.model_name = model_name
+        self.agent_ready = False
 
-        # 2. Main Content (Log + Sidebar)
+    def compose(self) -> ComposeResult:
+        yield TopBar()
         with Horizontal(id="main-container"):
             yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
             yield Sidebar(id="sidebar")
-
-        # 3. Bottom Controls
         with Vertical(id="bottom-container"):
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
-                yield Input(placeholder="Ask Qoze anything...", id="input-box", select_on_focus=False)
-            yield StatusBar(model_name="Claude 3.7 Sonnet")
+                yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
+            yield StatusBar(model_name=self.model_name)
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
         self.input_box = self.query_one("#input-box", Input)
         self.status_bar = self.query_one(StatusBar)
-
-        # Welcome Message
-        welcome = Text()
-        welcome.append("╭──────────────────────────────────────────────╮\n", style="bold #7aa2f7")
-        welcome.append("│           Welcome to QozeCode v0.2.3         │\n", style="bold #7aa2f7")
-        welcome.append("╰──────────────────────────────────────────────╯\n", style="bold #7aa2f7")
-
-        self.main_log.write(welcome)
-        self.main_log.write(Text("Current Agent: ", style="bold white").append("DeepSeek-R1", style="bold cyan"))
-        self.main_log.write(Text("Environment:   ", style="bold white").append(f"{os.getcwd()}", style="cyan"))
-        self.main_log.write(Text("\nTips:", style="bold white"))
-        self.main_log.write(Text(" • Type 'exit' to quit", style="dim white"))
-        self.main_log.write(Text(" • Start with '!' to execute commands (e.g., !ls)", style="dim white"))
-        self.main_log.write(Text(" • Type 'clear' to reset view", style="dim white"))
-        self.main_log.write(Rule(style="#414868"))
         self.tui_stream = TUIStreamOutput(self.main_log)
-        self.current_model = "deepseek-r1:14b"
-        self.input_box.focus()
+
+        # 打印欢迎信息
+        self.print_welcome()
+
+        # 异步初始化 Agent
+        self.run_worker(self.init_agent_worker(), exclusive=True)
+
+    def print_welcome(self):
+        ascii_art = """
+   ██████╗  ██████╗ ███████╗███████╗
+  ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝
+  ██║   ██║██║   ██║  ███╔╝ █████╗  
+  ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝  
+  ╚██████╔╝╚██████╔╝███████╗███████╗
+   ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝
+        """
+        self.main_log.write(Text(ascii_art, style="bold cyan"))
+        self.main_log.write(Text(f"Model: {self.model_name}", style="bold white"))
+        self.main_log.write(Rule(style="#414868"))
+
+    async def init_agent_worker(self):
+        """后台初始化 Agent"""
+        self.main_log.write(Text("⚡ Initializing LLM and Tools...", style="yellow"))
+        try:
+            llm = model_initializer.initialize_llm(self.model_name)
+
+            # 设置 qoze_code_agent 的全局变量，注入 LLM
+            qoze_code_agent.llm = llm
+            qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
+
+            self.agent_ready = True
+            self.input_box.disabled = False
+            self.input_box.placeholder = "Ask Qoze anything..."
+            self.input_box.focus()
+            self.main_log.write(Text("✓ Agent Ready!", style="bold green"))
+
+        except Exception as e:
+            self.main_log.write(f"[red]Initialization Failed: {e}[/]")
+            self.main_log.write(f"[red]{traceback.format_exc()}[/]")
 
     @on(Input.Submitted)
     async def handle_input(self, event: Input.Submitted):
+        if not self.agent_ready:
+            return
+
         user_input = event.value
         if not user_input.strip():
             return
 
         self.input_box.value = ""
+        self.status_bar.update_state("Thinking...")
 
-        # User message style
+        # Display User Input
         self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
 
         if user_input.lower() in ['quit', 'exit', 'q']:
@@ -389,23 +362,49 @@ class Qoze(App):
 
         if user_input.lower() == 'clear':
             self.main_log.clear()
+            self.print_welcome()
+            self.status_bar.update_state("Idle")
             return
 
-        current_tokens = self.status_bar.context_tokens + len(user_input) * 1.5
-        current_cost = self.status_bar.cost + 0.0001
-        self.status_bar.update_stats(tokens=current_tokens, cost=current_cost)
+        # Prepare Message
+        image_folder = ".qoze/image"
+        human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
 
-        human_msg = create_message_with_images(user_input)
-        conversation_state["messages"].append(human_msg)
+        # Update State
+        current_state = {
+            "messages": qoze_code_agent.conversation_state["messages"] + [human_msg],
+            "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
+        }
+        qoze_code_agent.conversation_state["messages"].append(human_msg)
 
-        # Run agent
+        # Stream Response
         await self.tui_stream.stream_response(
-            self.current_model,
-            conversation_state,
-            conversation_state
+            self.model_name,
+            current_state,
+            qoze_code_agent.conversation_state
         )
+
+        self.status_bar.update_state("Idle")
+
+
+def main():
+    # 1. 确保配置存在
+    launcher.ensure_config()
+
+    # 2. 获取模型选择
+    try:
+        model = launcher.get_model_choice()
+    except Exception as e:
+        print(f"Model selection failed: {e}")
+        model = "gpt-5.2"
+
+    if model is None:
+        return
+
+    # 3. 启动 TUI App
+    app = Qoze(model_name=model)
+    app.run()
 
 
 if __name__ == "__main__":
-    app = Qoze()
-    app.run()
+    main()
