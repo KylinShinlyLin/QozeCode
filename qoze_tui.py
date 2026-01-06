@@ -156,7 +156,7 @@ class TUIStreamOutput:
     def flush_to_log(self, text: str, reasoning: str):
         """将当前流式缓冲区的内容固化到日志中，并清空流式显示"""
         if reasoning:
-            self.main_log.write(Panel(Markdown(reasoning), title="Thinking Process", border_style="dim blue"))
+            self.main_log.write(Text(reasoning, style="italic dim #565f89"))
         if text:
             self.main_log.write(Markdown(text))
 
@@ -173,12 +173,12 @@ class TUIStreamOutput:
         total_response_text = ""
         total_reasoning_content = ""
 
-        # 标记 AI 回复开始
-        self.main_log.write(Rule(style="dim cyan"))
+        # # 标记 AI 回复开始
+        # self.main_log.write(Rule(style="dim cyan"))
 
         # 激活流式显示区域
         self.stream_display.styles.display = "block"
-        self.stream_display.update(Panel("Thinking...", title="AI Status", style="dim cyan"))
+        self.stream_display.update("")
 
         try:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
