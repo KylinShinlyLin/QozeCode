@@ -121,12 +121,14 @@ class QozeTui(App):
 
     #main-output {
         height: 100%;
+        overflow-x: hidden;
     }
 
     #input-area {
         dock: bottom;
-        height: 3;
-        border: round #5EF9FF;
+        height: 4;
+        padding: 0 2;
+        border: round #5CFAFF;
     }
     """
 
