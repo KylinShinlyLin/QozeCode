@@ -116,6 +116,7 @@ class QozeTui(App):
 
     #left-panel {
         height: 100%;
+        overflow-x: hidden;
     }
 
     #main-output {
@@ -138,7 +139,7 @@ class QozeTui(App):
         with Container(id="grid-container"):
             # Swapped: Main Output is now first (left, 70%), Events/Left-Panel is second (right, 30%)
             yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
-            yield RichLog(id="left-panel", markup=True, highlight=True, auto_scroll=True)
+            yield RichLog(id="left-panel", markup=True, highlight=True, auto_scroll=True, wrap=True)
         yield Input(placeholder="回车执行请求（输入 'line' 进入多行编辑）", id="input-area")
 
     def on_mount(self):
