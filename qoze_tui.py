@@ -9,7 +9,7 @@ from datetime import datetime
 
 from textual.app import App, ComposeResult, on
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label, LoadingIndicator
+from textual.widgets import Input, RichLog, Static, Label
 from textual.binding import Binding
 from rich.text import Text
 from rich.rule import Rule
@@ -147,40 +147,38 @@ class StatusBar(Static):
 
 
 class TUIStreamOutput:
-    """流式输出适配器 - 适配 Textual"""
+    """流式输出适配器 - 适配 Textual (真流式)"""
 
-    def __init__(self, main_log: RichLog):
+    def __init__(self, main_log: RichLog, stream_display: Static):
         self.main_log = main_log
-        self.buffer = ""
-        # Styles
-        self.CYAN = "#00ffff"
-        self.LIGHT_BLUE = "#00afff"
-        self.LIGHT_GRAY = "#8a8a8a"
-        self.GREEN = "#00ff00"
+        self.stream_display = stream_display
 
-    def write_chunk(self, text: str, style=None):
-        """写入普通文本块"""
-        self.buffer += text
-        if '\n' in self.buffer:
-            lines = self.buffer.split('\n')
-            # 写入完整的行
-            for line in lines[:-1]:
-                self.main_log.write(Text(line, style=style))
-            # 剩下的留在 buffer
-            self.buffer = lines[-1]
+    def flush_to_log(self, text: str, reasoning: str):
+        """将当前流式缓冲区的内容固化到日志中，并清空流式显示"""
+        if reasoning:
+            self.main_log.write(Panel(Markdown(reasoning), title="Thinking Process", border_style="dim blue"))
+        if text:
+            self.main_log.write(Markdown(text))
 
-    def flush(self, style=None):
-        if self.buffer:
-            self.main_log.write(Text(self.buffer, style=style))
-            self.buffer = ""
+        self.stream_display.update("")
+        self.stream_display.styles.display = "none"
 
     async def stream_response(self, model_name, current_state, conversation_state):
         """核心流式处理逻辑"""
+        # 用于显示的当前片段 buffer
         current_response_text = ""
         current_reasoning_content = ""
 
+        # 用于 State 记录的完整累积
+        total_response_text = ""
+        total_reasoning_content = ""
+
         # 标记 AI 回复开始
         self.main_log.write(Rule(style="dim cyan"))
+
+        # 激活流式显示区域
+        self.stream_display.styles.display = "block"
+        self.stream_display.update(Panel("Thinking...", title="AI Status", style="dim cyan"))
 
         try:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
@@ -188,6 +186,12 @@ class TUIStreamOutput:
             ):
                 # 1. 处理 ToolMessage (工具执行结果)
                 if isinstance(message_chunk, ToolMessage):
+                    # 遇到工具输出，先固化之前的 AI 文本
+                    if current_response_text or current_reasoning_content:
+                        self.flush_to_log(current_response_text, current_reasoning_content)
+                        current_response_text = ""
+                        current_reasoning_content = ""
+
                     tool_name = message_chunk.name if hasattr(message_chunk, 'name') else "Tool"
                     content_preview = str(message_chunk.content)[:200] + "..." if len(
                         str(message_chunk.content)) > 200 else str(message_chunk.content)
@@ -203,10 +207,19 @@ class TUIStreamOutput:
 
                 # 2. 处理 Tool Calls (AI 决定调用工具)
                 if isinstance(message_chunk, AIMessage) and message_chunk.tool_calls:
+                    # 固化之前的 AI 文本
+                    if current_response_text or current_reasoning_content:
+                        self.flush_to_log(current_response_text, current_reasoning_content)
+                        current_response_text = ""
+                        current_reasoning_content = ""
+
                     for tool_call in message_chunk.tool_calls:
                         self.main_log.write(Text(f"⚙  Invoking tool: {tool_call['name']}...", style="bold yellow"))
 
-                # 3. 处理 DeepSeek / Gemini 的思考过程 (Reasoning)
+                    # 继续显示后续可能的内容
+                    self.stream_display.styles.display = "block"
+
+                # 3. 处理 Reasoning
                 reasoning = ""
                 if hasattr(message_chunk, 'additional_kwargs') and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get('reasoning_content', '')
@@ -219,11 +232,9 @@ class TUIStreamOutput:
 
                 if reasoning:
                     current_reasoning_content += reasoning
-                    # self.main_log.write(Text(reasoning, style="italic dim #565f89"))
-                    self.write_chunk(reasoning, style="italic dim #565f89")
-                    continue
+                    total_reasoning_content += reasoning
 
-                # 4. 处理普通文本内容
+                # 4. 处理 Content
                 content = message_chunk.content
                 chunk_text = ""
                 if isinstance(content, str):
@@ -234,40 +245,81 @@ class TUIStreamOutput:
                             chunk_text += item.get('text', '')
 
                 if chunk_text:
-                    self.write_chunk(chunk_text)
                     current_response_text += chunk_text
+                    total_response_text += chunk_text
 
-            # 循环结束后，刷新 buffer
-            self.flush()
+                # 5. 更新流式显示 (True Streaming)
+                if current_reasoning_content or current_response_text:
+                    renderables = []
 
-            # 保存到历史记录
-            additional_kwargs = {'reasoning_content': current_reasoning_content}
-            ai_response = AIMessage(
-                content=current_response_text,
-                additional_kwargs=additional_kwargs)
+                    if current_reasoning_content:
+                        renderables.append(
+                            Text(current_reasoning_content, style="italic dim #565f89")
+                        )
 
-            # 只有当确实有回复时才添加
-            if current_response_text or current_reasoning_content or ai_response.tool_calls:
-                conversation_state["messages"].append(ai_response)
-                conversation_state["llm_calls"] += 1
+                    if current_response_text:
+                        if current_reasoning_content:
+                            renderables.append(Text(" "))  # Spacer
+
+                        # 尝试渲染 Markdown，如果失败退回文本，避免未闭合标签报错
+                        try:
+                            renderables.append(Markdown(current_response_text))
+                        except:
+                            renderables.append(Text(current_response_text))
+
+                    self.stream_display.update(Group(*renderables))
+                    self.stream_display.scroll_end(animate=False)
+
+            # 循环结束后，固化最后的内容
+            self.flush_to_log(current_response_text, current_reasoning_content)
 
             self.main_log.write(Text("✓ Completed", style="bold green"))
             self.main_log.write(Text(" ", style="dim"))  # Spacer
 
+            # 保存到历史记录
+            # 注意：这里只保存累积的文本和推理。如果是多轮工具调用，中间过程已被 LangChain 内部状态管理了吗？
+            # 这里的 conversation_state 是手动管理的列表。为了简单起见，我们添加最终的 AI Message。
+            if total_response_text or total_reasoning_content:
+                additional_kwargs = {'reasoning_content': total_reasoning_content}
+                ai_response = AIMessage(
+                    content=total_response_text,
+                    additional_kwargs=additional_kwargs)
+                conversation_state["messages"].append(ai_response)
+                conversation_state["llm_calls"] += 1
+
         except Exception as e:
             traceback.print_exc()
             self.main_log.write(f"[red]Stream Error: {e}[/]")
+            self.stream_display.update("")
+            self.stream_display.styles.display = "none"
 
 
 class Qoze(App):
     CSS = """
     Screen { background: #1a1b26; color: #a9b1d6; }
     TopBar { dock: top; height: 1; background: #1a1b26; color: #c0caf5; }
+    
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
-    #main-output { height: 100%; width: 75%; background: #1a1b26; border: none; padding: 1 2; }
+    
+    /* 聊天区域布局调整 */
+    #chat-area { width: 75%; height: 100%; }
+    #main-output { width: 100%; height: 1fr; background: #1a1b26; border: none; padding: 1 2; }
+    
+    /* 流式输出区域 - 初始隐藏 */
+    #stream-output { 
+        width: 100%; 
+        height: auto; 
+        max-height: 60%; 
+        background: #1a1b26; 
+        padding: 0 2; 
+        border-top: solid #414868;
+        display: none;
+        overflow-y: auto;
+    }
+    
     #sidebar { width: 25%; height: 100%; background: #16161e; padding: 1 2; color: #787c99; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #1a1b26; }
-    #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #1a1b26; }
+    #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #1a1b26; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
     Input { width: 1fr; background: #1a1b26; border: none; color: #c0caf5; padding: 0; }
     Input:focus { border: none; }
@@ -288,7 +340,10 @@ class Qoze(App):
     def compose(self) -> ComposeResult:
         yield TopBar()
         with Horizontal(id="main-container"):
-            yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
+            # 使用 Vertical 容器包含历史记录和流式输出
+            with Vertical(id="chat-area"):
+                yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
+                yield Static(id="stream-output")
             yield Sidebar(id="sidebar")
         with Vertical(id="bottom-container"):
             with Horizontal(id="input-line"):
@@ -298,9 +353,12 @@ class Qoze(App):
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
+        self.stream_output = self.query_one("#stream-output", Static)
         self.input_box = self.query_one("#input-box", Input)
         self.status_bar = self.query_one(StatusBar)
-        self.tui_stream = TUIStreamOutput(self.main_log)
+
+        # 初始化流式输出适配器，传入 main_log 和 stream_output
+        self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output)
 
         # 打印欢迎信息
         self.print_welcome()
@@ -312,8 +370,8 @@ class Qoze(App):
         ascii_art = """
    ██████╗  ██████╗ ███████╗███████╗
   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝
-  ██║   ██║██║   ██║  ███╔╝ █████╗  
-  ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝  
+  ██║   ██║██║   ██║  ███╔╝ █████╗
+  ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝
   ╚██████╔╝╚██████╔╝███████╗███████╗
    ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝
         """
