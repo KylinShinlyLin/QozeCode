@@ -3,9 +3,10 @@ import os
 import sys
 import subprocess
 from datetime import datetime
+
 from textual.app import App, ComposeResult, on
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label
+from textual.widgets import Input, RichLog, Static, Label, Header
 from textual.binding import Binding
 from rich.text import Text
 from rich.rule import Rule
@@ -306,6 +307,7 @@ class QozeTui(App):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main-container"):
+            yield Header(id="header", name="Qoze Code", icon=None)
             yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
             yield Sidebar(id="sidebar")
 
