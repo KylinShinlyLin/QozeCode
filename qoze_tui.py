@@ -149,7 +149,19 @@ class QozeTui(App):
         self.main_log = self.query_one("#main-output", RichLog)
 
         self.left_log.write(Panel("System Events\nWaiting for input...", style="bold green"))
-        self.main_log.write(Panel("Qoze Agent Output Area", style="bold blue"))
+        model_name = "deepseek-r1"
+        self.main_log.write(Panel(
+            f"[bold dim cyan]✦ Welcome to QozeCode 0.2.3[/bold dim cyan]\n\n"
+            f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'} [bold cyan]\n"
+            f"[bold white]当前目录:[/bold white][bold cyan]{os.getcwd() or 'Unknown'} [bold cyan]\n"
+            f"[bold white]使用提示:[/bold white]\n"
+            f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
+            f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]\n"
+            f"[dim][bold white]  • 输入 'clear' 清理上下文 [/dim] [bold white]",
+            border_style="dim cyan",
+            title_align="center",
+            expand=False
+        ))
 
         self.tui_stream = TUIStreamOutput(self.main_log, self.left_log)
         self.current_model = "deepseek-r1:14b"  # Hardcoded default for now
