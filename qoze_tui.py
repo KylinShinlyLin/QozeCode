@@ -8,6 +8,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Input, RichLog, Static, Label
 from textual.binding import Binding
 from rich.text import Text
+from rich.rule import Rule
 from rich.panel import Panel
 from rich.console import Group
 
@@ -117,8 +118,8 @@ class StatusBar(Static):
 
     def render(self):
         # Left side
-        left = Text(" ctrl+? help ", style="bold black on white")
-        left.append(f" Context: {self.context_tokens / 1000:.1f}K, Cost: ${self.cost:.2f}",
+        # left = Text(" ctrl+? help ", style="bold black on white")
+        left = Text(f" Context: {self.context_tokens / 1000:.1f}K, Cost: ${self.cost:.2f}",
                     style="dim white on #1e1e1e")
 
         # Right side
@@ -319,8 +320,15 @@ class QozeTui(App):
         self.input_box = self.query_one("#input-box", Input)
         self.status_bar = self.query_one(StatusBar)
 
-        self.main_log.write(Text("* gofumpt: 1", style="dim"))
-        self.main_log.write(Text("task: [lint] golangci-lint run", style="dim"))
+        self.main_log.write(Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"))
+        self.main_log.write(Text("模型: ", style="bold white").append(Text("deepseek-r1", style="bold cyan")))
+        self.main_log.write(
+            Text("当前目录:", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")))
+        self.main_log.write(Text("使用提示:", style="bold white"))
+        self.main_log.write(Text("• 输入 'q' 或 'exit' 退出", style="bold white dim"))
+        self.main_log.write(Text("• !开头会直接执行例如：!ls ", style="bold white dim"))
+        self.main_log.write(Text("• 输入 'clear' 清理上下文", style="bold white dim"))
+        self.main_log.write(Rule("Ready", style="bold green"))
         self.main_log.write(Text("\nReady.", style="bold green"))
 
         self.tui_stream = TUIStreamOutput(self.main_log)
