@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import asyncio
+import time
 import os
 import sys
 import subprocess
@@ -20,6 +21,9 @@ from rich.markdown import Markdown
 
 # Add current directory to path
 sys.path.append(os.getcwd())
+
+SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
 
 # Import agent components
 try:
@@ -149,9 +153,27 @@ class StatusBar(Static):
 class TUIStreamOutput:
     """流式输出适配器 - 适配 Textual (真流式)"""
 
-    def __init__(self, main_log: RichLog, stream_display: MarkdownWidget):
+    def __init__(self, main_log: RichLog, stream_display: MarkdownWidget, tool_status: Static):
         self.main_log = main_log
         self.stream_display = stream_display
+        self.tool_status = tool_status
+        self.tool_start_time = None
+        self.tool_name = None
+        self.tool_timer = None
+
+    def _update_tool_spinner(self):
+        if not self.tool_start_time or not self.tool_name:
+            return
+        
+        elapsed = time.time() - self.tool_start_time
+        frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
+        
+        # 格式化时间
+        m, s = divmod(int(elapsed), 60)
+        time_str = f"{m:02d}:{s:02d}"
+        
+        content = f"{frame} [bold blue]{self.tool_name}[/] [rgb(65,170,65)]{time_str}[/]"
+        self.tool_status.update(Text.from_markup(content))
 
     def flush_to_log(self, text: str, reasoning: str):
         """将当前流式缓冲区的内容固化到日志中，并清空流式显示"""
@@ -189,17 +211,32 @@ class TUIStreamOutput:
                         current_response_text = ""
                         current_reasoning_content = ""
 
-                    tool_name = message_chunk.name if hasattr(message_chunk, 'name') else "Tool"
-                    content_preview = str(message_chunk.content)[:200] + "..." if len(
-                        str(message_chunk.content)) > 200 else str(message_chunk.content)
-
-                    panel = Panel(
-                        Text(content_preview, style="dim white"),
-                        title=f"🔧 Tool Output: {tool_name}",
-                        border_style="dim yellow",
-                        expand=False
-                    )
-                    self.main_log.write(panel)
+                    # Stop Spinner
+                    if self.tool_timer:
+                        self.tool_timer.stop()
+                        self.tool_timer = None
+                    
+                    elapsed = time.time() - (self.tool_start_time or time.time())
+                    self.tool_start_time = None
+                    
+                    tool_name = message_chunk.name if hasattr(message_chunk, "name") else "Tool"
+                    content_str = str(message_chunk.content)
+                    
+                    # Simple error detection
+                    is_error = "error" in content_str.lower() and len(content_str) < 500
+                    
+                    status_icon = "✗" if is_error else "✓"
+                    status_color = "red" if is_error else "green"
+                    status_text = "Failed" if is_error else "Success"
+                    
+                    # Log simple status line
+                    final_msg = f"{status_icon} [bold blue]{tool_name}[/] [{status_color}]{status_text}[/] [rgb(65,170,65)]in {elapsed:.2f}s[/]"
+                    self.main_log.write(Text.from_markup(final_msg))
+                    
+                    # Hide status bar
+                    self.tool_status.update("")
+                    self.tool_status.styles.display = "none"
+                    
                     continue
 
                 # 2. 处理 Tool Calls (AI 决定调用工具)
@@ -211,21 +248,26 @@ class TUIStreamOutput:
                         current_reasoning_content = ""
 
                     for tool_call in message_chunk.tool_calls:
-                        self.main_log.write(Text(f"⚙  Invoking tool: {tool_call['name']}...", style="bold yellow"))
-
+                        # Start Spinner Logic
+                        self.tool_name = tool_call["name"]
+                        self.tool_start_time = time.time()
+                        self.tool_status.styles.display = "block"
+                        # 使用 tool_status 组件的 set_interval
+                        self.tool_timer = self.tool_status.set_interval(0.1, self._update_tool_spinner)
+                        
                     # 继续显示后续可能的内容
                     self.stream_display.styles.display = "block"
 
                 # 3. 处理 Reasoning
                 reasoning = ""
-                if hasattr(message_chunk, 'additional_kwargs') and message_chunk.additional_kwargs:
-                    reasoning = message_chunk.additional_kwargs.get('reasoning_content', '')
+                if hasattr(message_chunk, "additional_kwargs") and message_chunk.additional_kwargs:
+                    reasoning = message_chunk.additional_kwargs.get("reasoning_content", "")
 
                 # Gemini thinking
                 if isinstance(message_chunk.content, list):
                     for content_item in message_chunk.content:
-                        if isinstance(content_item, dict) and content_item.get('type') == 'thinking':
-                            reasoning += content_item.get('thinking', '')
+                        if isinstance(content_item, dict) and content_item.get("type") == "thinking":
+                            reasoning += content_item.get("thinking", "")
 
                 if reasoning:
                     current_reasoning_content += reasoning
@@ -238,8 +280,8 @@ class TUIStreamOutput:
                     chunk_text = content
                 elif isinstance(content, list):
                     for item in content:
-                        if isinstance(item, dict) and item.get('type') == 'text':
-                            chunk_text += item.get('text', '')
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            chunk_text += item.get("text", "")
 
                 if chunk_text:
                     current_response_text += chunk_text
@@ -251,8 +293,7 @@ class TUIStreamOutput:
 
                     if current_reasoning_content:
                         # 格式化推理内容为引用块，模拟 dim 效果
-                        # 注意：需要 CSS 配合 BlockQuote 样式
-                        lines = current_reasoning_content.split('\n')
+                        lines = current_reasoning_content.split("\n")
                         quoted_lines = [f"> {line}" for line in lines]
                         md_content += "\n".join(quoted_lines) + "\n\n"
 
@@ -260,7 +301,6 @@ class TUIStreamOutput:
                         md_content += current_response_text
 
                     self.stream_display.update(md_content)
-                    # Markdown Widget 继承自 VerticalScroll，支持 scroll_end
                     self.stream_display.scroll_end(animate=False)
 
             # 循环结束后，固化最后的内容
@@ -268,7 +308,7 @@ class TUIStreamOutput:
 
             # 保存到历史记录
             if total_response_text or total_reasoning_content:
-                additional_kwargs = {'reasoning_content': total_reasoning_content}
+                additional_kwargs = {"reasoning_content": total_reasoning_content}
                 ai_response = AIMessage(
                     content=total_response_text,
                     additional_kwargs=additional_kwargs)
@@ -282,6 +322,7 @@ class TUIStreamOutput:
             self.stream_display.styles.display = "none"
 
 
+
 class Qoze(App):
     CSS = """
     Screen { background: #1a1b26; color: #a9b1d6; }
@@ -292,6 +333,16 @@ class Qoze(App):
     /* 聊天区域布局调整 */
     #chat-area { width: 75%; height: 100%; }
     #main-output { width: 100%; height: 1fr; background: #1a1b26; border: none; padding: 1 2; }
+    /* 工具状态栏 */
+    #tool-status {
+        width: 100%;
+        height: auto;
+        min-height: 1;
+        background: #1a1b26;
+        padding: 0 2;
+        display: none;
+    }
+
 
     /* 流式输出区域 - 使用 Markdown Widget */
     #stream-output {
@@ -341,6 +392,7 @@ class Qoze(App):
             # 使用 Vertical 容器包含历史记录和流式输出
             with Vertical(id="chat-area"):
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
+                yield Static(id="tool-status")
                 # 使用 Textual Markdown Widget 替代 Static
                 yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar")
@@ -352,12 +404,13 @@ class Qoze(App):
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
+        self.tool_status = self.query_one("#tool-status", Static)
         self.stream_output = self.query_one("#stream-output", MarkdownWidget)
         self.input_box = self.query_one("#input-box", Input)
         self.status_bar = self.query_one(StatusBar)
 
         # 初始化流式输出适配器，传入 main_log 和 stream_output
-        self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output)
+        self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output, self.tool_status)
 
         # 打印欢迎信息
         self.print_welcome()
