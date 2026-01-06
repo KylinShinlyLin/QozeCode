@@ -312,7 +312,7 @@ class QozeTui(App):
         with Vertical(id="bottom-container"):
             with Horizontal(id="input-line"):
                 yield Label(">", classes="prompt-symbol")
-                yield Input(placeholder="Type a message...", id="input-box")
+                yield Input(placeholder="Type a message...", id="input-box", select_on_focus=False)
             yield StatusBar(model_name="Claude 3.7 Sonnet")
 
     def on_mount(self):
@@ -343,7 +343,7 @@ class QozeTui(App):
 
         self.input_box.value = ""
 
-        self.main_log.write(Text(f"\n> {user_input}", style="bold white"))
+        self.main_log.write(Text(f"> {user_input}", style="bold white"))
 
         if user_input.lower() in ['quit', 'exit', 'q']:
             self.exit()
