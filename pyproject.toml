@@ -33,7 +33,8 @@ dependencies = [
     "google-auth",
     "colorama",
     "python-crontab",
-    "hnswlib"
+    "hnswlib",
+    "textual"
 ]
 #  langchain-google-vertexai
 [project.scripts]

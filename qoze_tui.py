@@ -125,6 +125,7 @@ class QozeTui(App):
     #input-area {
         dock: bottom;
         height: 3;
+        border: round #5EF9FF;
     }
     """
 
@@ -134,13 +135,11 @@ class QozeTui(App):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
         with Container(id="grid-container"):
             # Swapped: Main Output is now first (left, 70%), Events/Left-Panel is second (right, 30%)
             yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
             yield RichLog(id="left-panel", markup=True, highlight=True, auto_scroll=True)
-        yield Input(placeholder="Type your instruction...", id="input-area")
-        yield Footer()
+        yield Input(placeholder="回车执行请求（输入 'line' 进入多行编辑）", id="input-area")
 
     def on_mount(self):
         self.left_log = self.query_one("#left-panel", RichLog)
