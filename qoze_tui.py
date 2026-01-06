@@ -65,7 +65,7 @@ class TopBar(Static):
     def update_clock(self):
         time_str = datetime.now().strftime("%H:%M:%S")
         # 左侧标题，右侧时间
-        left = Text(" ⚡ Qoze Code ", style="bold white on #d75f00")
+        left = Text(" Qoze Code ", style="bold white on #d75f00")
         left.append(" v0.2.3 ", style="bold white on #005faf")
 
         right = Text(f" {time_str} ", style="bold white on #333333")
@@ -146,9 +146,9 @@ class StatusBar(Static):
 
     def render(self):
         left = Text(" Context: ", style="dim white on #1a1b26")
-        left.append(f"{self.context_tokens / 1000:.1f}K", style="bold cyan on #1a1b26")
-        left.append(" | Cost: ", style="dim white on #1a1b26")
-        left.append(f"${self.cost:.4f}", style="bold green on #1a1b26")
+        left.append(f"{self.context_tokens / 1000:.1f} tokens", style="bold cyan on #1a1b26")
+        # left.append(" | Cost: ", style="dim white on #1a1b26")
+        # left.append(f"${self.cost:.4f}", style="bold green on #1a1b26")
         right = Text(f"{self.model_name} ", style="bold white on #414868")
 
         total_width = self.content_size.width or 100
