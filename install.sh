@@ -14,6 +14,7 @@ NC='\033[0m' # No Color
 
 # 配置变量
 REPO_URL="https://github.com/KylinShinlyLin/QozeCode.git"
+BRANCH="feat/ui_textual"
 INSTALL_DIR="$HOME/.qoze"
 BIN_DIR="$HOME/.local/bin"
 VENV_DIR="$INSTALL_DIR/venv"
@@ -81,17 +82,19 @@ create_directories() {
 
 # 下载源码
 download_source() {
-    log_info "下载 QozeCode 源码..."
-    
+    log_info "下载 QozeCode 源码 (分支: $BRANCH)..."
+
     if [ -d "$BUILD_DIR/QozeCode" ]; then
-        log_warning "检测到已存在的源码，正在更新..."
+        log_warning "检测到已存在的源码，正在切换/更新到分支 $BRANCH..."
         cd "$BUILD_DIR/QozeCode"
-        git pull origin main
+        git fetch origin
+        git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
+        git pull origin "$BRANCH"
     else
         cd "$BUILD_DIR"
-        git clone "$REPO_URL"
+        git clone -b "$BRANCH" "$REPO_URL"
     fi
-    
+
     log_success "源码下载完成"
 }
 
