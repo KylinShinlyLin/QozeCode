@@ -579,40 +579,52 @@ class Qoze(App):
         if not user_input.strip():
             return
 
-        self.status_bar.update_state("Thinking...")
-
-        # Display User Input
-        self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
-
-        if user_input.lower() in ['quit', 'exit', 'q']:
+        # 1. 优先处理退出命令
+        if user_input.lower() in ["quit", "exit", "q"]:
             self.exit()
             return
 
-        if user_input.lower() == 'clear':
-            self.main_log.clear()
-            self.print_welcome()
+        # 2. 隐藏输入框并更新状态
+        self.query_one("#input-line").add_class("hidden")
+        self.status_bar.update_state("Thinking...")
+
+        try:
+            # 显示用户输入
+            self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
+
+            # 处理清除命令
+            if user_input.lower() == "clear":
+                self.main_log.clear()
+                self.print_welcome()
+                return  # 将在 finally 中恢复 UI
+
+            # 3. 准备消息与 AI 处理
+            image_folder = ".qoze/image"
+            human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
+
+            # 更新对话状态
+            current_state = {
+                "messages": qoze_code_agent.conversation_state["messages"] + [human_msg],
+                "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
+            }
+            qoze_code_agent.conversation_state["messages"].append(human_msg)
+
+            # 流式获取回复
+            await self.tui_stream.stream_response(
+                self.model_name,
+                current_state,
+                qoze_code_agent.conversation_state
+            )
+
+        except Exception as e:
+            self.main_log.write(f"[red]Error processing input: {e}[/]")
+            self.main_log.write(f"[red]{traceback.format_exc()}[/]")
+
+        finally:
+            # 4. 无论成功失败，恢复输入框显示
             self.status_bar.update_state("Idle")
-            return
-
-        # Prepare Message
-        image_folder = ".qoze/image"
-        human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
-
-        # Update State
-        current_state = {
-            "messages": qoze_code_agent.conversation_state["messages"] + [human_msg],
-            "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
-        }
-        qoze_code_agent.conversation_state["messages"].append(human_msg)
-
-        # Stream Response
-        await self.tui_stream.stream_response(
-            self.model_name,
-            current_state,
-            qoze_code_agent.conversation_state
-        )
-
-        self.status_bar.update_state("Idle")
+            self.query_one("#input-line").remove_class("hidden")
+            self.input_box.focus()
 
     @on(Input.Submitted)
     async def handle_input(self, event: Input.Submitted):
