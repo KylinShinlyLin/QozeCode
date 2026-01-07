@@ -39,10 +39,20 @@ except ImportError as e:
 # 获取 Git 信息
 def get_git_info():
     try:
-        repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True, stderr=subprocess.DEVNULL).strip()
+        repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True,
+                                           stderr=subprocess.DEVNULL).strip()
         return repo_url
     except:
         return "local"
+
+
+def get_git_branch():
+    try:
+        branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True,
+                                         stderr=subprocess.DEVNULL).strip()
+        return branch
+    except:
+        return None
 
 
 def get_modified_files():
@@ -92,11 +102,17 @@ class Sidebar(Static):
         cwd = os.getcwd()
         repo_url = get_git_info()
         modified = get_modified_files()
+        branch = get_git_branch()
 
         text = Text()
         text.append("\n项目信息\n", style="bold #7aa2f7 underline")
         text.append(f"Repo: ", style="dim white")
         text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
+
+        if branch:
+            text.append(f"Branch: ", style="dim white")
+            text.append(f"{branch}\n", style="bold cyan")
+
         text.append(f"模型: ", style="dim white")
         text.append(f"{self.model_name}\n\n", style="bold cyan")
 
