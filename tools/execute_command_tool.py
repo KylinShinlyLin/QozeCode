@@ -18,7 +18,7 @@ RESET = "\033[0m"
 
 
 @tool
-def execute_command(command: str, timeout: int = 360) -> str:
+def execute_command(command: str, timeout: int = 120) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
     
     Args:
@@ -31,7 +31,6 @@ def execute_command(command: str, timeout: int = 360) -> str:
 
     try:
         # 使用 subprocess.Popen 来实时获取输出
-        command_str = command[:66]
         process = subprocess.Popen(
             command,
             shell=True,
@@ -80,12 +79,12 @@ def execute_command(command: str, timeout: int = 360) -> str:
                 if output:
                     output_lines.append(output.rstrip())
             # 等待进程完成
-            return_code = process.wait()
             full_output = '\n'.join(output_lines)
+            return_code = process.wait()
+            if return_code != 0:
+                full_output = "[RUN_FAILED]" + full_output
             return full_output
-
         except Exception as e:
-
             traceback.print_exc()  # 打印完整堆栈到控制台
             return f"❌ 命令执行异常: {str(e)}"
 

@@ -189,7 +189,7 @@ class TUIStreamOutput:
         m, s = divmod(int(elapsed), 60)
         time_str = f"{m:02d}:{s:02d}"
 
-        content = f"{frame} [bold blue]{self.current_display_tool}[/] [rgb(65,170,65)]{time_str}[/]"
+        content = f"[dim bold cyan] {frame} {self.current_display_tool} {time_str}[/]"
         self.tool_status.update(Text.from_markup(content))
 
     def flush_to_log(self, text: str, reasoning: str):
@@ -282,14 +282,12 @@ class TUIStreamOutput:
                     content_str = str(message_chunk.content)
 
                     # Simple error detection
-                    is_error = "error" in content_str.lower() and len(content_str) < 500
-
+                    is_error = content_str.startswith("[RUN_FAILED]")
                     status_icon = "✗" if is_error else "✓"
-
+                    color = "red" if is_error else "cyan"
                     # Log simple status line
-                    final_msg = f"[bold dim cyan] {status_icon} {tool_name} in {elapsed:.2f}s[/]"
+                    final_msg = f"[dim bold {color}] {status_icon} {tool_name} in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
-
                     continue
 
                 # 2. 处理 Tool Calls (使用累积后的消息判断)
