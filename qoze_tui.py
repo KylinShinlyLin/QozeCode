@@ -216,6 +216,12 @@ class TUIStreamOutput:
                     # 尝试通过 tool_call_id 获取名称
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
 
+                    # 容错：如果只有一个活跃工具，且 ID 没匹配上，强制认为是这一个
+                    if not tool_name and len(self.active_tools) == 1:
+                        _id, _name = list(self.active_tools.items())[0]
+                        tool_name = _name
+                        self.active_tools.clear()
+
                     # 如果没找到，尝试从 message_chunk 属性获取
                     if not tool_name:
                         tool_name = message_chunk.name if hasattr(message_chunk, "name") else None
@@ -341,6 +347,18 @@ class TUIStreamOutput:
             self.main_log.write(f"[red]Stream Error: {e}[/]")
             self.stream_display.update("")
             self.stream_display.styles.display = "none"
+
+        finally:
+            # 确保在任何情况下（完成或出错）都清除工具状态指示器
+            if self.tool_timer:
+                self.tool_timer.stop()
+                self.tool_timer = None
+
+            self.tool_status.update("")
+            self.tool_status.styles.display = "none"
+            self.active_tools.clear()
+            self.current_display_tool = None
+            self.tool_start_time = None
 
 
 class Qoze(App):
