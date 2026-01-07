@@ -182,7 +182,7 @@ class TUIStreamOutput:
         if reasoning:
             self.main_log.write(Text(reasoning, style="italic dim #565f89"))
         if text:
-            self.main_log.write(Text(text))
+            self.main_log.write(Markdown(text))
 
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
@@ -378,15 +378,15 @@ class Qoze(App):
 
     /* 自定义 Markdown 样式以匹配主题 */
     #stream-output > BlockQuote {
-        border-left: solid #565f89;
-        color: #787c99;
+        border-left: none;
+        color: #565f89;
         background: #13131c;
         text-style: italic;
         margin: 0 0 1 0;
         padding: 0 1;
     }
 
-    #sidebar { width: 23%; height: 100%; background: #16161e; padding: 1 2; color: #787c99; border-left: solid #2f334d; }
+    #sidebar { width: 23%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
     #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
