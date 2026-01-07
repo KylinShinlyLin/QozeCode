@@ -194,7 +194,7 @@ try_build_binary() {
     
     # 检查是否有 Qoze.spec 文件
     if [ ! -f "Qoze.spec" ]; then
-        log_warning "未找到 Qoze.spec 文件，跳过二进制构建"
+#        log_warning "未找到 Qoze.spec 文件，跳过二进制构建"
         return 1
     fi
     
@@ -421,14 +421,13 @@ configure_env() {
         
         log_success "✅ 已添加 PATH 配置到 $primary_config"
     else
-        log_info "📝 $primary_config 已经配置过 QozeCode PATH"
+        log_info "$primary_config 已经配置过 QozeCode PATH"
     fi
     
     # 临时添加到当前会话
     export PATH="$BIN_DIR:$PATH"
-    
-    # 🚀 自动化解决方案：创建一个自动激活脚本
-    log_info "🔄 创建自动激活解决方案..."
+
+#    log_info "🔄 创建自动激活解决方案..."
     
     # 创建激活脚本
     activation_script="$INSTALL_DIR/activate_qoze.sh"
@@ -469,13 +468,13 @@ EOF
     chmod +x "$env_script"
     
     # 🚀 尝试多种自动激活方法
-    log_info "🎯 尝试自动激活环境变量..."
+#    log_info "🎯 尝试自动激活环境变量..."
     
     success_methods=()
     
     # 方法1: 尝试在当前shell中source配置文件
     if [ "$current_shell" != "fish" ]; then
-        log_info "方法1: 尝试重新加载 $primary_config"
+#        log_info "方法1: 尝试重新加载 $primary_config"
         if source "$primary_config" 2>/dev/null; then
             success_methods+=("重新加载配置文件")
             log_success "✅ 成功重新加载 $primary_config"
@@ -722,8 +721,8 @@ main() {
                 install_binary
                 log_success "✅ 使用二进制安装方式完成"
             else
-                log_warning "⚠️  二进制构建失败，回退到源码安装方式"
-                log_info "这是正常的，源码安装同样稳定可靠"
+#                log_warning "⚠️  二进制构建失败，回退到源码安装方式"
+#                log_info "这是正常的，源码安装同样稳定可靠"
                 install_from_source
                 log_success "✅ 使用源码安装方式完成"
             fi
