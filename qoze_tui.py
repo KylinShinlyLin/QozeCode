@@ -90,7 +90,7 @@ class Sidebar(Static):
         text = Text()
         text.append("\n项目信息\n", style="bold #7aa2f7 underline")
         text.append(f"Repo: ", style="dim white")
-        text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
+        text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n\n", style="bold cyan")
 
         # path_parts = cwd.split('/')
         # short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
@@ -98,8 +98,8 @@ class Sidebar(Static):
         # text.append(f".../{short_cwd}\n\n", style="cyan")
 
         # Git Status
-        text.append("GIT STATUS\n", style="bold #f7768e underline")
         if modified:
+            text.append("GIT 变更\n", style="bold #7dcfff underline")
             for status, filename in modified:
                 if 'M' in status:
                     icon = "✹"
@@ -108,14 +108,14 @@ class Sidebar(Static):
                     icon = "+"
                     style = "green"
                 elif 'D' in status:
-                    icon = "x"
-                    style = "red"
+                    icon = "-"
+                    style = "dim white"
                 else:
                     icon = "•"
                     style = "white"
                 text.append(f"{icon} {filename[:20]}\n", style=style)
         else:
-            text.append("Clean working tree\n", style="dim green")
+            text.append("", style="dim green")
 
         self.update(text)
 
