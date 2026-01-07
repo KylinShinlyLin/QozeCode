@@ -136,10 +136,10 @@ class StatusBar(Static):
         self.refresh()
 
     def render(self):
-        left = Text(" Status: ", style="dim white on #1a1b26")
+        # left = Text(" Status: ", style="dim white on #1a1b26")
 
         status_style = "bold green" if self.state_desc == "Idle" else "bold yellow"
-        left.append(f"{self.state_desc}", style=f"{status_style} on #1a1b26")
+        left = Text(f" {self.state_desc}", style=f"dim white {status_style} on #1a1b26")
 
         right = Text(f"{self.model_name} ", style="bold white on #414868")
 
@@ -162,6 +162,21 @@ class TUIStreamOutput:
         self.active_tools = {}
         # Track display name for spinner (latest active tool)
         self.current_display_tool = None
+
+    @staticmethod
+    def _get_tool_display_name(tool_name: str, tool_args: dict) -> str:
+        """根据工具名称和参数，生成用户友好的显示名称"""
+        display_name = tool_name
+
+        # 针对 execute_command 的特殊处理
+        if tool_name == "execute_command":
+            cmd = tool_args.get("command", "")
+            if cmd:
+                # 截取前 60 个字符，如果超长则添加 ...
+                short_cmd = cmd[:60] + ("..." if len(cmd) > 60 else "")
+                display_name = f"command: {short_cmd}"
+
+        return display_name
 
     def _update_tool_spinner(self):
         if not self.tool_start_time or not self.current_display_tool:
@@ -272,9 +287,13 @@ class TUIStreamOutput:
                     for tool_call in message_chunk.tool_calls:
                         t_name = tool_call.get("name", "Unknown Tool")
                         t_id = tool_call.get("id", "unknown_id")
+                        t_args = tool_call.get("args", {})
+
+                        # Determine display name
+                        display_name = self._get_tool_display_name(t_name, t_args)
 
                         self.active_tools[t_id] = t_name
-                        self.current_display_tool = t_name
+                        self.current_display_tool = display_name
 
                         # Start Spinner if not running
                         if not self.tool_timer:
