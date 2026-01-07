@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import asyncio
-import time
 import os
+import time
 
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GLOG_minloglevel'] = '2'
@@ -13,14 +12,12 @@ import traceback
 from datetime import datetime
 
 from textual.app import App, ComposeResult, on
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget, TextArea
 from textual.binding import Binding
 from rich.text import Text
-from rich.rule import Rule
 from rich.panel import Panel
 from rich.console import Group
-from rich.align import Align
 from rich.markdown import Markdown
 
 # Add current directory to path
