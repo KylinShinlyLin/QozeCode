@@ -41,7 +41,7 @@ def get_git_info():
         repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True).strip()
         return repo_url
     except:
-        return "local/repository"
+        return "local"
 
 
 def get_modified_files():
@@ -78,6 +78,11 @@ class TopBar(Static):
 
 
 class Sidebar(Static):
+
+    def __init__(self, *args, model_name="Unknown", **kwargs):
+        self.model_name = model_name
+        super().__init__(*args, **kwargs)
+
     def on_mount(self):
         self.update_info()
         self.set_interval(5, self.update_info)
@@ -90,7 +95,9 @@ class Sidebar(Static):
         text = Text()
         text.append("\n项目信息\n", style="bold #7aa2f7 underline")
         text.append(f"Repo: ", style="dim white")
-        text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n\n", style="bold cyan")
+        text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
+        text.append(f"模型: ", style="dim white")
+        text.append(f"{self.model_name}\n\n", style="bold cyan")
 
         # path_parts = cwd.split('/')
         # short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
@@ -399,8 +406,8 @@ class Qoze(App):
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
 
     /* 聊天区域布局调整 */
-    #chat-area { width: 77%; height: 100%; }
-    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 1 2; }
+    #chat-area { width: 78%; height: 100%; }
+    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0 1; }
     /* 工具状态栏 */
     #tool-status {
         width: 100%;
@@ -434,7 +441,7 @@ class Qoze(App):
         padding: 0 1;
     }
 
-    #sidebar { width: 23%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
+    #sidebar { width: 22%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
     #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
@@ -483,7 +490,7 @@ class Qoze(App):
                 yield Static(id="tool-status")
                 # 使用 Textual Markdown Widget 替代 Static
                 yield MarkdownWidget(id="stream-output")
-            yield Sidebar(id="sidebar")
+            yield Sidebar(id="sidebar", model_name=self.model_name)
         with Vertical(id="bottom-container"):
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
@@ -528,7 +535,6 @@ class Qoze(App):
 
         # 使用提示面板
         tips_content = Group(
-            # Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"),
             Text(""),
             Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
             Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
@@ -538,8 +544,6 @@ class Qoze(App):
             Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
             Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
             Text(""),
-            # Text("✓ Agent Ready ",
-            #      style="italic bold green", justify="center")
         )
 
         # 输出所有内容
@@ -547,7 +551,7 @@ class Qoze(App):
         self.main_log.write(Text(""))
         self.main_log.write(Align.center(Panel(
             tips_content,
-            title="[bold #bb9af7]Tips[/]",
+            title="[dim white]Tips[/]",
             border_style="bold #414868",
             padding=(0, 1)
         )))
