@@ -7,6 +7,7 @@ os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GLOG_minloglevel'] = '2'
 
 import sys
+import asyncio
 import subprocess
 import traceback
 from datetime import datetime
@@ -479,7 +480,7 @@ class Qoze(App):
     """
 
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Quit"),
+        Binding("ctrl+c", "interrupt", "Cancel/Quit"),
         Binding("ctrl+l", "clear_screen", "Clear"),
         # 使用 priority=True 确保在组件之前处理
         Binding("ctrl+d", "submit_multiline", "Submit (Multi-line)", priority=True),
@@ -491,6 +492,7 @@ class Qoze(App):
         self.model_name = model_name
         self.agent_ready = False
         self.multiline_mode = False
+        self.processing_worker = None
 
     def compose(self) -> ComposeResult:
         yield TopBar()
@@ -554,6 +556,7 @@ class Qoze(App):
             Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
             Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
             Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
+            Text("  • Ctrl+D 可以强制终止正在运行的请求", style="dim bold white"),
             Text(""),
         )
 
@@ -598,7 +601,7 @@ class Qoze(App):
         # 2. 隐藏输入框并更新状态
         self.query_one("#input-line").add_class("hidden")
         self.main_log.focus()  # 确保主日志区域获得焦点以支持滚动
-        self.status_bar.update_state("Thinking...")
+        self.status_bar.update_state("Thinking... (Ctrl+C to Cancel)")
 
         try:
             # 显示用户输入
@@ -619,6 +622,7 @@ class Qoze(App):
                 "messages": qoze_code_agent.conversation_state["messages"] + [human_msg],
                 "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
             }
+            # 先加入历史记录（如果取消需要移除）
             qoze_code_agent.conversation_state["messages"].append(human_msg)
 
             # 流式获取回复
@@ -627,6 +631,16 @@ class Qoze(App):
                 current_state,
                 qoze_code_agent.conversation_state
             )
+
+        except asyncio.CancelledError:
+            self.main_log.write(Text("⛔ 请求已被主动取消", style="bold red"))
+
+            # 回滚状态：移除刚刚添加的用户消息
+            if qoze_code_agent.conversation_state["messages"]:
+                qoze_code_agent.conversation_state["messages"].pop()
+
+            # 恢复用户输入到输入框以便重新编辑
+            self.input_box.value = user_input
 
         except Exception as e:
             self.main_log.write(f"[red]Error processing input: {e}[/]")
@@ -637,6 +651,17 @@ class Qoze(App):
             self.status_bar.update_state("Idle")
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
+            self.processing_worker = None
+
+    def action_interrupt(self):
+        """处理中断/退出逻辑"""
+        # 如果有正在进行的 Worker，则取消它
+        if self.processing_worker and self.processing_worker.is_running:
+            self.processing_worker.cancel()
+            return
+
+        # 否则，执行正常的退出
+        self.exit()
 
     @on(Input.Submitted)
     async def handle_input(self, event: Input.Submitted):
@@ -661,7 +686,7 @@ class Qoze(App):
             self.main_log.write(Text("\n💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交 Esc 退出多行编辑", style="dim"))
             return
 
-        await self.process_user_input(user_input)
+        self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
 
     async def action_submit_multiline(self):
         """提交多行输入"""
@@ -673,6 +698,7 @@ class Qoze(App):
 
         # 退出多行模式
         self.multiline_mode = False
+        self.processing_worker = None
         self.multi_line_input.add_class("hidden")
         self.multi_line_input.text = ""  # 清空
         self.query_one("#input-line").remove_class("hidden")
@@ -680,7 +706,7 @@ class Qoze(App):
 
         # 处理输入
         if user_input.strip():
-            await self.process_user_input(user_input)
+            self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
         else:
             self.status_bar.update_state("Idle")
 
@@ -690,6 +716,7 @@ class Qoze(App):
             return
 
         self.multiline_mode = False
+        self.processing_worker = None
         self.multi_line_input.add_class("hidden")
         self.multi_line_input.text = ""  # 清空
         self.query_one("#input-line").remove_class("hidden")
