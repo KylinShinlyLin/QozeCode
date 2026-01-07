@@ -24,7 +24,6 @@ sys.path.append(os.getcwd())
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-
 # Import agent components
 try:
     import launcher
@@ -158,21 +157,24 @@ class TUIStreamOutput:
         self.stream_display = stream_display
         self.tool_status = tool_status
         self.tool_start_time = None
-        self.tool_name = None
         self.tool_timer = None
+        # Track active tools: {tool_call_id: tool_name}
+        self.active_tools = {}
+        # Track display name for spinner (latest active tool)
+        self.current_display_tool = None
 
     def _update_tool_spinner(self):
-        if not self.tool_start_time or not self.tool_name:
+        if not self.tool_start_time or not self.current_display_tool:
             return
-        
+
         elapsed = time.time() - self.tool_start_time
         frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
-        
+
         # 格式化时间
         m, s = divmod(int(elapsed), 60)
         time_str = f"{m:02d}:{s:02d}"
-        
-        content = f"{frame} [bold blue]{self.tool_name}[/] [rgb(65,170,65)]{time_str}[/]"
+
+        content = f"{frame} [bold blue]{self.current_display_tool}[/] [rgb(65,170,65)]{time_str}[/]"
         self.tool_status.update(Text.from_markup(content))
 
     def flush_to_log(self, text: str, reasoning: str):
@@ -180,7 +182,7 @@ class TUIStreamOutput:
         if reasoning:
             self.main_log.write(Text(reasoning, style="italic dim #565f89"))
         if text:
-            self.main_log.write(Markdown(text))
+            self.main_log.write(Text(text))
 
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
@@ -211,32 +213,46 @@ class TUIStreamOutput:
                         current_response_text = ""
                         current_reasoning_content = ""
 
-                    # Stop Spinner
-                    if self.tool_timer:
-                        self.tool_timer.stop()
-                        self.tool_timer = None
-                    
+                    # 尝试通过 tool_call_id 获取名称
+                    tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
+
+                    # 如果没找到，尝试从 message_chunk 属性获取
+                    if not tool_name:
+                        tool_name = message_chunk.name if hasattr(message_chunk, "name") else None
+
+                    # 如果还是没找到，使用 fallback
+                    if not tool_name:
+                        tool_name = self.current_display_tool if self.current_display_tool else "Tool"
+
+                    # 只有当活跃工具列表为空时，才停止 Spinner
+                    # (这对于并行调用可能不完美，但对于串行足够)
+                    if not self.active_tools:
+                        if self.tool_timer:
+                            self.tool_timer.stop()
+                            self.tool_timer = None
+
+                        self.tool_status.update("")
+                        self.tool_status.styles.display = "none"
+                        self.current_display_tool = None
+
                     elapsed = time.time() - (self.tool_start_time or time.time())
-                    self.tool_start_time = None
-                    
-                    tool_name = message_chunk.name if hasattr(message_chunk, "name") else "Tool"
+                    # 如果还有活跃工具，不重置 start_time，继续计时
+                    if not self.active_tools:
+                        self.tool_start_time = None
+
                     content_str = str(message_chunk.content)
-                    
+
                     # Simple error detection
                     is_error = "error" in content_str.lower() and len(content_str) < 500
-                    
+
                     status_icon = "✗" if is_error else "✓"
                     status_color = "red" if is_error else "green"
                     status_text = "Failed" if is_error else "Success"
-                    
+
                     # Log simple status line
                     final_msg = f"{status_icon} [bold blue]{tool_name}[/] [{status_color}]{status_text}[/] [rgb(65,170,65)]in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
-                    
-                    # Hide status bar
-                    self.tool_status.update("")
-                    self.tool_status.styles.display = "none"
-                    
+
                     continue
 
                 # 2. 处理 Tool Calls (AI 决定调用工具)
@@ -248,13 +264,18 @@ class TUIStreamOutput:
                         current_reasoning_content = ""
 
                     for tool_call in message_chunk.tool_calls:
-                        # Start Spinner Logic
-                        self.tool_name = tool_call["name"]
-                        self.tool_start_time = time.time()
-                        self.tool_status.styles.display = "block"
-                        # 使用 tool_status 组件的 set_interval
-                        self.tool_timer = self.tool_status.set_interval(0.1, self._update_tool_spinner)
-                        
+                        t_name = tool_call.get("name", "Unknown Tool")
+                        t_id = tool_call.get("id", "unknown_id")
+
+                        self.active_tools[t_id] = t_name
+                        self.current_display_tool = t_name
+
+                        # Start Spinner if not running
+                        if not self.tool_timer:
+                            self.tool_start_time = time.time()
+                            self.tool_status.styles.display = "block"
+                            self.tool_timer = self.tool_status.set_interval(0.1, self._update_tool_spinner)
+
                     # 继续显示后续可能的内容
                     self.stream_display.styles.display = "block"
 
@@ -322,7 +343,6 @@ class TUIStreamOutput:
             self.stream_display.styles.display = "none"
 
 
-
 class Qoze(App):
     CSS = """
     Screen { background: #1a1b26; color: #a9b1d6; }
@@ -355,7 +375,7 @@ class Qoze(App):
         display: none;
         overflow-y: auto; /* 确保可滚动 */
     }
-    
+
     /* 自定义 Markdown 样式以匹配主题 */
     #stream-output > BlockQuote {
         border-left: solid #565f89;
@@ -419,21 +439,49 @@ class Qoze(App):
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
     def print_welcome(self):
-        ascii_art = """
-   ██████╗  ██████╗ ███████╗███████╗
-  ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝
-  ██║   ██║██║   ██║  ███╔╝ █████╗
-  ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝
-  ╚██████╔╝╚██████╔╝███████╗███████╗
-   ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝
+
+        qoze_code_art = """
+        ╭────────────────────────────────────────────────────────────────────────────╮
+        │  ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗    │
+        │ ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝    │
+        │ ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗      │
+        │ ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝      │
+        │ ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗    │
+        │  ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝    │
+        ╰────────────────────────────────────────────────────────────────────────────╯
         """
-        self.main_log.write(Text(ascii_art, style="bold cyan"))
-        self.main_log.write(Text(f"Model: {self.model_name}", style="bold white"))
-        self.main_log.write(Rule(style="#414868"))
+
+        # 创建信息网格
+
+        from rich.align import Align
+
+        # 使用提示面板
+        tips_content = Group(
+            Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"),
+            Text(""),
+            Text("模型:", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
+            Text("当前目录:", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
+            Text("使用提示:", style="bold white"),
+            Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
+            Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
+            Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
+            Text(""),
+            Text("✓ Agent Ready ",
+                 style="italic bold green", justify="center")
+        )
+
+        # 输出所有内容
+        self.main_log.write(Align.center(Text(qoze_code_art, style="bold #7aa2f7")))
+        self.main_log.write(Text(""))
+        self.main_log.write(Align.center(Panel(
+            tips_content,
+            title="[bold #bb9af7]Tips[/]",
+            border_style="bold #414868",
+            padding=(1, 2)
+        )))
 
     async def init_agent_worker(self):
         """后台初始化 Agent"""
-        self.main_log.write(Text("⚡ Initializing LLM and Tools...", style="yellow"))
         try:
             llm = model_initializer.initialize_llm(self.model_name)
 
@@ -445,7 +493,6 @@ class Qoze(App):
             self.input_box.disabled = False
             self.input_box.placeholder = "Ask Qoze anything..."
             self.input_box.focus()
-            self.main_log.write(Text("✓ Agent Ready!", style="bold green"))
 
         except Exception as e:
             self.main_log.write(f"[red]Initialization Failed: {e}[/]")
@@ -498,6 +545,9 @@ class Qoze(App):
 
 
 def main():
+    # 0. 设置 TUI 模式环境变量 (关键!)
+    os.environ["QOZE_TUI_MODE"] = "true"
+
     # 1. 确保配置存在
     launcher.ensure_config()
 
