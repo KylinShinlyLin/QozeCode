@@ -100,11 +100,6 @@ class Sidebar(Static):
         text.append(f"模型: ", style="dim white")
         text.append(f"{self.model_name}\n\n", style="bold cyan")
 
-        # path_parts = cwd.split('/')
-        # short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
-        # text.append("Path: ", style="dim white")
-        # text.append(f".../{short_cwd}\n\n", style="cyan")
-
         # Git Status
         if modified:
             text.append("GIT 变更\n", style="bold #7dcfff underline")
