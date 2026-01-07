@@ -72,8 +72,8 @@ class TopBar(Static):
 
     def update_clock(self):
         time_str = datetime.now().strftime("%H:%M:%S")
-        left = Text(" Qoze Code ", style="bold white on #d75f00")
-        left.append(" v0.2.3 ", style="bold white on #005faf")
+        left = Text(" QozeCode ", style="bold white on #d75f00")
+        left.append(" v0.3.1 ", style="bold white on #005faf")
         right = Text(f" {time_str} ", style="bold white on #333333")
         total_width = self.content_size.width or 80
         spacer_width = max(0, total_width - len(left) - len(right))
@@ -445,7 +445,7 @@ class Qoze(App):
         height: 15;
         width: 100%;
         background: #13131c;
-        border: solid #bb9af7;
+        border: round #808080;
         color: #c0caf5;
         padding: 1;
     }
