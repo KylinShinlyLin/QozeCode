@@ -442,24 +442,24 @@ class Qoze(App):
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
     #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
-    
+
     Input { width: 1fr; background: #13131c; border: none; color: #c0caf5; padding: 0; }
     Input:focus { border: none; }
-    
+
     /* 多行输入框样式 */
     TextArea {
         height: 15;
         width: 100%;
         background: #13131c;
-        border: solid #bb9af7; 
+        border: solid #bb9af7;
         color: #c0caf5;
         padding: 1;
     }
-    
+
     .hidden {
         display: none;
     }
-    
+
     StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
     LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
     """
@@ -467,8 +467,9 @@ class Qoze(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+l", "clear_screen", "Clear"),
-        Binding("ctrl+d", "submit_multiline", "Submit (Multi-line)"),
-        Binding("escape", "cancel_multiline", "Cancel (Multi-line)"),
+        # 使用 priority=True 确保在组件之前处理
+        Binding("ctrl+d", "submit_multiline", "Submit (Multi-line)", priority=True),
+        Binding("escape", "cancel_multiline", "Cancel (Multi-line)", priority=True),
     ]
 
     def __init__(self, model_name):
