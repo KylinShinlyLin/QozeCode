@@ -177,7 +177,7 @@ class TUIStreamOutput:
             cmd = tool_args.get("command", "")
             if cmd:
                 # 截取前 60 个字符，如果超长则添加 ...
-                short_cmd = cmd[:60] + ("..." if len(cmd) > 60 else "")
+                short_cmd = cmd[:50] + ("..." if len(cmd) > 50 else "")
                 display_name = f"command: {short_cmd}"
 
         return display_name
