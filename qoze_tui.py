@@ -356,7 +356,7 @@ class TUIStreamOutput:
                         md_content += current_response_text
 
                     self.stream_display.update(md_content)
-                    self.stream_display.scroll_end(animate=False)
+                    # self.stream_display.scroll_end(animate=False)
 
             # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
@@ -577,6 +577,7 @@ class Qoze(App):
 
         # 2. 隐藏输入框并更新状态
         self.query_one("#input-line").add_class("hidden")
+        self.main_log.focus()  # 确保主日志区域获得焦点以支持滚动
         self.status_bar.update_state("Thinking...")
 
         try:
