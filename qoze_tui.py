@@ -3,6 +3,10 @@
 import asyncio
 import time
 import os
+
+os.environ['GRPC_VERBOSITY'] = 'ERROR'
+os.environ['GLOG_minloglevel'] = '2'
+
 import sys
 import subprocess
 import traceback
@@ -137,19 +141,6 @@ class StatusBar(Static):
     def update_state(self, state):
         self.state_desc = state
         self.refresh()
-
-    def render(self):
-        # left = Text(" Status: ", style="dim white on #1a1b26")
-
-        status_style = "bold green" if self.state_desc == "Idle" else "bold yellow"
-        left = Text(f" {self.state_desc}", style=f"dim white {status_style} on #1a1b26")
-
-        right = Text(f"{self.model_name} ", style="bold white on #414868")
-
-        total_width = self.content_size.width or 100
-        spacer_width = max(0, total_width - len(left) - len(right))
-
-        return left + Text(" " * spacer_width, style="on #1a1b26") + right
 
 
 class TUIStreamOutput:
@@ -443,7 +434,7 @@ class Qoze(App):
 
     #sidebar { width: 22%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
-    #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
+    #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
 
     Input { width: 1fr; background: #13131c; border: none; color: #c0caf5; padding: 0; }
@@ -567,7 +558,7 @@ class Qoze(App):
 
             self.agent_ready = True
             self.input_box.disabled = False
-            self.input_box.placeholder = "Ask Qoze anything..."
+            self.input_box.placeholder = "Type message...（输入 'line' 进入多行编辑）"
             self.input_box.focus()
 
         except Exception as e:
@@ -646,8 +637,7 @@ class Qoze(App):
             self.multi_line_input.focus()
 
             # 更新状态栏提示
-            self.status_bar.update_state("Multi-line Mode (Ctrl+D to submit, Esc to cancel)")
-            self.main_log.write(Text("\n💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交", style="dim"))
+            self.main_log.write(Text("\n💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交 Esc 退出多行编辑", style="dim"))
             return
 
         await self.process_user_input(user_input)
