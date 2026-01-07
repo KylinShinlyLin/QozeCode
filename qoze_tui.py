@@ -156,6 +156,7 @@ class TUIStreamOutput:
         self.active_tools = {}
         # Track display name for spinner (latest active tool)
         self.current_display_tool = None
+        self.last_update_time = 0
 
     @staticmethod
     def _get_tool_display_name(tool_name: str, tool_args: dict) -> str:
@@ -212,6 +213,9 @@ class TUIStreamOutput:
         # 激活流式显示区域
         self.stream_display.styles.display = "block"
         self.stream_display.update("")
+
+        # 重置更新时间
+        self.last_update_time = 0
 
         try:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
@@ -344,19 +348,22 @@ class TUIStreamOutput:
 
                 # 5. 更新流式显示 (True Streaming with Markdown Widget)
                 if current_reasoning_content or current_response_text:
-                    md_content = ""
+                    now = time.time()
+                    # 节流：每 0.1 秒更新一次 UI，避免阻塞主线程导致无法滚动
+                    if now - self.last_update_time > 0.1:
+                        md_content = ""
 
-                    if current_reasoning_content:
-                        # 格式化推理内容为引用块，模拟 dim 效果
-                        lines = current_reasoning_content.split("\n")
-                        quoted_lines = [f"> {line}" for line in lines]
-                        md_content += "\n".join(quoted_lines) + "\n\n"
+                        if current_reasoning_content:
+                            # 格式化推理内容为引用块，模拟 dim 效果
+                            lines = current_reasoning_content.split("\n")
+                            quoted_lines = [f"> {line}" for line in lines]
+                            md_content += "\n".join(quoted_lines) + "\n\n"
 
-                    if current_response_text:
-                        md_content += current_response_text
+                        if current_response_text:
+                            md_content += current_response_text
 
-                    self.stream_display.update(md_content)
-                    # self.stream_display.scroll_end(animate=False)
+                        self.stream_display.update(md_content)
+                        self.last_update_time = now
 
             # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
@@ -387,6 +394,7 @@ class TUIStreamOutput:
             self.active_tools.clear()
             self.current_display_tool = None
             self.tool_start_time = None
+            self.last_update_time = 0
 
 
 class Qoze(App):
@@ -516,7 +524,7 @@ class Qoze(App):
         │   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
         │   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
         │   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
-        │    ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
+        │    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
         ╰────────────────────────────────────────────────────────────────────────────╯
         """
 
@@ -689,6 +697,7 @@ def main():
     # 2. 获取模型选择
     try:
         model = launcher.get_model_choice()
+        os.system('cls' if os.name == 'nt' else 'clear')
     except Exception as e:
         print(f"Model selection failed: {e}")
         model = "gpt-5.2"
