@@ -39,7 +39,7 @@ except ImportError as e:
 # 获取 Git 信息
 def get_git_info():
     try:
-        repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True).strip()
+        repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True, stderr=subprocess.DEVNULL).strip()
         return repo_url
     except:
         return "local"
@@ -47,7 +47,7 @@ def get_git_info():
 
 def get_modified_files():
     try:
-        status = subprocess.check_output(['git', 'status', '-s'], text=True).strip()
+        status = subprocess.check_output(['git', 'status', '-s'], text=True, stderr=subprocess.DEVNULL).strip()
         if not status:
             return []
         files = []
@@ -186,6 +186,8 @@ class TUIStreamOutput:
         if text:
             self.main_log.write(Markdown(text))
 
+        # 确保滚动到底部
+        self.main_log.scroll_end(animate=False)
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
 
@@ -355,6 +357,8 @@ class TUIStreamOutput:
                             md_content += current_response_text
 
                         self.stream_display.update(md_content)
+                        self.main_log.scroll_end(animate=False)
+                        self.stream_display.scroll_end(animate=False)
                         self.last_update_time = now
 
             # 循环结束后，固化最后的内容
