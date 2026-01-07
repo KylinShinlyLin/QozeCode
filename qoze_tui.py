@@ -402,7 +402,7 @@ class Qoze(App):
 
     /* 聊天区域布局调整 */
     #chat-area { width: 78%; height: 100%; }
-    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0 1; }
+    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0;  text-align: left; }
     /* 工具状态栏 */
     #tool-status {
         width: 100%;

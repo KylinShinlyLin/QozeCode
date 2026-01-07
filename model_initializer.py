@@ -13,6 +13,14 @@ os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息�
 from shared_console import console
 
 
+def get_gemini_model_name(model_name):
+    if model_name == 'gemini-3-pro':
+        return "gemini-3-pro-preview"
+    elif model_name == 'gemini-3-flash':
+        return "gemini-3-flash-preview"
+    return None
+
+
 def initialize_llm(model_name: str):
     """根据模型名称初始化对应的LLM"""
     import os
@@ -51,10 +59,8 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Claude-4 初始化失败: {str(e)}")
             raise
-    elif model_name == 'gemini-3-pro':
+    elif model_name in ('gemini-3-pro', 'gemini-3-flash'):
         try:
-
-            # 延迟导入重依赖
             from langchain_google_vertexai import ChatVertexAI
             from google.oauth2 import service_account
             import os
@@ -66,17 +72,15 @@ def initialize_llm(model_name: str):
             logging.getLogger('google.ai.generativelanguage_v1beta').setLevel(logging.ERROR)
             # 抑制 vertex_ai 参数警告
             warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
-
             creds = ensure_model_credentials(model_name)
             credentials = service_account.Credentials.from_service_account_file(
                 creds['credentials_path'],
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-
             # 仅构建客户端，不做网络验证
             llm = ChatVertexAI(
                 credentials=credentials,
-                model_name="gemini-3-pro-preview",
+                model_name=get_gemini_model_name(model_name),
                 project=creds["project"],
                 location="global",  # gemini-3 只有全球节点
                 vertex_ai=True,

@@ -16,8 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import argparse
-import asyncio
 import base64
 import operator
 import os
@@ -26,7 +24,6 @@ import socket
 # 屏蔽 absl 库的 STDERR 警告
 # import os
 import traceback
-from pathlib import Path
 from typing import Literal, List
 
 # import nest_asyncio
@@ -37,20 +34,12 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolMessage
 from langgraph.graph import StateGraph, START, END
-from rich.panel import Panel
 from typing_extensions import TypedDict, Annotated
 
-from completion_handler import setup_completion
-from input_handler import input_manager
-from input_processor import InputProcessor
 from shared_console import console
-from stream_output import StreamOutput
-from tools.common_tools import manage_cron_job
 # from tools.common_tools import ask
 from tools.execute_command_tool import execute_command
-from tools.math_tools import multiply, add, divide
 from tools.search_tool import tavily_search, get_webpage_to_markdown
-from utils.constants import init_prompt
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_system_prompt
 
@@ -75,15 +64,14 @@ plan_mode = False
 # 当前会话
 conversation_state = {"messages": [], "llm_calls": 0}
 
-
-def get_terminal_display_lines():
-    """获取终端可用于显示内容的行数"""
-    try:
-        terminal_height = console.size.height
-        return max(10, terminal_height - 8)
-    except:
-        # 如果获取终端大小失败，使用默认值
-        return 20
+# def get_terminal_display_lines():
+#     """获取终端可用于显示内容的行数"""
+#     try:
+#         terminal_height = console.size.height
+#         return max(10, terminal_height - 8)
+#     except:
+#         # 如果获取终端大小失败，使用默认值
+#         return 20
 
 
 tools_by_name = {tool.name: tool for tool in tools}
@@ -205,21 +193,21 @@ agent_builder.add_edge("tool_node", "llm_call")
 agent = agent_builder.compile()
 
 
-def print_panel(model_name):
-    combined_panel = Panel(
-        f"[bold dim cyan]✦ Welcome to QozeCode 0.2.3[/bold dim cyan]\n\n"
-        f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'} [bold cyan]\n"
-        f"[bold white]当前目录:[/bold white][bold cyan]{os.getcwd() or 'Unknown'} [bold cyan]\n"
-        f"[bold white]使用提示:[/bold white]\n"
-        f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
-        f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]\n"
-        f"[dim][bold white]  • 输入 'clear' 清理上下文 [/dim] [bold white]",
-
-        border_style="dim white",
-        title_align="center",
-        expand=False
-    )
-    console.print(combined_panel)
+# def print_panel(model_name):
+#     combined_panel = Panel(
+#         f"[bold dim cyan]✦ Welcome to QozeCode 0.2.3[/bold dim cyan]\n\n"
+#         f"[bold white]模型:[/bold white][bold cyan] {model_name or 'Unknown'} [bold cyan]\n"
+#         f"[bold white]当前目录:[/bold white][bold cyan]{os.getcwd() or 'Unknown'} [bold cyan]\n"
+#         f"[bold white]使用提示:[/bold white]\n"
+#         f"[dim][bold white]  • 输入 [bold]'q'[/bold]、[bold]'quit'[/bold] 或 [bold]'exit'[/bold] 退出 [/dim] [bold white]\n"
+#         f"[dim][bold white]  • !开头会直接执行例如：!ls [/dim] [bold white]\n"
+#         f"[dim][bold white]  • 输入 'clear' 清理上下文 [/dim] [bold white]",
+#
+#         border_style="dim white",
+#         title_align="center",
+#         expand=False
+#     )
+#     console.print(combined_panel)
 
 
 def get_image_files(folder_path: str) -> List[str]:
@@ -282,112 +270,111 @@ def create_message_with_images(text_content: str, image_folder: str = ".qoze/ima
 
     return HumanMessage(content=message_content)
 
-
-# 多轮对话函数
-async def chat_loop(model_name: str = None):
-    global plan_mode, conversation_state
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print_panel(model_name)
-
-    Path(".qoze/image").mkdir(parents=True, exist_ok=True)
-    Path(".qoze/rules").mkdir(parents=True, exist_ok=True)
-    # 初始化处理器
-    input_processor = InputProcessor(input_manager)
-    stream_output = StreamOutput(agent)
-
-    # 检查图片文件夹状态
-    image_folder = ".qoze/image"
-    if os.path.exists(image_folder):
-        image_count = len(get_image_files(image_folder))
-        if image_count > 0:
-            console.print(f"📁 检测到图片文件: {image_folder} (包含 {image_count} 张图片)", style="green")
-
-    while True:
-        try:
-            # 设置自动补全
-            setup_completion()
-            # 输入处理
-            user_input = await input_processor.get_user_input(plan_mode)
-
-            if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                console.print("👋 再见！", style="bold cyan")
-                return
-
-            if user_input.lower() == 'clear':
-                os.system('cls' if os.name == 'nt' else 'clear')
-                print_panel(model_name)
-                conversation_state = {"messages": [], "llm_calls": 0}
-                continue
-
-            if user_input.lower() in ['plan']:
-                plan_mode = True
-                console.print("进入计划模式")
-                continue
-
-            if user_input in ["qoze init"]:
-                user_input = init_prompt
-
-            # 空输入，继续循环
-            if user_input == "":
-                continue
-
-            # 创建用户消息（包含文本和图片）
-            user_message = create_message_with_images(user_input, image_folder)
-
-            # 更新对话状态
-            current_state = {
-                "messages": conversation_state["messages"] + [user_message],
-                "llm_calls": conversation_state["llm_calls"]
-            }
-            # 流式输出
-            await stream_output.stream_response(model_name, current_state, conversation_state)
-
-        except KeyboardInterrupt:
-            console.print("\n\n👋 程序被用户中断", style="yellow")
-            break
-
-        except Exception as e:
-            traceback.print_exc()
-            console.print(f"\n❌ 发生错误: {str(e)}", style="red")
-
-
-async def start_chat_with_session(model_name: str = None):
-    """启动带会话 ID 的聊天"""
-    await chat_loop(model_name)
+# # 多轮对话函数
+# async def chat_loop(model_name: str = None):
+#     global plan_mode, conversation_state
+#     os.system('cls' if os.name == 'nt' else 'clear')
+#     print_panel(model_name)
+#
+#     Path(".qoze/image").mkdir(parents=True, exist_ok=True)
+#     Path(".qoze/rules").mkdir(parents=True, exist_ok=True)
+#     # 初始化处理器
+#     input_processor = InputProcessor(input_manager)
+#     stream_output = StreamOutput(agent)
+#
+#     # 检查图片文件夹状态
+#     image_folder = ".qoze/image"
+#     if os.path.exists(image_folder):
+#         image_count = len(get_image_files(image_folder))
+#         if image_count > 0:
+#             console.print(f"📁 检测到图片文件: {image_folder} (包含 {image_count} 张图片)", style="green")
+#
+#     while True:
+#         try:
+#             # 设置自动补全
+#             setup_completion()
+#             # 输入处理
+#             user_input = await input_processor.get_user_input(plan_mode)
+#
+#             if user_input.lower() in ['quit', 'exit', '退出', 'q']:
+#                 console.print("👋 再见！", style="bold cyan")
+#                 return
+#
+#             if user_input.lower() == 'clear':
+#                 os.system('cls' if os.name == 'nt' else 'clear')
+#                 print_panel(model_name)
+#                 conversation_state = {"messages": [], "llm_calls": 0}
+#                 continue
+#
+#             if user_input.lower() in ['plan']:
+#                 plan_mode = True
+#                 console.print("进入计划模式")
+#                 continue
+#
+#             if user_input in ["qoze init"]:
+#                 user_input = init_prompt
+#
+#             # 空输入，继续循环
+#             if user_input == "":
+#                 continue
+#
+#             # 创建用户消息（包含文本和图片）
+#             user_message = create_message_with_images(user_input, image_folder)
+#
+#             # 更新对话状态
+#             current_state = {
+#                 "messages": conversation_state["messages"] + [user_message],
+#                 "llm_calls": conversation_state["llm_calls"]
+#             }
+#             # 流式输出
+#             await stream_output.stream_response(model_name, current_state, conversation_state)
+#
+#         except KeyboardInterrupt:
+#             console.print("\n\n👋 程序被用户中断", style="yellow")
+#             break
+#
+#         except Exception as e:
+#             traceback.print_exc()
+#             console.print(f"\n❌ 发生错误: {str(e)}", style="red")
 
 
-def parse_arguments():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='QozeCode Agent - AI编程助手')
-    parser.add_argument(
-        '--model',
-        choices=['claude-4', 'gemini', 'gpt-5'],
-        default='gemini',
-        help='选择要使用的AI模型 (默认: gemini)'
-    )
-    parser.add_argument(
-        '--session-id',
-        default='123',
-        help='会话ID (默认: 123)'
-    )
-    return parser.parse_args()
+# async def start_chat_with_session(model_name: str = None):
+#     """启动带会话 ID 的聊天"""
+#     await chat_loop(model_name)
 
 
-def handleRun(model_name: str = None):
-    """主函数 - 支持直接传入参数或从命令行解析"""
-    try:
-        # 初始化选择的模型（仅构建客户端，不做网络验证）
-        with console.status("[bold cyan]正在初始化模型...", spinner="dots"):
-            # 延迟导入以避免启动时加载模型相关重依赖
-            from model_initializer import initialize_llm
-            global llm, llm_with_tools
-            llm = initialize_llm(model_name)
-            # 初始化带工具的 LLM
-            llm_with_tools = llm.bind_tools(tools)
-        # 启动聊天循环
-        asyncio.run(start_chat_with_session(model_name))
+# def parse_arguments():
+#     """解析命令行参数"""
+#     parser = argparse.ArgumentParser(description='QozeCode Agent - AI编程助手')
+#     parser.add_argument(
+#         '--model',
+#         choices=['claude-4', 'gemini', 'gpt-5'],
+#         default='gemini',
+#         help='选择要使用的AI模型 (默认: gemini)'
+#     )
+#     parser.add_argument(
+#         '--session-id',
+#         default='123',
+#         help='会话ID (默认: 123)'
+#     )
+#     return parser.parse_args()
 
-    except KeyboardInterrupt:
-        console.print("\n\n👋 程序被用户中断", style="yellow")
-    except Exception as e:
-        console.print(f"\n❌ 启动失败: {str(e)}", style="red")
+
+# def handleRun(model_name: str = None):
+#     """主函数 - 支持直接传入参数或从命令行解析"""
+#     try:
+#         # 初始化选择的模型（仅构建客户端，不做网络验证）
+#         with console.status("[bold cyan]正在初始化模型...", spinner="dots"):
+#             # 延迟导入以避免启动时加载模型相关重依赖
+#             from model_initializer import initialize_llm
+#             global llm, llm_with_tools
+#             llm = initialize_llm(model_name)
+#             # 初始化带工具的 LLM
+#             llm_with_tools = llm.bind_tools(tools)
+#         # 启动聊天循环
+#         asyncio.run(start_chat_with_session(model_name))
+#
+#     except KeyboardInterrupt:
+#         console.print("\n\n👋 程序被用户中断", style="yellow")
+#     except Exception as e:
+#         console.print(f"\n❌ 启动失败: {str(e)}", style="red")

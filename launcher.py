@@ -8,8 +8,6 @@ QozeCode Agent 启动器 - Inquirer版本
 import os
 import sys
 import time
-import traceback
-import uuid
 from typing import Optional
 
 from constant import template_content
@@ -70,8 +68,9 @@ def get_model_choice() -> Optional[str]:
     # 定义选项 - 简洁对齐
     choices = [
         "gpt-5.2                     OpenAI",
-        "gemini-3-pro  (think)       Google GCP",
-        "qwen3-max  (think)          Alibaba Cloud",
+        "gemini-3-pro   (think)      Google GCP",
+        "gemini-3-flash (think)      Google GCP",
+        "qwen3-max      (think)      Alibaba Cloud",
         "deepseek-reasoner           DeepSeek",
         "glm-4.6                     智普",
         "claude-4                    bedrock",
@@ -97,6 +96,8 @@ def get_model_choice() -> Optional[str]:
             return 'claude-4'
         elif "gemini-3-pro" in selected:
             return 'gemini-3-pro'
+        elif "gemini-3-flash" in selected:
+            return 'gemini-3-flash'
         elif "gpt-5.2" in selected:
             return 'gpt-5.2'
         elif "deepseek-reasoner" in selected:
@@ -143,30 +144,30 @@ def ensure_config():
         console.print(f"创建配置文件失败: {e}", style="red")
 
 
-# 函数 launch_agent（记录启动与返回耗时）
-def launch_agent(model: str):
-    """启动 QozeCode Agent"""
-    from qoze_code_agent import handleRun
-    # 直接调用 handleRun 并传入选择的模型
-    handleRun(model_name=model)
-
-
-# 函数 main（记录各阶段耗时）
-def main():
-    """主函数"""
-    try:
-        ensure_config()
-        # 获取模型选择
-        model = get_model_choice()
-        if model is None:
-            return
-        # 启动 agent
-        launch_agent(model)
-    except KeyboardInterrupt:
-        console.print("\n👋 再见", style="dim")
-    except Exception as e:
-        console.print(f"\n❌ 错误: {str(e)}", style="red", markup=False)
-
-
-if __name__ == '__main__':
-    main()
+# # 函数 launch_agent（记录启动与返回耗时）
+# def launch_agent(model: str):
+#     """启动 QozeCode Agent"""
+#     from qoze_code_agent import handleRun
+#     # 直接调用 handleRun 并传入选择的模型
+#     handleRun(model_name=model)
+#
+#
+# # 函数 main（记录各阶段耗时）
+# def main():
+#     """主函数"""
+#     try:
+#         ensure_config()
+#         # 获取模型选择
+#         model = get_model_choice()
+#         if model is None:
+#             return
+#         # 启动 agent
+#         launch_agent(model)
+#     except KeyboardInterrupt:
+#         console.print("\n👋 再见", style="dim")
+#     except Exception as e:
+#         console.print(f"\n❌ 错误: {str(e)}", style="red", markup=False)
+#
+#
+# if __name__ == '__main__':
+#     main()

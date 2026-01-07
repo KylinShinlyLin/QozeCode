@@ -130,7 +130,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             "region_name": region,
         }
         return credentials
-    if model_name == "gemini-3-pro":
+    if model_name in ("gemini-3-pro", "gemini-3-flash"):
         section = "vertexai"
         if not cfg.has_section(section):
             fail("Gemini/Vertex AI 凭证 (section [vertexai])")
@@ -149,15 +149,6 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         if not api_key:
             fail("GLM-4.6 AI 凭证")
         return {"api_key": api_key}
-    # if model_name == "Kimi":
-    #     section = "Kimi"
-    #     if not cfg.has_section(section):
-    #         fail("Kimi AI 凭证 (section [Kimi])")
-    #     api_key = cfg.get(section, "api_key", fallback=None)
-    #     if not api_key:
-    #         fail("Kimi AI 凭证")
-    #     return {"api_key": api_key}
-
     if model_name == "qwen3-max":
         section = "Qwen3"
         if not cfg.has_section(section):
