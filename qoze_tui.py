@@ -212,6 +212,9 @@ class TUIStreamOutput:
         total_response_text = ""
         total_reasoning_content = ""
 
+        # 新增：用于累积 AI 消息以解析完整的 tool calls
+        accumulated_ai_message = None
+
         # 激活流式显示区域
         self.stream_display.styles.display = "block"
         self.stream_display.update("")
@@ -220,6 +223,13 @@ class TUIStreamOutput:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
                     current_state, stream_mode="messages", config={"recursion_limit": 150}
             ):
+                # 0. 累积 AI 消息 (用于获取完整的 tool_calls 参数)
+                if isinstance(message_chunk, AIMessage):
+                    if accumulated_ai_message is None:
+                        accumulated_ai_message = message_chunk
+                    else:
+                        accumulated_ai_message += message_chunk
+
                 # 1. 处理 ToolMessage (工具执行结果)
                 if isinstance(message_chunk, ToolMessage):
                     # 遇到工具输出，先固化之前的 AI 文本
@@ -231,11 +241,17 @@ class TUIStreamOutput:
                     # 尝试通过 tool_call_id 获取名称
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
 
-                    # 容错：如果只有一个活跃工具，且 ID 没匹配上，强制认为是这一个
-                    if not tool_name and len(self.active_tools) == 1:
-                        _id, _name = list(self.active_tools.items())[0]
-                        tool_name = _name
-                        self.active_tools.clear()
+                    # 容错：如果没找到，且 active_tools 不为空
+                    if not tool_name and self.active_tools:
+                        # 策略: 如果只有一个，直接取；如果有多个，取最后一个（假设是最近的）
+                        if len(self.active_tools) == 1:
+                            _id, _name = list(self.active_tools.items())[0]
+                            tool_name = _name
+                            self.active_tools.clear()
+                        else:
+                            _id, _name = list(self.active_tools.items())[-1]
+                            tool_name = _name
+                            del self.active_tools[_id]
 
                     # 如果没找到，尝试从 message_chunk 属性获取
                     if not tool_name:
@@ -245,8 +261,10 @@ class TUIStreamOutput:
                     if not tool_name:
                         tool_name = self.current_display_tool if self.current_display_tool else "Tool"
 
+                    # ToolMessage 意味着一轮工具调用结束，重置累积器
+                    accumulated_ai_message = None
+
                     # 只有当活跃工具列表为空时，才停止 Spinner
-                    # (这对于并行调用可能不完美，但对于串行足够)
                     if not self.active_tools:
                         if self.tool_timer:
                             self.tool_timer.stop()
@@ -267,24 +285,22 @@ class TUIStreamOutput:
                     is_error = "error" in content_str.lower() and len(content_str) < 500
 
                     status_icon = "✗" if is_error else "✓"
-                    status_color = "red" if is_error else "green"
-                    status_text = "Failed" if is_error else "Success"
 
                     # Log simple status line
-                    final_msg = f"{status_icon} [bold blue]{tool_name}[/] [{status_color}]{status_text}[/] [rgb(65,170,65)]in {elapsed:.2f}s[/]"
+                    final_msg = f"[bold dim cyan] {status_icon} {tool_name} in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
 
                     continue
 
-                # 2. 处理 Tool Calls (AI 决定调用工具)
-                if isinstance(message_chunk, AIMessage) and message_chunk.tool_calls:
+                # 2. 处理 Tool Calls (使用累积后的消息判断)
+                if accumulated_ai_message and accumulated_ai_message.tool_calls:
                     # 固化之前的 AI 文本
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
 
-                    for tool_call in message_chunk.tool_calls:
+                    for tool_call in accumulated_ai_message.tool_calls:
                         t_name = tool_call.get("name", "Unknown Tool")
                         t_id = tool_call.get("id", "unknown_id")
                         t_args = tool_call.get("args", {})
@@ -292,7 +308,8 @@ class TUIStreamOutput:
                         # Determine display name
                         display_name = self._get_tool_display_name(t_name, t_args)
 
-                        self.active_tools[t_id] = t_name
+                        # 持续更新 active_tools
+                        self.active_tools[t_id] = display_name
                         self.current_display_tool = display_name
 
                         # Start Spinner if not running
@@ -494,7 +511,7 @@ class Qoze(App):
 
         # 使用提示面板
         tips_content = Group(
-            Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"),
+            # Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"),
             Text(""),
             Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
             Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
@@ -503,8 +520,8 @@ class Qoze(App):
             Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
             Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
             Text(""),
-            Text("✓ Agent Ready ",
-                 style="italic bold green", justify="center")
+            # Text("✓ Agent Ready ",
+            #      style="italic bold green", justify="center")
         )
 
         # 输出所有内容
