@@ -346,19 +346,19 @@ class TUIStreamOutput:
 class Qoze(App):
     CSS = """
     Screen { background: #1a1b26; color: #a9b1d6; }
-    TopBar { dock: top; height: 1; background: #1a1b26; color: #c0caf5; }
+    TopBar { dock: top; height: 1; background: #13131c; color: #c0caf5; }
 
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
 
     /* 聊天区域布局调整 */
-    #chat-area { width: 75%; height: 100%; }
-    #main-output { width: 100%; height: 1fr; background: #1a1b26; border: none; padding: 1 2; }
+    #chat-area { width: 77%; height: 100%; }
+    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 1 2; }
     /* 工具状态栏 */
     #tool-status {
         width: 100%;
         height: auto;
         min-height: 1;
-        background: #1a1b26;
+        background: #13131c;
         padding: 0 2;
         display: none;
     }
@@ -369,7 +369,7 @@ class Qoze(App):
         width: 100%;
         height: auto;
         max-height: 60%;
-        background: #1a1b26;
+        background: #13131c;
         padding: 0 2;
         border-top: solid #414868;
         display: none;
@@ -380,19 +380,19 @@ class Qoze(App):
     #stream-output > BlockQuote {
         border-left: solid #565f89;
         color: #787c99;
-        background: #1a1b26;
+        background: #13131c;
         text-style: italic;
         margin: 0 0 1 0;
         padding: 0 1;
     }
 
-    #sidebar { width: 25%; height: 100%; background: #16161e; padding: 1 2; color: #787c99; border-left: solid #2f334d; }
-    #bottom-container { height: auto; dock: bottom; background: #1a1b26; }
-    #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #1a1b26; }
+    #sidebar { width: 23%; height: 100%; background: #16161e; padding: 1 2; color: #787c99; border-left: solid #2f334d; }
+    #bottom-container { height: auto; dock: bottom; background: #13131c; }
+    #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
-    Input { width: 1fr; background: #1a1b26; border: none; color: #c0caf5; padding: 0; }
+    Input { width: 1fr; background: #13131c; border: none; color: #c0caf5; padding: 0; }
     Input:focus { border: none; }
-    StatusBar { height: 1; width: 100%; background: #1a1b26; dock: bottom; }
+    StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
     LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
     """
 
@@ -459,9 +459,9 @@ class Qoze(App):
         tips_content = Group(
             Text("✦ Welcome to QozeCode 0.2.3", style="bold dim cyan"),
             Text(""),
-            Text("模型:", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
-            Text("当前目录:", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
-            Text("使用提示:", style="bold white"),
+            Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
+            Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
+            Text("使用提示: ", style="bold white"),
             Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
             Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
             Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
@@ -477,7 +477,7 @@ class Qoze(App):
             tips_content,
             title="[bold #bb9af7]Tips[/]",
             border_style="bold #414868",
-            padding=(1, 2)
+            padding=(0, 1)
         )))
 
     async def init_agent_worker(self):
