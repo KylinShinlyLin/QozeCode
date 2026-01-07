@@ -10,7 +10,7 @@ from datetime import datetime
 
 from textual.app import App, ComposeResult, on
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget
+from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget, TextArea
 from textual.binding import Binding
 from rich.text import Text
 from rich.rule import Rule
@@ -442,8 +442,24 @@ class Qoze(App):
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
     #input-line { height: 4; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
+    
     Input { width: 1fr; background: #13131c; border: none; color: #c0caf5; padding: 0; }
     Input:focus { border: none; }
+    
+    /* 多行输入框样式 */
+    TextArea {
+        height: 15;
+        width: 100%;
+        background: #13131c;
+        border: solid #bb9af7; 
+        color: #c0caf5;
+        padding: 1;
+    }
+    
+    .hidden {
+        display: none;
+    }
+    
     StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
     LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
     """
@@ -451,12 +467,15 @@ class Qoze(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+l", "clear_screen", "Clear"),
+        Binding("ctrl+d", "submit_multiline", "Submit (Multi-line)"),
+        Binding("escape", "cancel_multiline", "Cancel (Multi-line)"),
     ]
 
     def __init__(self, model_name):
         super().__init__()
         self.model_name = model_name
         self.agent_ready = False
+        self.multiline_mode = False
 
     def compose(self) -> ComposeResult:
         yield TopBar()
@@ -472,6 +491,8 @@ class Qoze(App):
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
                 yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
+            # 添加多行输入组件，初始状态隐藏
+            yield TextArea(id="multi-line-input", classes="hidden")
             yield StatusBar(model_name=self.model_name)
 
     def on_mount(self):
@@ -479,6 +500,7 @@ class Qoze(App):
         self.tool_status = self.query_one("#tool-status", Static)
         self.stream_output = self.query_one("#stream-output", MarkdownWidget)
         self.input_box = self.query_one("#input-box", Input)
+        self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.status_bar = self.query_one(StatusBar)
 
         # 初始化流式输出适配器，传入 main_log 和 stream_output
@@ -495,7 +517,7 @@ class Qoze(App):
         qoze_code_art = """
         ╭────────────────────────────────────────────────────────────────────────────╮
         │  ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗    │
-        │ ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝    │
+        │ ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔════██╗██╔════╝    │
         │ ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗      │
         │ ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝      │
         │ ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗    │
@@ -515,6 +537,7 @@ class Qoze(App):
             Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
             Text("使用提示: ", style="bold white"),
             Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
+            Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
             Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
             Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
             Text(""),
@@ -550,16 +573,11 @@ class Qoze(App):
             self.main_log.write(f"[red]Initialization Failed: {e}[/]")
             self.main_log.write(f"[red]{traceback.format_exc()}[/]")
 
-    @on(Input.Submitted)
-    async def handle_input(self, event: Input.Submitted):
-        if not self.agent_ready:
-            return
-
-        user_input = event.value
+    async def process_user_input(self, user_input):
+        """处理用户输入的核心逻辑"""
         if not user_input.strip():
             return
 
-        self.input_box.value = ""
         self.status_bar.update_state("Thinking...")
 
         # Display User Input
@@ -594,6 +612,67 @@ class Qoze(App):
         )
 
         self.status_bar.update_state("Idle")
+
+    @on(Input.Submitted)
+    async def handle_input(self, event: Input.Submitted):
+        if not self.agent_ready:
+            return
+
+        user_input = event.value
+        self.input_box.value = ""
+
+        # 检查是否进入多行模式
+        if user_input.lower() == 'line':
+            self.multiline_mode = True
+
+            # 切换界面元素
+            self.query_one("#input-line").add_class("hidden")
+            self.multi_line_input.remove_class("hidden")
+
+            # 聚焦多行输入框
+            self.multi_line_input.focus()
+
+            # 更新状态栏提示
+            self.status_bar.update_state("Multi-line Mode (Ctrl+D to submit, Esc to cancel)")
+            self.main_log.write(Text("\n💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交", style="dim"))
+            return
+
+        await self.process_user_input(user_input)
+
+    async def action_submit_multiline(self):
+        """提交多行输入"""
+        if not self.multiline_mode:
+            return
+
+        # 获取内容
+        user_input = self.multi_line_input.text
+
+        # 退出多行模式
+        self.multiline_mode = False
+        self.multi_line_input.add_class("hidden")
+        self.multi_line_input.text = ""  # 清空
+        self.query_one("#input-line").remove_class("hidden")
+        self.input_box.focus()
+
+        # 处理输入
+        if user_input.strip():
+            await self.process_user_input(user_input)
+        else:
+            self.status_bar.update_state("Idle")
+
+    def action_cancel_multiline(self):
+        """取消多行输入"""
+        if not self.multiline_mode:
+            return
+
+        self.multiline_mode = False
+        self.multi_line_input.add_class("hidden")
+        self.multi_line_input.text = ""  # 清空
+        self.query_one("#input-line").remove_class("hidden")
+        self.input_box.focus()
+
+        self.status_bar.update_state("Idle")
+        self.main_log.write(Text("💡 已退出多行编辑模式", style="dim"))
 
 
 def main():
