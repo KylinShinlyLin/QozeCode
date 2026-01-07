@@ -88,18 +88,14 @@ class Sidebar(Static):
         modified = get_modified_files()
 
         text = Text()
-        text.append("\nPROJECT INFO\n", style="bold #7aa2f7 underline")
+        text.append("\n项目信息\n", style="bold #7aa2f7 underline")
         text.append(f"Repo: ", style="dim white")
         text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
 
-        path_parts = cwd.split('/')
-        short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
-        text.append("Path: ", style="dim white")
-        text.append(f".../{short_cwd}\n\n", style="cyan")
-
-        text.append("SESSION\n", style="bold #bb9af7 underline")
-        text.append("Status: ", style="dim white")
-        text.append("Active\n", style="green")
+        # path_parts = cwd.split('/')
+        # short_cwd = '/'.join(path_parts[-2:]) if len(path_parts) > 1 else cwd
+        # text.append("Path: ", style="dim white")
+        # text.append(f".../{short_cwd}\n\n", style="cyan")
 
         # Git Status
         text.append("GIT STATUS\n", style="bold #f7768e underline")
@@ -517,12 +513,12 @@ class Qoze(App):
 
         qoze_code_art = """
         ╭────────────────────────────────────────────────────────────────────────────╮
-        │  ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗    │
-        │ ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔════██╗██╔════╝    │
-        │ ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗      │
-        │ ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝      │
-        │ ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗    │
-        │  ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝    │
+        │   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
+        │   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
+        │   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
+        │   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
+        │   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
+        │    ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
         ╰────────────────────────────────────────────────────────────────────────────╯
         """
 
