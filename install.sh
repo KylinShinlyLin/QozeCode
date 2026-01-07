@@ -113,12 +113,12 @@ create_venv() {
     # 升级 pip
     pip install --upgrade pip
     
-    log_success "虚拟环境创建完成"
+#    log_success "虚拟环境创建完成"
 }
 
 # 安装项目依赖
 install_dependencies() {
-    log_info "安装项目依赖..."
+#    log_info "安装项目依赖..."
     
     source "$VENV_DIR/bin/activate"
     cd "$BUILD_DIR/QozeCode"
@@ -134,7 +134,7 @@ install_dependencies() {
 #    log_success "浏览器功能安装完成"
     
     # 预安装 PyInstaller（为二进制构建做准备）
-    log_info "预安装 PyInstaller..."
+#    log_info "预安装 PyInstaller..."
     if pip install pyinstaller; then
         log_success "PyInstaller 安装成功"
         # 验证安装
@@ -173,7 +173,7 @@ ensure_pyinstaller() {
         
         # 验证安装
         if python -c "import PyInstaller; print(f'PyInstaller 版本: {PyInstaller.__version__}')" 2>/dev/null; then
-            log_success "PyInstaller 验证通过"
+#            log_success "PyInstaller 验证通过"
             return 0
         else
             log_error "PyInstaller 安装验证失败"
