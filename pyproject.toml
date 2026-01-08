@@ -19,6 +19,7 @@ dependencies = [
     "langchain-deepseek",
     "langchain-google-genai",
     "langchain-aws",
+    "langchain-xai",
     "langchain-community",
     "langchain-openai",
     "langchain-qwq",
@@ -33,7 +34,7 @@ dependencies = [
     "colorama",
     "python-crontab",
     "hnswlib",
-    "textual"
+    "textual",
 ]
 
 [project.scripts]
