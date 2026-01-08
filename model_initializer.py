@@ -21,34 +21,27 @@ def initialize_llm(model_name: str):
     from config_manager import ensure_model_credentials
     if model_name == 'Claude-4':
         try:
-            # 延迟导入重依赖
-            # from langchain_aws import ChatBedrock
             from langchain_aws import ChatBedrockConverse
             from botocore.config import Config
             import boto3
-
-            # 读取 AWS 凭证（不做网络验证）
             creds = ensure_model_credentials(model_name)
-
             # 创建带代理的 boto3 配置
             config = Config(
                 region_name=creds['region_name']
             )
-
             # 创建 bedrock 客户端
             bedrock_client = boto3.client(
                 service_name="bedrock-runtime",
                 region_name=creds['region_name'],
                 config=config
             )
-
             llm = ChatBedrockConverse(
                 client=bedrock_client,
                 model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
                 region_name=creds['region_name'],
                 additional_model_request_fields={
                     "thinking": {"type": "enabled", "budget_tokens": 4096},
-                },
+                }
             )
             return llm
         except ImportError:
@@ -126,7 +119,6 @@ def initialize_llm(model_name: str):
     elif model_name == 'glm-4.6':
         try:
             from langchain_community.chat_models import ChatZhipuAI
-            # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatZhipuAI(
                 model="GLM-4.6",
@@ -139,13 +131,10 @@ def initialize_llm(model_name: str):
             raise
     elif model_name == 'qwen3-max':
         try:
-            # 延迟导入重依赖
             from langchain_qwq import ChatQwen
-            # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatQwen(
                 model="qwen3-max-preview",
-                # model="qwen3-max",
                 temperature=0.3,
                 api_key=creds["api_key"],
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -159,59 +148,58 @@ def initialize_llm(model_name: str):
     else:
         raise ValueError(f"不支持的模型: {model_name}")
 
+# def verify_credentials(model_name: str):
+#     """
+#     针对不同模型执行快速凭证验证（短超时，不在加载状态下）。
+#     成功则静默，失败抛异常。
+#     """
+#     import os
+#     import httpx
+#     from config_manager import ensure_model_credentials
+#
+#     if model_name in ('gpt-5', 'gpt-5-codex'):
+#         creds = ensure_model_credentials(model_name)
+#         api_key = creds["api_key"]
+#         os.environ["OPENAI_API_KEY"] = api_key
+#
+#     elif model_name == 'DeepSeek':
+#         creds = ensure_model_credentials(model_name)
+#         api_key = creds["api_key"]
+#         os.environ["DEEPSEEK_API_KEY"] = api_key
+#         try:
+#             with httpx.Client(timeout=5.0) as client:
+#                 r = client.get(
+#                     "https://api.deepseek.com/v1/models",
+#                     headers={"Authorization": f"Bearer {api_key}"}
+#                 )
+#             if r.status_code != 200:
+#                 raise RuntimeError(f"DeepSeek 验证失败: {r.status_code} {r.text[:200]}")
+#         except Exception as e:
+#             raise RuntimeError(f"DeepSeek 验证失败: {e}")
+#
+#     elif model_name == 'Claude-4':
+#         import boto3
+#         from botocore.config import Config
+#         ensure_model_credentials(model_name)
+#
+#     elif model_name == 'gemini':
+#         creds = ensure_model_credentials(model_name)
+#         cred_path = creds.get("credentials_path")
+#         if not cred_path or not os.path.exists(cred_path):
+#             raise RuntimeError("Gemini 凭证验证失败: 凭证文件不存在")
+#
+#     else:
+#         raise ValueError(f"不支持的模型: {model_name}")
 
-def verify_credentials(model_name: str):
-    """
-    针对不同模型执行快速凭证验证（短超时，不在加载状态下）。
-    成功则静默，失败抛异常。
-    """
-    import os
-    import httpx
-    from config_manager import ensure_model_credentials
 
-    if model_name in ('gpt-5', 'gpt-5-codex'):
-        creds = ensure_model_credentials(model_name)
-        api_key = creds["api_key"]
-        os.environ["OPENAI_API_KEY"] = api_key
-
-    elif model_name == 'DeepSeek':
-        creds = ensure_model_credentials(model_name)
-        api_key = creds["api_key"]
-        os.environ["DEEPSEEK_API_KEY"] = api_key
-        try:
-            with httpx.Client(timeout=5.0) as client:
-                r = client.get(
-                    "https://api.deepseek.com/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-            if r.status_code != 200:
-                raise RuntimeError(f"DeepSeek 验证失败: {r.status_code} {r.text[:200]}")
-        except Exception as e:
-            raise RuntimeError(f"DeepSeek 验证失败: {e}")
-
-    elif model_name == 'Claude-4':
-        import boto3
-        from botocore.config import Config
-        ensure_model_credentials(model_name)
-
-    elif model_name == 'gemini':
-        creds = ensure_model_credentials(model_name)
-        cred_path = creds.get("credentials_path")
-        if not cred_path or not os.path.exists(cred_path):
-            raise RuntimeError("Gemini 凭证验证失败: 凭证文件不存在")
-
-    else:
-        raise ValueError(f"不支持的模型: {model_name}")
-
-
-def verify_llm(llm):
-    """
-    对 LLM 做一次最小调用验证密钥是否可用。
-    如果失败则抛出异常由上层处理。
-    """
-    try:
-        # LangChain Chat 模型支持直接 invoke 字符串
-        llm.invoke("ping")
-    except Exception as e:
-        console.print(f"❌ 密钥验证失败: {e}", style="red")
-        raise
+# def verify_llm(llm):
+#     """
+#     对 LLM 做一次最小调用验证密钥是否可用。
+#     如果失败则抛出异常由上层处理。
+#     """
+#     try:
+#         # LangChain Chat 模型支持直接 invoke 字符串
+#         llm.invoke("ping")
+#     except Exception as e:
+#         console.print(f"❌ 密钥验证失败: {e}", style="red")
+#         raise
