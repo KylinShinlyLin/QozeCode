@@ -105,6 +105,14 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         if not api_key:
             fail("OpenAI API Key (section [openai] -> api_key)")
         return {"api_key": api_key}
+    if model_name == "Grok-4.1-Fast":
+        section = "XAI"
+        if not cfg.has_section(section):
+            fail("XAI API Key (section [XAI] -> api_key)")
+        api_key = cfg.get(section, "api_key", fallback=None)
+        if not api_key:
+            fail("XAI API Key (section [XAI] -> api_key)")
+        return {"api_key": api_key}
 
     if model_name == "deepseek-chat":
         section = "deepseek"

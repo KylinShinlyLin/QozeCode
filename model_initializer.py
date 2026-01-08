@@ -50,6 +50,14 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Claude-4 初始化失败: {str(e)}")
             raise
+    elif model_name == 'Grok-4.1-Fast':
+        from langchain_xai import ChatXAI
+        creds = ensure_model_credentials(model_name)
+        llm = ChatXAI(
+            api_key=creds["api_key"],
+            model="grok-4-1-fast-reasoning",
+        )
+        return llm
     elif model_name in ('gemini-3-pro', 'gemini-3-flash'):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI

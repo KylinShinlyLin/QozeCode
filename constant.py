@@ -1,4 +1,5 @@
-template_content = """[openai]
+template_content = """
+[openai]
 api_key=
 
 [deepseek]
@@ -9,13 +10,13 @@ session_token=
 region_name=us-east-1
 
 [vertexai]
-project=
-location=us-central1
-credentials_path=
+project= #你的项目id
+location=global
+credentials_path= #你的gcp credentials 文件路径
 
-[ZHIPU]
-api_key=
+[tavily]
+tavily_key=
 
-[Qwen3]
+[XAI]
 api_key=
 """

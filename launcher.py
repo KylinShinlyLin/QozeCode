@@ -119,9 +119,8 @@ def get_model_choice() -> Optional[str]:
         return None
 
 
-# 判断配置文件是否存在，如果不存在则创建一个
-# 函数 ensure_config（记录文件检查与创建耗时）
 def ensure_config():
+    # 区分系统环境 配置文件
     config_dir = "/etc/conf"
     config_file = os.path.join(config_dir, "qoze.conf")
     fallback_dir = os.path.expanduser("~/.qoze")
@@ -137,7 +136,6 @@ def ensure_config():
         return
     except Exception:
         pass
-
     try:
         os.makedirs(fallback_dir, exist_ok=True)
         with open(fallback_file, "w", encoding="utf-8") as f:
