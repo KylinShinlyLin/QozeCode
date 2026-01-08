@@ -1,4 +1,3 @@
-# 顶部模块区（增加日志工具）
 # !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -67,13 +66,14 @@ def get_model_choice() -> Optional[str]:
 
     # 定义选项 - 简洁对齐
     choices = [
-        "gpt-5.2                     OpenAI",
         "gemini-3-pro   (think)      Google GCP",
         "gemini-3-flash (think)      Google GCP",
+        "Grok 4.1 Fast  (think)      XAI",
+        "Claude-4       (think)      bedrock",
         "qwen3-max      (think)      Alibaba Cloud",
-        "deepseek-reasoner           DeepSeek",
+        "gpt-5.2                     OpenAI",
+        "deepseek-chat               DeepSeek",
         "glm-4.6                     智普",
-        "claude-4                    bedrock",
         "[退出程序]"
     ]
 
@@ -92,16 +92,18 @@ def get_model_choice() -> Optional[str]:
             return None
         selected = answers['model']
         # 根据选择返回对应的模型名
-        if "claude-4" in selected:
-            return 'claude-4'
+        if "Claude-4" in selected:
+            return 'Claude-4'
         elif "gemini-3-pro" in selected:
             return 'gemini-3-pro'
         elif "gemini-3-flash" in selected:
             return 'gemini-3-flash'
+        elif "Grok 4.1 Fast" in selected:
+            return 'Grok-4.1-Fast'
         elif "gpt-5.2" in selected:
             return 'gpt-5.2'
-        elif "deepseek-reasoner" in selected:
-            return 'deepseek-reasoner'
+        elif "deepseek-chat" in selected:
+            return 'deepseek-chat'
         elif "glm-4.6" in selected:
             return 'glm-4.6'
         # elif "kimi-k2" in selected:
@@ -142,32 +144,3 @@ def ensure_config():
             f.write(template_content)
     except Exception as e:
         console.print(f"创建配置文件失败: {e}", style="red")
-
-
-# # 函数 launch_agent（记录启动与返回耗时）
-# def launch_agent(model: str):
-#     """启动 QozeCode Agent"""
-#     from qoze_code_agent import handleRun
-#     # 直接调用 handleRun 并传入选择的模型
-#     handleRun(model_name=model)
-#
-#
-# # 函数 main（记录各阶段耗时）
-# def main():
-#     """主函数"""
-#     try:
-#         ensure_config()
-#         # 获取模型选择
-#         model = get_model_choice()
-#         if model is None:
-#             return
-#         # 启动 agent
-#         launch_agent(model)
-#     except KeyboardInterrupt:
-#         console.print("\n👋 再见", style="dim")
-#     except Exception as e:
-#         console.print(f"\n❌ 错误: {str(e)}", style="red", markup=False)
-#
-#
-# if __name__ == '__main__':
-#     main()

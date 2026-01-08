@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+import tempfile
 import time
 
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
@@ -119,7 +120,7 @@ class Sidebar(Static):
 
         # Git Status
         if modified:
-            text.append("GIT 变更\n", style="bold #7dcfff underline")
+            text.append("GIT 变更记录\n", style="bold #7dcfff underline")
             for status, filename in modified:
                 if 'M' in status:
                     icon = "✹"
@@ -223,15 +224,17 @@ class TUIStreamOutput:
 
         # 激活流式显示区域
         self.stream_display.styles.display = "block"
-        self.stream_display.update("")
+        # self.stream_display.update("")
 
         # 重置更新时间
         self.last_update_time = 0
 
         try:
+
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
                     current_state, stream_mode="messages", config={"recursion_limit": 150}
             ):
+                # self.main_log.write(Text(f"{message_chunk}", style="bold cyan"))
                 # 0. 累积 AI 消息 (用于获取完整的 tool_calls 参数)
                 if isinstance(message_chunk, AIMessage):
                     if accumulated_ai_message is None:
@@ -328,10 +331,22 @@ class TUIStreamOutput:
                     # 继续显示后续可能的内容
                     self.stream_display.styles.display = "block"
 
-                # 3. 处理 Reasoning
+                '''
+                每个厂商的 思考模型的返回的 reasoning 的格式是不一样的，这里对每个厂商进行兼容
+                '''
+                # 其它模型 比如 qwen glm deepseek 等等 thinking
                 reasoning = ""
                 if hasattr(message_chunk, "additional_kwargs") and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get("reasoning_content", "")
+
+                # claude thinking
+                if isinstance(message_chunk.content, list):
+                    for content_item in message_chunk.content:
+                        if isinstance(content_item, dict) and content_item.get("type") == "reasoning_content":
+                            reasoning_content = content_item.get("reasoning_content", {})
+                            reasoning += reasoning_content.get("text", "") if isinstance(reasoning_content,
+                                                                                         dict) else str(
+                                reasoning_content)
 
                 # Gemini thinking
                 if isinstance(message_chunk.content, list):
@@ -339,6 +354,7 @@ class TUIStreamOutput:
                         if isinstance(content_item, dict) and content_item.get("type") == "thinking":
                             reasoning += content_item.get("thinking", "")
 
+                # 判断是否有深度思考的内容
                 if reasoning:
                     current_reasoning_content += reasoning
                     total_reasoning_content += reasoning
@@ -373,7 +389,7 @@ class TUIStreamOutput:
                         if current_response_text:
                             md_content += current_response_text
 
-                        self.stream_display.update(md_content)
+                        await self.stream_display.update(md_content)
                         self.main_log.scroll_end(animate=False)
                         self.stream_display.scroll_end(animate=False)
                         self.last_update_time = now
@@ -393,7 +409,7 @@ class TUIStreamOutput:
         except Exception as e:
             traceback.print_exc()
             self.main_log.write(f"[red]Stream Error: {e}[/]")
-            self.stream_display.update("")
+            # self.stream_display.update("")
             self.stream_display.styles.display = "none"
 
         finally:
@@ -505,6 +521,7 @@ class Qoze(App):
                 yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar", model_name=self.model_name)
         with Vertical(id="bottom-container"):
+            # todo 这里增加一个显示 状态的 运行
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
                 yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
@@ -727,23 +744,14 @@ class Qoze(App):
 
 
 def main():
-    # 0. 设置 TUI 模式环境变量 (关键!)
-    os.environ["QOZE_TUI_MODE"] = "true"
-
     # 1. 确保配置存在
     launcher.ensure_config()
-
     # 2. 获取模型选择
-    try:
-        model = launcher.get_model_choice()
-        os.system('cls' if os.name == 'nt' else 'clear')
-    except Exception as e:
-        print(f"Model selection failed: {e}")
-        model = "gpt-5.2"
-
+    model = launcher.get_model_choice()
+    # 清理 console
+    os.system('cls' if os.name == 'nt' else 'clear')
     if model is None:
         return
-
     # 3. 启动 TUI App
     app = Qoze(model_name=model)
     app.run()

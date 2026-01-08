@@ -15,7 +15,7 @@
         - [OpenAI](#1-openai)
         - [DeepSeek](#2-deepseek)
         - [智普](#3-glm-4-智谱ai)
-        - [Claude](#4-claude-4-aws-bedrock)
+        - [Claude](#4-Claude-4-aws-bedrock)
         - [Gemini](#5-gemini-google-vertex-ai)
     - [使用方法](#使用方法)
 - [许可证](#许可证)

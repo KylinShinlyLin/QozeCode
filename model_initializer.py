@@ -3,12 +3,6 @@
 负责根据模型名称初始化对应的LLM实例
 """
 
-import os
-
-# 屏蔽 absl 库的 STDERR 警告
-os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
-os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
-
 # 保留轻量级导入
 from shared_console import console
 
@@ -25,10 +19,11 @@ def initialize_llm(model_name: str):
     """根据模型名称初始化对应的LLM"""
     import os
     from config_manager import ensure_model_credentials
-    if model_name == 'claude-4':
+    if model_name == 'Claude-4':
         try:
             # 延迟导入重依赖
-            from langchain_aws import ChatBedrock
+            # from langchain_aws import ChatBedrock
+            from langchain_aws import ChatBedrockConverse
             from botocore.config import Config
             import boto3
 
@@ -47,10 +42,13 @@ def initialize_llm(model_name: str):
                 config=config
             )
 
-            llm = ChatBedrock(
+            llm = ChatBedrockConverse(
                 client=bedrock_client,
                 model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
-                region_name=creds['region_name']
+                region_name=creds['region_name'],
+                additional_model_request_fields={
+                    "thinking": {"type": "enabled", "budget_tokens": 4096},
+                },
             )
             return llm
         except ImportError:
@@ -61,26 +59,20 @@ def initialize_llm(model_name: str):
             raise
     elif model_name in ('gemini-3-pro', 'gemini-3-flash'):
         try:
-            from langchain_google_vertexai import ChatVertexAI
+            from langchain_google_genai import ChatGoogleGenerativeAI
             from google.oauth2 import service_account
             import os
             import logging
             import warnings
-
-            # 抑制 Gemini schema 相关的警告信息
-            logging.getLogger('langchain_google_vertexai').setLevel(logging.ERROR)
-            logging.getLogger('google.ai.generativelanguage_v1beta').setLevel(logging.ERROR)
-            # 抑制 vertex_ai 参数警告
-            warnings.filterwarnings("ignore", message=".*vertex_ai.*not default parameter.*")
             creds = ensure_model_credentials(model_name)
             credentials = service_account.Credentials.from_service_account_file(
                 creds['credentials_path'],
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
             # 仅构建客户端，不做网络验证
-            llm = ChatVertexAI(
+            llm = ChatGoogleGenerativeAI(
                 credentials=credentials,
-                model_name=get_gemini_model_name(model_name),
+                model=get_gemini_model_name(model_name),
                 project=creds["project"],
                 location="global",  # gemini-3 只有全球节点
                 vertex_ai=True,
@@ -118,16 +110,11 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
             raise
-        except Exception as e:
-            print(f"❌ {model_name} 初始化失败: {str(e)}")
-            raise
-    elif model_name == 'deepseek-reasoner':
+    elif model_name == 'deepseek-chat':
         try:
-            # 延迟导入重依赖
             from langchain_deepseek import ChatDeepSeek
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
-
             llm = ChatDeepSeek(
                 model="deepseek-chat",
                 api_key=creds["api_key"]
@@ -136,35 +123,24 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
             raise
-        except Exception as e:
-            print(f"❌ DeepSeek 初始化失败: {str(e)}")
-            raise
     elif model_name == 'glm-4.6':
         try:
-            # 延迟导入重依赖
             from langchain_community.chat_models import ChatZhipuAI
-
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatZhipuAI(
                 model="GLM-4.6",
                 api_key=creds["api_key"],
                 temperature=0.3,
-                # thinking={"type": "enable"}
             )
             return llm
         except ImportError:
             print("❌ 缺少 GLM 依赖")
             raise
-        except Exception as e:
-            print(f"❌ GLM 初始化失败: {str(e)}")
-            raise
-
     elif model_name == 'qwen3-max':
         try:
             # 延迟导入重依赖
             from langchain_qwq import ChatQwen
-
             # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatQwen(
@@ -179,9 +155,6 @@ def initialize_llm(model_name: str):
             return llm
         except ImportError:
             print("❌ 缺少 GLM 依赖")
-            raise
-        except Exception as e:
-            print(f"❌ GLM 初始化失败: {str(e)}")
             raise
     else:
         raise ValueError(f"不支持的模型: {model_name}")
@@ -216,7 +189,7 @@ def verify_credentials(model_name: str):
         except Exception as e:
             raise RuntimeError(f"DeepSeek 验证失败: {e}")
 
-    elif model_name == 'claude-4':
+    elif model_name == 'Claude-4':
         import boto3
         from botocore.config import Config
         ensure_model_credentials(model_name)

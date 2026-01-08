@@ -15,3 +15,6 @@ credentials_path= #你的gcp credentials 文件路径
 
 [tavily]
 tavily_key=
+
+[XAI]
+api_key=
