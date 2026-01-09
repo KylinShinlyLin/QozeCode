@@ -18,7 +18,7 @@ RESET = "\033[0m"
 
 
 @tool
-def execute_command(command: str, timeout: int = 120) -> str:
+async def execute_command(command: str, timeout: int = 120) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
     
     Args:

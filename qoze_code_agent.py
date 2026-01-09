@@ -30,7 +30,12 @@ from langchain_core.messages import ToolMessage
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict, Annotated
 from shared_console import console
+import sys
+import os
+
 from tools.execute_command_tool import execute_command
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, get_webpage_to_markdown
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_system_prompt
@@ -128,7 +133,7 @@ async def tool_node(state: dict):
         tool = tools_by_name[tool_call["name"]]
         try:
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown"]:
+            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown", "execute_command"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
