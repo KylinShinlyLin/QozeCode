@@ -71,10 +71,10 @@ def llm_call(state: dict):
     system_info = platform.system()
     system_version = "unknown"
     current_dir = os.getcwd()
-    username = os.getenv('USER', 'unknown')
-    hostname = socket.gethostname()
+    # username = os.getenv('USER', 'unknown')
+    # hostname = socket.gethostname()
 
-    shell = home_dir = "unknown"
+    shell = "unknown"
     machine_type = processor = "unknown"
     directory_tree = "无法获取目录结构"
     # 获取系统信息
@@ -88,12 +88,12 @@ def llm_call(state: dict):
         # 当前工作目录
         current_dir = os.getcwd()
         # 用户信息
-        username = os.getenv('USER') or os.getenv('USERNAME') or 'unknown'
+        # username = os.getenv('USER') or os.getenv('USERNAME') or 'unknown'
         # 主机名
-        hostname = socket.gethostname()
+        # hostname = socket.gethostname()
         # 环境变量中的重要信息
         shell = os.getenv('SHELL', 'unknown')
-        home_dir = os.getenv('HOME', 'unknown')
+        # home_dir = os.getenv('HOME', 'unknown')
         directory_tree = get_directory_tree(current_dir)
 
     except Exception:
@@ -101,8 +101,8 @@ def llm_call(state: dict):
 
     system_msg = get_system_prompt(system_info=system_info, system_release=system_release,
                                    system_version=system_version, machine_type=machine_type, processor=processor,
-                                   hostname=hostname, username=username, shell=shell, current_dir=current_dir,
-                                   home_dir=home_dir, directory_tree=directory_tree, plan_mode=plan_mode)
+                                   shell=shell, current_dir=current_dir,
+                                   directory_tree=directory_tree)
 
     return {
         "messages": [

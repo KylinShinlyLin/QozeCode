@@ -7,15 +7,13 @@ import os
 
 
 def get_system_prompt(system_info, system_release, system_version, machine_type,
-                      processor, hostname, username, shell, current_dir,
-                      home_dir, directory_tree, plan_mode: bool):
+                      processor, shell, current_dir, directory_tree):
     # print(f"当前目录:{directory_tree}")
     """
     获取系统提示词模板
 
     Args:
         各种系统环境参数
-        plan_mode: 是否启用飞行模式
 
     Returns:
         str: 格式化的系统提示词
@@ -67,25 +65,21 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 **操作系统**: {system_info} {system_release} ({system_version})
 **架构**: {machine_type}
 **处理器**: {processor}
-**主机名**: {hostname}
-**用户**: {username}
 **Shell**: {shell}
 
 ## 当前环境
 **工作目录**: {current_dir}
-**用户主目录**: {home_dir}
 
 ## 工作原则
 - **严格遵循ReAct执行模式**：对于复杂任务，必须按照"思考分析 → 明确行动 → 执行操作 → 观察结果 → 反思调整"的循环流程，每步都要清晰表达推理过程，直到任务完成.
 - 基于ReAct机制，在触发 function call 之前需要说明为什么需要这个调用工具.
-- execute_command 避免一直阻塞当前 agent 进程，可以使用 -y 等方式跳过阻塞.
-- 或者避免大量 token 的浪费，尽量精准检索，尽量避免直接读取整个文件.
+- execute_command 避免一直阻塞当前 agent 进程，可以使用 -y 或者 sleep 一段时间的方式避免一直阻塞.
+- 为了避免读取大文件造成 token 的浪费，尽量精准检索，或者多步阅读尽量不要一次加载整个文件.
 - 始终考虑当前的系统环境和资源限制.
 - 在执行可能影响系统的操作前，先评估风险.
 - 优先使用适合当前操作系统的命令和工具.
 - 保持对用户数据和隐私的尊重.
-- 你可以使用python脚本，帮我处理Excel相关的任务.
-- 所有的临时文件和脚本都放到当前目录的 qoze 临时文件夹中.
+- 所有的临时文件和脚本都放到当前目录的 .qoze 目录中.
 - 使用命令行不要去读取当前目录以外的目录结构和文件内容，只能在当前目录下检索读取文件
 
 {rules_prompt}
