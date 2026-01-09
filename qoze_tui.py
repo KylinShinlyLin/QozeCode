@@ -49,6 +49,23 @@ def get_git_info():
         return "local"
 
 
+def format_repo_path(repo):
+    """格式化仓库路径显示"""
+    if repo == "local":
+        return repo
+
+    # 尝试提取仓库名
+    if repo.endswith('.git'):
+        repo = repo[:-4]
+
+    if 'github.com' in repo:
+        parts = repo.split('/')
+        if len(parts) >= 2:
+            return f"{parts[-2]}/{parts[-1]}"
+
+    return repo
+
+
 def get_git_branch():
     try:
         branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True,
@@ -142,6 +159,55 @@ class Sidebar(Static):
         self.update(text)
 
 
+class RequestIndicator(Static):
+    """请求状态指示器 - 显示动画和持续时间"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.is_active = False
+        self.start_time = None
+        self.update_timer = None
+
+    def start_request(self):
+        """开始请求动画"""
+        self.is_active = True
+        self.start_time = time.time()
+        self.remove_class("hidden")
+        # 启动定时更新
+        if self.update_timer:
+            self.update_timer.stop()
+        self.update_timer = self.set_timer(0.1, self._update_display)
+
+    def stop_request(self):
+        """停止请求动画"""
+        self.is_active = False
+        self.start_time = None
+        self.add_class("hidden")
+        if self.update_timer:
+            self.update_timer.stop()
+            self.update_timer = None
+
+    def _update_display(self):
+        """更新显示内容"""
+        if not self.is_active or not self.start_time:
+            return
+
+        elapsed = time.time() - self.start_time
+        frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
+        # 格式化持续时间 (HH:MM:SS)
+        total_seconds = int(elapsed)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        content = f"[bold cyan]{frame} Processing request... {time_str}[/]"
+        self.update(Text.from_markup(content))
+        # 如果仍在活动状态，设置下一次更新
+        if self.is_active:
+            self.update_timer = self.set_timer(0.1, self._update_display)
+
+
 class StatusBar(Static):
     def __init__(self, model_name="Unknown"):
         super().__init__()
@@ -152,6 +218,9 @@ class StatusBar(Static):
     def update_state(self, state):
         self.state_desc = state
         self.refresh()
+
+    def render(self):
+        return Text("请求期间 ctrl+c 可以终止当前请求", style="dim")
 
 
 class TUIStreamOutput:
@@ -491,9 +560,22 @@ class Qoze(App):
         display: none;
     }
 
-    StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
+
+    /* 请求指示器样式 */
+    #request-indicator {
+        height: 1;
+        width: 100%;
+        background: #13131c;
+        color: #7aa2f7;
+        padding: 0 1;
+        
+    }
+        StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
     LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
-    """
+    
+    .hidden {
+        display: none;
+    }"""
 
     BINDINGS = [
         Binding("ctrl+c", "interrupt", "Cancel/Quit"),
@@ -527,6 +609,7 @@ class Qoze(App):
                 yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
             # 添加多行输入组件，初始状态隐藏
             yield TextArea(id="multi-line-input", classes="hidden")
+            yield RequestIndicator(id="request-indicator", classes="hidden")
             yield StatusBar(model_name=self.model_name)
 
     def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
@@ -548,6 +631,7 @@ class Qoze(App):
         self.stream_output = self.query_one("#stream-output", MarkdownWidget)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
+        self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
 
         # 为主输出区域启用滚动功能
@@ -632,7 +716,8 @@ class Qoze(App):
             self.exit()
             return
 
-        # 2. 隐藏输入框并更新状态
+        # 2. 启动请求指示器并隐藏输入框
+        self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")
         self.main_log.focus()  # 确保主日志区域获得焦点以支持滚动
         self.status_bar.update_state("Thinking... (Ctrl+C to Cancel)")
@@ -680,7 +765,8 @@ class Qoze(App):
             self.main_log.write(f"[red]{traceback.format_exc()}[/]")
 
         finally:
-            # 4. 无论成功失败，恢复输入框显示
+            # 4. 停止请求指示器并恢复输入框显示
+            self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
