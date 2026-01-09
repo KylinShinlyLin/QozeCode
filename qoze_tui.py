@@ -210,7 +210,7 @@ class TUIStreamOutput:
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
 
-    async def stream_response(self, model_name, current_state, conversation_state):
+    async def stream_response(self, current_state, conversation_state):
         """核心流式处理逻辑"""
         # 用于显示的当前片段 buffer
         current_response_text = ""
@@ -225,13 +225,11 @@ class TUIStreamOutput:
 
         # 激活流式显示区域
         self.stream_display.styles.display = "block"
-        # self.stream_display.update("")
 
         # 重置更新时间
         self.last_update_time = 0
 
         try:
-
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
                     current_state, stream_mode="messages", config={"recursion_limit": 150}
             ):
@@ -398,6 +396,13 @@ class TUIStreamOutput:
             # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
 
+        except Exception as e:
+            traceback.print_exc()
+            self.main_log.write(f"[red]Stream Error: {e}[/]")
+            # self.stream_display.update("")
+            self.stream_display.styles.display = "none"
+
+        finally:
             # 保存到历史记录
             if total_response_text or total_reasoning_content:
                 additional_kwargs = {"reasoning_content": total_reasoning_content}
@@ -407,13 +412,6 @@ class TUIStreamOutput:
                 conversation_state["messages"].append(ai_response)
                 conversation_state["llm_calls"] += 1
 
-        except Exception as e:
-            traceback.print_exc()
-            self.main_log.write(f"[red]Stream Error: {e}[/]")
-            # self.stream_display.update("")
-            self.stream_display.styles.display = "none"
-
-        finally:
             # 确保在任何情况下（完成或出错）都清除工具状态指示器
             if self.tool_timer:
                 self.tool_timer.stop()
@@ -686,7 +684,6 @@ class Qoze(App):
 
             # 流式获取回复
             await self.tui_stream.stream_response(
-                self.model_name,
                 current_state,
                 qoze_code_agent.conversation_state
             )
