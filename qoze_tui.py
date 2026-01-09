@@ -503,7 +503,7 @@ class Qoze(App):
 
     /* 聊天区域布局调整 */
     #chat-area { width: 78%; height: 100%; }
-    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0;  text-align: left; }
+    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0; }
     /* 工具状态栏 */
     #tool-status {
         width: 100%;
@@ -648,21 +648,21 @@ class Qoze(App):
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
     def print_welcome(self):
-
         qoze_code_art = """
-        ╭────────────────────────────────────────────────────────────────────────────╮
-        │   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
-        │   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
-        │   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
-        │   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
-        │   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
-        │    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
-        ╰────────────────────────────────────────────────────────────────────────────╯
-        """
-
-        # 创建信息网格
+╭────────────────────────────────────────────────────────────────────────────╮
+│   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
+│   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
+│   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
+│   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
+│   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
+│    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
+╰────────────────────────────────────────────────────────────────────────────╯"""
 
         from rich.align import Align
+        from rich.text import Text
+        from rich.panel import Panel
+        from rich.console import Group
+        import os
 
         # 使用提示面板
         tips_content = Group(
@@ -678,15 +678,31 @@ class Qoze(App):
             Text(""),
         )
 
-        # 输出所有内容
-        self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
-        self.main_log.write(Text(""))
-        self.main_log.write(Align.center(Panel(
+        # 添加一些垂直空间
+        self.main_log.write("")
+        self.main_log.write("")
+
+        # 使用expand=True和Align.center来实现真正的居中
+        self.main_log.write(
+            Align.center(Text(qoze_code_art.strip(), style="bold cyan")),
+            expand=True
+        )
+
+        # 添加间距
+        self.main_log.write("")
+
+        # 创建Tips面板并居中
+        tips_panel = Panel(
             tips_content,
             title="[dim white]Tips[/]",
             border_style="bold #414868",
             padding=(0, 1)
-        )))
+        )
+
+        self.main_log.write(Align.center(tips_panel), expand=True)
+
+        # 添加底部空间
+        self.main_log.write("")
 
     async def init_agent_worker(self):
         """后台初始化 Agent"""
