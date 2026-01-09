@@ -531,39 +531,16 @@ class Qoze(App):
 
     def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
         """处理鼠标向下滚动事件"""
-        try:
-            # 确保main_log获得焦点并进行滚动
-            if hasattr(self, 'main_log') and self.main_log:
-                self.main_log.focus()
-                # self.main_log.scroll_down()
-                self.main_log.scroll_relative(y=5, animate=True, duration=0.1)
-                event.prevent_default()
-        except Exception:
-            # 备用滚动方法
-            try:
-                if hasattr(self, 'main_log') and self.main_log:
-                    # self.main_log.action_scroll_down()
-                    self.main_log.scroll_relative(y=5, animate=True, duration=0.1)
-            except:
-                pass
+        # 确保main_log获得焦点并进行滚动
+        if hasattr(self, 'main_log') and self.main_log:
+            self.main_log.scroll_relative(y=5, animate=True, duration=0.1)
+            event.prevent_default()
 
     def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
         """处理鼠标向上滚动事件"""
-        try:
-            # 确保main_log获得焦点并进行滚动
-            if hasattr(self, 'main_log') and self.main_log:
-                self.main_log.focus()
-                # self.main_log.scroll_up()
-                self.main_log.scroll_relative(y=-5, animate=True, duration=0.1)
-                event.prevent_default()
-        except Exception:
-            # 备用滚动方法
-            try:
-                if hasattr(self, 'main_log') and self.main_log:
-                    # self.main_log.action_scroll_up()
-                    self.main_log.scroll_relative(y=-5, animate=True, duration=0.1)
-            except:
-                pass
+        if hasattr(self, 'main_log') and self.main_log:
+            self.main_log.scroll_relative(y=-5, animate=True, duration=0.1)
+            event.prevent_default()
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
