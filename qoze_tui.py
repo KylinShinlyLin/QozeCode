@@ -16,6 +16,7 @@ from datetime import datetime
 from textual.app import App, ComposeResult, on
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget, TextArea
+from textual.events import MouseScrollDown, MouseScrollUp
 from textual.binding import Binding
 from rich.text import Text
 from rich.panel import Panel
@@ -457,6 +458,7 @@ class Qoze(App):
         border-top: solid #414868;
         display: none;
         overflow-y: auto; /* 确保可滚动 */
+        scrollbar-visibility: hidden;   /* 隐藏滚动条渲染 */
     }
 
     /* 自定义 Markdown 样式以匹配主题 */
@@ -529,6 +531,42 @@ class Qoze(App):
             yield TextArea(id="multi-line-input", classes="hidden")
             yield StatusBar(model_name=self.model_name)
 
+    def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
+        """处理鼠标向下滚动事件"""
+        try:
+            # 确保main_log获得焦点并进行滚动
+            if hasattr(self, 'main_log') and self.main_log:
+                self.main_log.focus()
+                # self.main_log.scroll_down()
+                self.main_log.scroll_relative(y=5, animate=True, duration=0.1)
+                event.prevent_default()
+        except Exception:
+            # 备用滚动方法
+            try:
+                if hasattr(self, 'main_log') and self.main_log:
+                    # self.main_log.action_scroll_down()
+                    self.main_log.scroll_relative(y=5, animate=True, duration=0.1)
+            except:
+                pass
+
+    def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
+        """处理鼠标向上滚动事件"""
+        try:
+            # 确保main_log获得焦点并进行滚动
+            if hasattr(self, 'main_log') and self.main_log:
+                self.main_log.focus()
+                # self.main_log.scroll_up()
+                self.main_log.scroll_relative(y=-5, animate=True, duration=0.1)
+                event.prevent_default()
+        except Exception:
+            # 备用滚动方法
+            try:
+                if hasattr(self, 'main_log') and self.main_log:
+                    # self.main_log.action_scroll_up()
+                    self.main_log.scroll_relative(y=-5, animate=True, duration=0.1)
+            except:
+                pass
+
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
         self.tool_status = self.query_one("#tool-status", Static)
@@ -536,6 +574,10 @@ class Qoze(App):
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.status_bar = self.query_one(StatusBar)
+
+        # 为主输出区域启用滚动功能
+        self.main_log.can_focus = False
+        self.main_log.auto_scroll = True
 
         # 初始化流式输出适配器，传入 main_log 和 stream_output
         self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output, self.tool_status)
