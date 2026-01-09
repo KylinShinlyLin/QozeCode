@@ -679,7 +679,7 @@ class Qoze(App):
         )
 
         # 输出所有内容
-        self.main_log.write(Align.center(Text(qoze_code_art, style="bold #7aa2f7")))
+        self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
         self.main_log.write(Text(""))
         self.main_log.write(Align.center(Panel(
             tips_content,
