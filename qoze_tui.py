@@ -32,6 +32,7 @@ sys.path.append(".")
 # Skills TUI Handler Import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 from skills_tui_integration import SkillsTUIHandler
+
 skills_tui_handler = SkillsTUIHandler()
 # Add current directory to path
 sys.path.append(os.getcwd())
@@ -334,7 +335,7 @@ class TUIStreamOutput:
                     raise
                 except Exception:
                     pass  # 忽略检查异常
-                
+
                 # self.main_log.write(Text(f"{message_chunk}", style="bold cyan"))
                 # 0. 累积 AI 消息 (用于获取完整的 tool_calls 参数)
                 if isinstance(message_chunk, AIMessage):
@@ -498,7 +499,7 @@ class TUIStreamOutput:
                                 break  # 跳出更新循环
                         except Exception:
                             pass
-                        
+
                         await self.stream_display.update(md_content)
                         self.main_log.scroll_end(animate=False)
                         self.stream_display.scroll_end(animate=False)
@@ -595,7 +596,7 @@ class Qoze(App):
 
     /* 多行输入框样式 */
     TextArea {
-        height: 15;
+        height: 10;
         width: 100%;
         background: #13131c;
         border: round #808080;
@@ -678,7 +679,7 @@ class Qoze(App):
         # 支持 / 命令和 skills 命令
         show_suggestions = False
         filtered = []
-        
+
         if value.startswith("/"):
             search_term = value.lower()
             # 过滤匹配的命令
@@ -688,7 +689,7 @@ class Qoze(App):
                 if cmd.lower().startswith(search_term)
             ]
             show_suggestions = len(filtered) > 0
-            
+
         elif value.lower().startswith("skills"):
             # Skills 命令自动补全
             skills_commands = [
@@ -702,7 +703,7 @@ class Qoze(App):
                 ("skills create", "创建新技能"),
                 ("skills help", "显示技能命令帮助"),
             ]
-            
+
             search_term = value.lower()
             filtered = [
                 Option(f"{cmd} - {desc}", id=cmd)
@@ -859,59 +860,50 @@ class Qoze(App):
             self.exit()
             return
 
-        # 2. 启动请求指示器并隐藏输入框
+        # 2. 处理特殊的本地命令 (不涉及 AI，不显示 "Thinking")
+        if user_input.lower() == "line":
+            self.main_log.write(Text("💡 进入多行编辑模式 (Ctrl+D 提交, Escape 退出)", style="dim"))
+            self.multiline_mode = True
+            self.query_one("#input-line").add_class("hidden")
+            self.multi_line_input.remove_class("hidden")
+            self.multi_line_input.focus()
+            self.status_bar.update_state("Multi-line Mode (Ctrl+D to submit)")
+            return
+
+        if user_input.lower() == "clear":
+            self.main_log.clear()
+            self.print_welcome()
+            return
+
+        # 处理 skills 命令
+        if user_input.lower().startswith('skills'):
+            try:
+                command_parts = user_input.split()
+                success, message = skills_tui_handler.handle_skills_command(command_parts)
+                if success:
+                    self.main_log.write(message)
+                else:
+                    self.main_log.write(Text(f"❌ {message}", style="red"))
+                return
+            except Exception as e:
+                self.main_log.write(Text(f"❌ Error handling skills command: {str(e)}", style="red"))
+                return
+
+        # 处理项目初始化命令
+        if user_input.lower() in ["qoze init", "init"]:
+            user_input = init_prompt
+
+        # 3. 启动请求指示器并隐藏输入框
         self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")
         self.main_log.focus()  # 确保主日志区域获得焦点以支持滚动
         self.status_bar.update_state("Thinking... (Ctrl+C to Cancel)")
 
         try:
-            # 处理多行编辑命令（在显示输入之前检查）
-            if user_input.lower() == "line":
-                self.main_log.write(Text("💡 进入多行编辑模式 (Ctrl+D 提交, Escape 退出)", style="dim"))
-                self.multiline_mode = True
-                self.query_one("#input-line").add_class("hidden")
-                self.multi_line_input.remove_class("hidden")
-                self.multi_line_input.focus()
-                self.status_bar.update_state("Multi-line Mode (Ctrl+D to submit)")
-                return  # 直接返回，不需要 AI 处理
-
-
             # 显示用户输入
             self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
 
-            # 处理清除命令
-            if user_input.lower() == "clear":
-                self.main_log.clear()
-                self.print_welcome()
-                return  # 将在 finally 中恢复 UI
-
-            # 处理 skills 命令
-            if user_input.lower().startswith('skills'):
-                try:
-                    command_parts = user_input.split()
-                    success, message = skills_tui_handler.handle_skills_command(command_parts)
-                    
-                    # 显示处理结果
-                    if success:
-                        self.main_log.write(message)
-                    else:
-                        self.main_log.write(Text(f"❌ {message}", style="red"))
-                    
-                    return  # 直接返回，不需要 AI 处理
-                except (ValueError, RuntimeError, ImportError) as e:
-                    self.main_log.write(Text(f"❌ Error handling skills command: {str(e)}", style="red"))
-                    return
-
-                return  # 直接返回，不需要 AI 处理
-
-            
-            # 处理项目初始化命令
-            if user_input.lower() in ["qoze init", "init"]:
-                user_input = init_prompt
-
-
-            # 3. 准备消息与 AI 处理
+            # 4. 准备消息与 AI 处理
             image_folder = ".qoze/image"
             human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
 
@@ -931,21 +923,15 @@ class Qoze(App):
 
         except KeyboardInterrupt:
             self.main_log.write(Text("⛔ 用户中断请求 (Ctrl+C)", style="bold red"))
-            # 回滚状态：移除刚刚添加的用户消息
             if qoze_code_agent.conversation_state["messages"]:
                 qoze_code_agent.conversation_state["messages"].pop()
-            # 恢复用户输入到输入框
             self.input_box.value = user_input
-            raise  # 重新抛出以确保正确的中断处理
+            raise
 
         except asyncio.CancelledError:
             self.main_log.write(Text("⛔ 请求已被主动取消", style="bold red"))
-
-            # 回滚状态：移除刚刚添加的用户消息
             if qoze_code_agent.conversation_state["messages"]:
                 qoze_code_agent.conversation_state["messages"].pop()
-
-            # 恢复用户输入到输入框以便重新编辑
             self.input_box.value = user_input
 
         except Exception as e:
@@ -975,6 +961,7 @@ class Qoze(App):
 
         # 否则，执行正常的退出
         self.exit()
+
     @on(Input.Submitted)
     async def handle_input(self, event: Input.Submitted):
         if not self.agent_ready:
