@@ -220,7 +220,7 @@ class StatusBar(Static):
         self.refresh()
 
     def render(self):
-        return Text("请求期间 ctrl+c 可以终止当前请求", style="dim")
+        return Text(" ctrl+c 可以终止当前请求", style="dim")
 
 
 class TUIStreamOutput:
