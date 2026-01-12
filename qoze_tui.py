@@ -4,6 +4,9 @@ import os
 import tempfile
 import time
 
+import constant
+from utils.constants import init_prompt
+
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GLOG_minloglevel'] = '2'
 
@@ -732,6 +735,10 @@ class Qoze(App):
                 self.main_log.clear()
                 self.print_welcome()
                 return  # 将在 finally 中恢复 UI
+
+            # 对项目做一个整体的阅读梳理，出指引文件
+            if user_input.lower() == "qoze init":
+                user_input = init_prompt
 
             # 3. 准备消息与 AI 处理
             image_folder = ".qoze/image"
