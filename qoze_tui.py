@@ -365,9 +365,8 @@ class TUIStreamOutput:
                     is_error = content_str.startswith("[RUN_FAILED]")
                     status_icon = "✗" if is_error else "✓"
                     color = "red" if is_error else "cyan"
-                    icon_color = "red" if is_error else "green"
                     # Log simple status line
-                    final_msg = f" [dim bold {icon_color}] {status_icon}[/][dim bold {color}] {tool_name} in {elapsed:.2f}s [/]"
+                    final_msg = f"[dim bold {color}] {status_icon} {tool_name} in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
                     continue
 
@@ -450,10 +449,10 @@ class TUIStreamOutput:
                         md_content = ""
 
                         if current_reasoning_content:
-                            # 格式化推理内容为引用块，模拟 dim 效果
+                            # 格式化推理内容，直接使用 dim 效果
                             lines = current_reasoning_content.split("\n")
-                            quoted_lines = [f"> {line}" for line in lines]
-                            md_content += "\n".join(quoted_lines) + "\n\n"
+                            # 直接添加内容，不使用引用块
+                            md_content += current_reasoning_content + "\n\n"
 
                         if current_response_text:
                             md_content += current_response_text
@@ -504,7 +503,7 @@ class Qoze(App):
 
     /* 聊天区域布局调整 */
     #chat-area { width: 78%; height: 100%; }
-    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0; }
+    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0;  text-align: left; }
     /* 工具状态栏 */
     #tool-status {
         width: 100%;
@@ -617,13 +616,13 @@ class Qoze(App):
         """处理鼠标向下滚动事件"""
         # 确保main_log获得焦点并进行滚动
         if hasattr(self, 'main_log') and self.main_log:
-            self.main_log.scroll_relative(y=5, animate=True, duration=0.1)
+            self.main_log.scroll_relative(y=-3, animate=True, duration=0.1)
             event.prevent_default()
 
     def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
         """处理鼠标向上滚动事件"""
         if hasattr(self, 'main_log') and self.main_log:
-            self.main_log.scroll_relative(y=-5, animate=True, duration=0.1)
+            self.main_log.scroll_relative(y=3, animate=True, duration=0.1)
             event.prevent_default()
 
     def on_mount(self):
@@ -649,21 +648,21 @@ class Qoze(App):
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
     def print_welcome(self):
+
         qoze_code_art = """
-╭────────────────────────────────────────────────────────────────────────────╮
-│   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
-│   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
-│   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
-│   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
-│   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
-│    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
-╰────────────────────────────────────────────────────────────────────────────╯"""
+        ╭────────────────────────────────────────────────────────────────────────────╮
+        │   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
+        │   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
+        │   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
+        │   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
+        │   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
+        │    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
+        ╰────────────────────────────────────────────────────────────────────────────╯
+        """
+
+        # 创建信息网格
 
         from rich.align import Align
-        from rich.text import Text
-        from rich.panel import Panel
-        from rich.console import Group
-        import os
 
         # 使用提示面板
         tips_content = Group(
@@ -679,31 +678,15 @@ class Qoze(App):
             Text(""),
         )
 
-        # 添加一些垂直空间
-        self.main_log.write("")
-        self.main_log.write("")
-
-        # 使用expand=True和Align.center来实现真正的居中
-        self.main_log.write(
-            Align.center(Text(qoze_code_art.strip(), style="bold cyan")),
-            expand=True
-        )
-
-        # 添加间距
-        self.main_log.write("")
-
-        # 创建Tips面板并居中
-        tips_panel = Panel(
+        # 输出所有内容
+        self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
+        self.main_log.write(Text(""))
+        self.main_log.write(Align.center(Panel(
             tips_content,
             title="[dim white]Tips[/]",
             border_style="bold #414868",
             padding=(0, 1)
-        )
-
-        self.main_log.write(Align.center(tips_panel), expand=True)
-
-        # 添加底部空间
-        self.main_log.write("")
+        )))
 
     async def init_agent_worker(self):
         """后台初始化 Agent"""
