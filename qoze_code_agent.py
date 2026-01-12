@@ -37,6 +37,8 @@ from tools.execute_command_tool import execute_command
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, get_webpage_to_markdown
+from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
+from utils.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_system_prompt
 
@@ -47,12 +49,74 @@ os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息�
 CYAN = "\033[96m"
 RESET = "\033[0m"
 
+# 全局技能管理器
+skill_manager = None
+
+def get_enhanced_system_prompt():
+    """获取增强的系统提示词（包含技能信息）"""
+    global skill_manager
+    if skill_manager is None:
+        skill_manager = SkillManager()
+    
+    # 获取基础系统提示词
+    base_prompt = get_enhanced_system_prompt()
+    
+    # 获取可用技能信息
+    available_skills = skill_manager.get_available_skills()
+    
+    # 获取当前激活的技能内容
+    active_skills_content = skill_manager.get_active_skills_content()
+    
+    # 构建技能相关的提示词
+    skills_prompt = ""
+    
+    if available_skills:
+        skills_list = []
+        for name, description in available_skills.items():
+            skills_list.append(f"- **{name}**: {description}")
+        
+        skills_prompt = f"""
+
+## 🎯 Available Skills System
+
+You have access to a professional skills system. Skills are specialized capability packages that provide expert-level guidance for specific tasks.
+
+### Available Skills:
+{chr(10).join(skills_list)}
+
+### How to Use Skills:
+1. **Discovery**: When you encounter a task that might benefit from specialized knowledge, check if there's a relevant skill
+2. **Activation**: Use `activate_skill(skill_name)` to load the professional guidance
+3. **Application**: Follow the detailed instructions and best practices provided by the activated skill
+4. **Management**: Use `list_available_skills()` to see all options, `deactivate_skill()` when done
+
+### When to Activate Skills:
+- You need specialized domain knowledge
+- The task involves complex workflows or best practices  
+- You want to ensure professional-grade results
+- The user asks for expert-level implementation
+
+**Important**: Always consider activating relevant skills before starting complex tasks!
+"""
+
+    # 如果有激活的技能，添加其内容
+    if active_skills_content:
+        skills_prompt += f"""
+
+## 🔥 Currently Active Skills:
+{active_skills_content}
+
+**Note**: Use the guidance from these active skills to provide expert-level assistance.
+"""
+
+    return base_prompt + skills_prompt
+
 # 全局 LLM 变量，将在 main 函数中初始化
 llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [execute_command, tavily_search, get_webpage_to_markdown]
+base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_skill, list_available_skills, deactivate_skill]
 
 # 初始时不加载浏览器工具
 tools = base_tools
