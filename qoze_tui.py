@@ -365,8 +365,9 @@ class TUIStreamOutput:
                     is_error = content_str.startswith("[RUN_FAILED]")
                     status_icon = "✗" if is_error else "✓"
                     color = "red" if is_error else "cyan"
+                    icon_color = "red" if is_error else "green"
                     # Log simple status line
-                    final_msg = f"[dim bold {color}] {status_icon} {tool_name} in {elapsed:.2f}s[/]"
+                    final_msg = f"  [dim bold {icon_color}]{status_icon}[/][dim bold {color}] {tool_name} in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
                     continue
 
