@@ -581,11 +581,11 @@ class Qoze(App):
         background: #13131c;
         color: #7aa2f7;
         padding: 0 1;
-        
+
     }
         StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
     LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
-    
+
     .hidden {
         display: none;
     }
@@ -678,13 +678,36 @@ class Qoze(App):
         else:
             suggestions.styles.display = "none"
 
+    async def execute_input_command(self, command: str):
+        """统一处理输入的命令执行逻辑"""
+        if not self.agent_ready:
+            return
+
+        # 检查是否进入多行模式
+        if command.lower() in ['line', '/line']:
+            self.multiline_mode = True
+
+            # 切换界面元素
+            self.query_one("#input-line").add_class("hidden")
+            self.multi_line_input.remove_class("hidden")
+
+            # 聚焦多行输入框
+            self.multi_line_input.focus()
+
+            # 更新状态栏提示
+            self.main_log.write(Text("\n💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交 Esc 退出多行编辑", style="dim"))
+            return
+
+        self.processing_worker = self.run_worker(self.process_user_input(command), exclusive=True)
+
     @on(OptionList.OptionSelected, "#command-suggestions")
-    def on_command_selected(self, event: OptionList.OptionSelected):
+    async def on_command_selected(self, event: OptionList.OptionSelected):
         cmd = event.option_id
         if cmd:
-            self.input_box.value = cmd
             self.query_one("#command-suggestions").styles.display = "none"
+            self.input_box.value = ""
             self.input_box.focus()
+            await self.execute_input_command(str(cmd))
 
     def on_key(self, event) -> None:
         suggestions = self.query_one("#command-suggestions", OptionList)
@@ -702,10 +725,13 @@ class Qoze(App):
             elif event.key == "enter":
                 if suggestions.highlighted is not None:
                     option = suggestions.get_option_at_index(suggestions.highlighted)
-                    self.input_box.value = str(option.id)
+                    cmd = str(option.id)
                     suggestions.styles.display = "none"
+                    self.input_box.value = ""
                     event.prevent_default()
                     event.stop()
+                    # 直接执行命令
+                    self.run_worker(self.execute_input_command(cmd))
 
     def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
         """处理鼠标向下滚动事件"""
@@ -891,23 +917,7 @@ class Qoze(App):
 
         user_input = event.value
         self.input_box.value = ""
-
-        # 检查是否进入多行模式
-        if user_input.lower() == 'line':
-            self.multiline_mode = True
-
-            # 切换界面元素
-            self.query_one("#input-line").add_class("hidden")
-            self.multi_line_input.remove_class("hidden")
-
-            # 聚焦多行输入框
-            self.multi_line_input.focus()
-
-            # 更新状态栏提示
-            self.main_log.write(Text("\n💡 已进入多行编辑模式，输入内容后按 [Ctrl+D] 提交 Esc 退出多行编辑", style="dim"))
-            return
-
-        self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
+        await self.execute_input_command(user_input)
 
     async def action_submit_multiline(self):
         """提交多行输入"""
