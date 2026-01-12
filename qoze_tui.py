@@ -807,13 +807,13 @@ class Qoze(App):
         if not user_input.strip():
             return
 
+        if user_input.startswith("/"):
+            user_input = user_input[1:]
+
         # 1. 优先处理退出命令
         if user_input.lower() in ["quit", "exit", "q"]:
             self.exit()
             return
-
-        if user_input.startswith("/"):
-            user_input = user_input[1:]
 
         # 2. 启动请求指示器并隐藏输入框
         self.request_indicator.start_request()
