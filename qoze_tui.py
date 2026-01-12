@@ -18,7 +18,8 @@ from datetime import datetime
 
 from textual.app import App, ComposeResult, on
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget, TextArea
+from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget, TextArea, OptionList
+from textual.widgets.option_list import Option
 from textual.events import MouseScrollDown, MouseScrollUp
 from textual.binding import Binding
 from rich.text import Text
@@ -28,6 +29,15 @@ from rich.markdown import Markdown
 
 # Add current directory to path
 sys.path.append(os.getcwd())
+
+COMMANDS = [
+    ("/clear", "清理会话上下文"),
+    ("/line", "进入多行编辑模式"),
+    ("/qoze init", "初始化项目指引"),
+    ("/quit", "退出程序"),
+    ("/help", "显示帮助信息"),
+    ("/exit", "退出程序"),
+]
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -579,6 +589,16 @@ class Qoze(App):
     
     .hidden {
         display: none;
+    }
+
+    #command-suggestions {
+        display: none;
+        background: #1e1e2e;
+        border: solid #414868;
+        max-height: 8;
+        width: 60%;
+        margin-left: 2;
+        margin-bottom: 0;
     }"""
 
     BINDINGS = [
@@ -607,6 +627,7 @@ class Qoze(App):
                 yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar", model_name=self.model_name)
         with Vertical(id="bottom-container"):
+            yield OptionList(id="command-suggestions")
             # todo 这里增加一个显示 状态的 运行
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
@@ -615,6 +636,77 @@ class Qoze(App):
             yield TextArea(id="multi-line-input", classes="hidden")
             yield RequestIndicator(id="request-indicator", classes="hidden")
             yield StatusBar(model_name=self.model_name)
+
+    @on(Input.Changed, "#input-box")
+    def on_input_changed(self, event: Input.Changed):
+        value = event.value
+        suggestions = self.query_one("#command-suggestions", OptionList)
+
+        if value.startswith("/"):
+            search_term = value.lower()
+            # 过滤匹配的命令
+            filtered = [
+                Option(f"{cmd} - {desc}", id=cmd)
+                for cmd, desc in COMMANDS
+                if cmd.lower().startswith(search_term)
+            ]
+
+            if filtered:
+                suggestions.clear_options()
+                suggestions.add_options(filtered)
+                suggestions.styles.display = "block"
+                # 默认选中第一个
+                suggestions.highlighted = 0
+            else:
+                suggestions.styles.display = "none"
+        else:
+            suggestions.styles.display = "none"
+
+        if value.startswith("/"):
+            search_term = value.lower()
+            filtered = [
+                Option(f"{cmd} - {desc}", id=cmd)
+                for cmd, desc in COMMANDS
+                if cmd.startswith(search_term)
+            ]
+
+            if filtered:
+                suggestions.clear_options()
+                suggestions.add_options(filtered)
+                suggestions.styles.display = "block"
+            else:
+                suggestions.styles.display = "none"
+        else:
+            suggestions.styles.display = "none"
+
+    @on(OptionList.OptionSelected, "#command-suggestions")
+    def on_command_selected(self, event: OptionList.OptionSelected):
+        cmd = event.option_id
+        if cmd:
+            self.input_box.value = cmd
+            self.query_one("#command-suggestions").styles.display = "none"
+            self.input_box.focus()
+
+    def on_key(self, event) -> None:
+        suggestions = self.query_one("#command-suggestions", OptionList)
+        if suggestions.styles.display != "none":
+            if event.key == "up":
+                suggestions.action_cursor_up()
+                event.prevent_default()
+            elif event.key == "down":
+                suggestions.action_cursor_down()
+                event.prevent_default()
+            elif event.key == "escape":
+                suggestions.styles.display = "none"
+                event.prevent_default()
+                event.stop()
+            elif event.key == "enter":
+                if suggestions.highlighted is not None:
+                    option = suggestions.get_option_at_index(suggestions.highlighted)
+                    self.input_box.value = str(option.id)
+                    suggestions.styles.display = "none"
+                    event.prevent_default()
+                    event.stop()
 
     def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
         """处理鼠标向下滚动事件"""
@@ -719,6 +811,9 @@ class Qoze(App):
         if user_input.lower() in ["quit", "exit", "q"]:
             self.exit()
             return
+
+        if user_input.startswith("/"):
+            user_input = user_input[1:]
 
         # 2. 启动请求指示器并隐藏输入框
         self.request_indicator.start_request()
