@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+from langgraph.checkpoint.memory import MemorySaver
+
+# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Copyright 2025 QozeCode
@@ -52,71 +54,34 @@ RESET = "\033[0m"
 # 全局技能管理器
 skill_manager = None
 
-def get_enhanced_system_prompt():
+
+def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
+                               shell="", current_dir="", directory_tree=""):
     """获取增强的系统提示词（包含技能信息）"""
     global skill_manager
     if skill_manager is None:
         skill_manager = SkillManager()
-    
-    # 获取基础系统提示词
-    base_prompt = get_enhanced_system_prompt()
-    
-    # 获取可用技能信息
+    base_prompt = get_system_prompt(system_info=system_info, system_release=system_release,
+                                    system_version=system_version, machine_type=machine_type, processor=processor,
+                                    shell=shell, current_dir=current_dir, directory_tree=directory_tree)
     available_skills = skill_manager.get_available_skills()
-    
-    # 获取当前激活的技能内容
     active_skills_content = skill_manager.get_active_skills_content()
-    
-    # 构建技能相关的提示词
     skills_prompt = ""
-    
     if available_skills:
-        skills_list = []
-        for name, description in available_skills.items():
-            skills_list.append(f"- **{name}**: {description}")
-        
-        skills_prompt = f"""
-
-## 🎯 Available Skills System
-
-You have access to a professional skills system. Skills are specialized capability packages that provide expert-level guidance for specific tasks.
-
-### Available Skills:
-{chr(10).join(skills_list)}
-
-### How to Use Skills:
-1. **Discovery**: When you encounter a task that might benefit from specialized knowledge, check if there's a relevant skill
-2. **Activation**: Use `activate_skill(skill_name)` to load the professional guidance
-3. **Application**: Follow the detailed instructions and best practices provided by the activated skill
-4. **Management**: Use `list_available_skills()` to see all options, `deactivate_skill()` when done
-
-### When to Activate Skills:
-- You need specialized domain knowledge
-- The task involves complex workflows or best practices  
-- You want to ensure professional-grade results
-- The user asks for expert-level implementation
-
-**Important**: Always consider activating relevant skills before starting complex tasks!
-"""
-
-    # 如果有激活的技能，添加其内容
+        skills_list = [f"- **{name}**: {description}" for name, description in available_skills.items()]
+        skills_prompt = "\n\n## 🎯 Available Skills System\n" + "\n".join(skills_list)
     if active_skills_content:
-        skills_prompt += f"""
-
-## 🔥 Currently Active Skills:
-{active_skills_content}
-
-**Note**: Use the guidance from these active skills to provide expert-level assistance.
-"""
-
+        skills_prompt += f"\n\n## 🔥 Currently Active Skills:\n{active_skills_content}"
     return base_prompt + skills_prompt
+
 
 # 全局 LLM 变量，将在 main 函数中初始化
 llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_skill, list_available_skills, deactivate_skill]
+base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_skill, list_available_skills,
+              deactivate_skill]
 
 # 初始时不加载浏览器工具
 tools = base_tools
@@ -159,16 +124,16 @@ async def llm_call(state: dict):
     except Exception:
         print("获取设备信息异常")
 
-    system_msg = get_system_prompt(system_info=system_info, system_release=system_release,
-                                   system_version=system_version, machine_type=machine_type, processor=processor,
-                                   shell=shell, current_dir=current_dir,
-                                   directory_tree=directory_tree)
+    system_msg = get_enhanced_system_prompt(system_info=system_info, system_release=system_release,
+                                            system_version=system_version, machine_type=machine_type,
+                                            processor=processor, shell=shell, current_dir=current_dir,
+                                            directory_tree=directory_tree)
 
     # Use ainvoke for non-blocking LLM call
     response = await llm_with_tools.ainvoke(
         [SystemMessage(content=system_msg)] + state["messages"]
     )
-    
+
     return {
         "messages": [response],
         "llm_calls": state.get('llm_calls', 0) + 1
@@ -227,7 +192,8 @@ agent_builder.add_conditional_edges(
 agent_builder.add_edge("tool_node", "llm_call")
 
 # Compile the agent
-agent = agent_builder.compile()
+memory = MemorySaver()
+agent = agent_builder.compile(checkpointer=memory)
 
 
 def get_image_files(folder_path: str) -> List[str]:

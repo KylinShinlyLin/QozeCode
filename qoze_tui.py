@@ -303,7 +303,7 @@ class TUIStreamOutput:
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
 
-    async def stream_response(self, current_state, conversation_state):
+    async def stream_response(self, current_state, conversation_state, thread_id="default_session"):
         """核心流式处理逻辑"""
         # 用于显示的当前片段 buffer
         current_response_text = ""
@@ -324,7 +324,9 @@ class TUIStreamOutput:
 
         try:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
-                    current_state, stream_mode="messages", config={"recursion_limit": 150}
+                    current_state,
+                    stream_mode="messages",
+                    config={"recursion_limit": 150, "configurable": {"thread_id": thread_id}}
             ):
                 # 检查流式响应是否被用户取消
                 try:
@@ -336,7 +338,6 @@ class TUIStreamOutput:
                 except Exception:
                     pass  # 忽略检查异常
 
-                # self.main_log.write(Text(f"{message_chunk}", style="bold cyan"))
                 # 0. 累积 AI 消息 (用于获取完整的 tool_calls 参数)
                 if isinstance(message_chunk, AIMessage):
                     if accumulated_ai_message is None:
@@ -354,10 +355,7 @@ class TUIStreamOutput:
 
                     # 尝试通过 tool_call_id 获取名称
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
-
-                    # 容错：如果没找到，且 active_tools 不为空
                     if not tool_name and self.active_tools:
-                        # 策略: 如果只有一个，直接取；如果有多个，取最后一个（假设是最近的）
                         if len(self.active_tools) == 1:
                             _id, _name = list(self.active_tools.items())[0]
                             tool_name = _name
@@ -367,47 +365,36 @@ class TUIStreamOutput:
                             tool_name = _name
                             del self.active_tools[_id]
 
-                    # 如果没找到，尝试从 message_chunk 属性获取
                     if not tool_name:
                         tool_name = message_chunk.name if hasattr(message_chunk, "name") else None
-
-                    # 如果还是没找到，使用 fallback
                     if not tool_name:
                         tool_name = self.current_display_tool if self.current_display_tool else "Tool"
 
-                    # ToolMessage 意味着一轮工具调用结束，重置累积器
                     accumulated_ai_message = None
 
-                    # 只有当活跃工具列表为空时，才停止 Spinner
                     if not self.active_tools:
                         if self.tool_timer:
                             self.tool_timer.stop()
                             self.tool_timer = None
-
                         self.tool_status.update("")
                         self.tool_status.styles.display = "none"
                         self.current_display_tool = None
 
                     elapsed = time.time() - (self.tool_start_time or time.time())
-                    # 如果还有活跃工具，不重置 start_time，继续计时
                     if not self.active_tools:
                         self.tool_start_time = None
 
                     content_str = str(message_chunk.content)
-
-                    # Simple error detection
                     is_error = content_str.startswith("[RUN_FAILED]")
                     status_icon = "✗" if is_error else "✓"
                     color = "red" if is_error else "cyan"
                     icon_color = "red" if is_error else "green"
-                    # Log simple status line
                     final_msg = f"  [dim bold {icon_color}]{status_icon}[/][dim bold {color}] {tool_name} in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
                     continue
 
-                # 2. 处理 Tool Calls (使用累积后的消息判断)
+                # 2. 处理 Tool Calls
                 if accumulated_ai_message and accumulated_ai_message.tool_calls:
-                    # 固化之前的 AI 文本
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
@@ -417,32 +404,20 @@ class TUIStreamOutput:
                         t_name = tool_call.get("name", "Unknown Tool")
                         t_id = tool_call.get("id", "unknown_id")
                         t_args = tool_call.get("args", {})
-
-                        # Determine display name
                         display_name = self._get_tool_display_name(t_name, t_args)
-
-                        # 持续更新 active_tools
                         self.active_tools[t_id] = display_name
                         self.current_display_tool = display_name
 
-                        # Start Spinner if not running
                         if not self.tool_timer:
                             self.tool_start_time = time.time()
                             self.tool_status.styles.display = "block"
                             self.tool_timer = self.tool_status.set_interval(0.1, self._update_tool_spinner)
-
-                    # 继续显示后续可能的内容
                     self.stream_display.styles.display = "block"
 
-                '''
-                每个厂商的 思考模型的返回的 reasoning 的格式是不一样的，这里对每个厂商进行兼容
-                '''
-                # 其它模型 比如 qwen glm deepseek 等等 thinking
+                # 3. 处理 Reasoning/Thinking
                 reasoning = ""
                 if hasattr(message_chunk, "additional_kwargs") and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get("reasoning_content", "")
-
-                # claude thinking
                 if isinstance(message_chunk.content, list):
                     for content_item in message_chunk.content:
                         if isinstance(content_item, dict) and content_item.get("type") == "reasoning_content":
@@ -450,14 +425,9 @@ class TUIStreamOutput:
                             reasoning += reasoning_content.get("text", "") if isinstance(reasoning_content,
                                                                                          dict) else str(
                                 reasoning_content)
-
-                # Gemini thinking
-                if isinstance(message_chunk.content, list):
-                    for content_item in message_chunk.content:
                         if isinstance(content_item, dict) and content_item.get("type") == "thinking":
                             reasoning += content_item.get("thinking", "")
 
-                # 判断是否有深度思考的内容
                 if reasoning:
                     current_reasoning_content += reasoning
                     total_reasoning_content += reasoning
@@ -476,30 +446,21 @@ class TUIStreamOutput:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
 
-                # 5. 更新流式显示 (True Streaming with Markdown Widget)
+                # 5. 更新流式显示
                 if current_reasoning_content or current_response_text:
                     now = time.time()
-                    # 节流：每 0.1 秒更新一次 UI，避免阻塞主线程导致无法滚动
                     if now - self.last_update_time > 0.1:
                         md_content = ""
-
                         if current_reasoning_content:
-                            # 格式化推理内容，直接使用 dim 效果
-                            lines = current_reasoning_content.split("\n")
-                            # 直接添加内容，不使用引用块
-                            md_content += current_reasoning_content + "\n\n"
-
+                            md_content += current_reasoning_content + ""
                         if current_response_text:
                             md_content += current_response_text
-
-                        # 更新UI前检查是否被取消
                         try:
                             current_task = asyncio.current_task()
                             if current_task and current_task.cancelled():
-                                break  # 跳出更新循环
+                                break
                         except Exception:
                             pass
-
                         await self.stream_display.update(md_content)
                         self.main_log.scroll_end(animate=False)
                         self.stream_display.scroll_end(animate=False)
@@ -508,31 +469,24 @@ class TUIStreamOutput:
             # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
 
+            # 同步 Graph 内部状态到本地历史，确保包含完整的 Tool 调用链路
+            graph_state = await qoze_code_agent.agent.aget_state(config={"configurable": {"thread_id": thread_id}})
+            if graph_state and graph_state.values and "messages" in graph_state.values:
+                conversation_state["messages"] = graph_state.values["messages"]
+
         except asyncio.CancelledError:
-            # 流式响应被用户取消
             self.stream_display.styles.display = "none"
-            raise  # 重新抛出取消异常
+            raise
         except Exception as e:
             traceback.print_exc()
             self.main_log.write(f"[red]Stream Error: {e}[/]")
-            # self.stream_display.update("")
             self.stream_display.styles.display = "none"
-
         finally:
-            # 保存到历史记录
             if total_response_text or total_reasoning_content:
-                additional_kwargs = {"reasoning_content": total_reasoning_content}
-                ai_response = AIMessage(
-                    content=total_response_text,
-                    additional_kwargs=additional_kwargs)
-                conversation_state["messages"].append(ai_response)
                 conversation_state["llm_calls"] += 1
-
-            # 确保在任何情况下（完成或出错）都清除工具状态指示器
             if self.tool_timer:
                 self.tool_timer.stop()
                 self.tool_timer = None
-
             self.tool_status.update("")
             self.tool_status.styles.display = "none"
             self.active_tools.clear()
@@ -647,6 +601,7 @@ class Qoze(App):
         self.model_name = model_name
         self.agent_ready = False
         self.multiline_mode = False
+        self.thread_id = "default_session"
         self.processing_worker = None
 
     def compose(self) -> ComposeResult:
@@ -871,6 +826,9 @@ class Qoze(App):
 
         if user_input.lower() == "clear":
             self.main_log.clear()
+            import uuid
+            self.thread_id = str(uuid.uuid4())
+            qoze_code_agent.conversation_state["messages"] = []
             self.print_welcome()
             return
 
@@ -907,17 +865,22 @@ class Qoze(App):
             human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
 
             # 更新对话状态
+            # 将新消息添加到本地历史记录
+            qoze_code_agent.conversation_state["messages"].append(human_msg)
+
+            # 构造传递给 Graph 的状态（只包含新消息，Graph 会根据 thread_id 自动合并历史）
             current_state = {
-                "messages": qoze_code_agent.conversation_state["messages"] + [human_msg],
+                "messages": [human_msg],
                 "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
             }
             # 先加入历史记录（如果取消需要移除）
-            qoze_code_agent.conversation_state["messages"].append(human_msg)
+            # Added to graph via stream_response
 
             # 流式获取回复
             await self.tui_stream.stream_response(
                 current_state,
-                qoze_code_agent.conversation_state
+                qoze_code_agent.conversation_state,
+                thread_id=self.thread_id
             )
 
         except KeyboardInterrupt:
