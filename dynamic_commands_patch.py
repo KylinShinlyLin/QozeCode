@@ -74,7 +74,6 @@ class DynamicCommandsGenerator:
             ("skills status", "显示技能系统状态"),
             ("skills refresh", "刷新技能缓存"),
             ("skills create", "创建新技能"),
-            ("skills help", "显示技能命令帮助"),
         ]
 
         try:
@@ -102,7 +101,7 @@ class DynamicCommandsGenerator:
                         f"启用 {skill_desc} (当前未激活 ⭕)"
                     ))
 
-        except Exception as e:
+        except Exception:
             # 如果获取失败，添加通用命令
             base_skills_commands.extend([
                 ("skills enable <name>", "启用指定技能"),
