@@ -3,8 +3,54 @@
 负责根据模型名称初始化对应的LLM实例
 """
 
-# 保留轻量级导入
-from shared_console import console
+
+def patch_langchain_deepseek():
+    """
+    todo 先使用猴子补丁修复 deepseek-r1 思考过程不支持 function call 的问题
+    针对 deepseek-reasoner 的强制要求，修复消息转换中丢失 reasoning_content 的问题。
+    未来 通自定义实现或者，等待官方修复这个问题
+    """
+    try:
+        from langchain_deepseek import ChatDeepSeek
+        import os
+
+        # 记录原始方法
+        original_get_request_payload = ChatDeepSeek._get_request_payload
+
+        def patched_get_request_payload(self, input_, **kwargs):
+            # 1. 获取原始 payload
+            payload = original_get_request_payload(self, input_, **kwargs)
+
+            # 2. 获取原始消息对象列表
+            messages = self._convert_input(input_).to_messages()
+
+            # 3. 补全 reasoning_content
+            if "messages" in payload:
+                for i, msg in enumerate(messages):
+                    if i < len(payload["messages"]):
+                        # 尝试从 additional_kwargs 中提取
+                        reasoning = msg.additional_kwargs.get("reasoning_content")
+
+                        # 兼容：有些版本的 LangChain 会把 reasoning 放在 content 列表中
+                        if not reasoning and isinstance(msg.content, list):
+                            for block in msg.content:
+                                if isinstance(block, dict) and block.get("type") == "reasoning_content":
+                                    reasoning = block.get("reasoning_content")
+                                    break
+
+                        if reasoning:
+                            # 调试日志
+                            with open(".qoze/patch.log", "a") as f:
+                                f.write(f"Patching message {i} with reasoning_content\n")
+                            payload["messages"][i]["reasoning_content"] = reasoning
+
+            return payload
+
+        # 替换类方法
+        ChatDeepSeek._get_request_payload = patched_get_request_payload
+    except Exception as e:
+        with open(".qoze/patch.log", "a") as f:
+            f.write(f"Patch failed: {str(e)}\n")
 
 
 def get_gemini_model_name(model_name):
@@ -19,6 +65,12 @@ def initialize_llm(model_name: str):
     """根据模型名称初始化对应的LLM"""
     import os
     from config_manager import ensure_model_credentials
+
+    # 在初始化前应用补丁
+    if 'deepseek' in model_name.lower():
+        # todo 先使用猴子补丁修复 deepseek-r1 思考过程不支持 function call 的问题
+        patch_langchain_deepseek()
+
     if model_name == 'Claude-4':
         try:
             from langchain_aws import ChatBedrockConverse
@@ -114,10 +166,21 @@ def initialize_llm(model_name: str):
     elif model_name == 'deepseek-chat':
         try:
             from langchain_deepseek import ChatDeepSeek
-            # 读取 DeepSeek 密钥
             creds = ensure_model_credentials(model_name)
             llm = ChatDeepSeek(
                 model="deepseek-chat",
+                api_key=creds["api_key"]
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
+            raise
+    elif model_name == 'deepseek-reasoner':
+        try:
+            from langchain_deepseek import ChatDeepSeek
+            creds = ensure_model_credentials(model_name)
+            llm = ChatDeepSeek(
+                model="deepseek-reasoner",
                 api_key=creds["api_key"]
             )
             return llm
@@ -155,59 +218,3 @@ def initialize_llm(model_name: str):
             raise
     else:
         raise ValueError(f"不支持的模型: {model_name}")
-
-# def verify_credentials(model_name: str):
-#     """
-#     针对不同模型执行快速凭证验证（短超时，不在加载状态下）。
-#     成功则静默，失败抛异常。
-#     """
-#     import os
-#     import httpx
-#     from config_manager import ensure_model_credentials
-#
-#     if model_name in ('gpt-5', 'gpt-5-codex'):
-#         creds = ensure_model_credentials(model_name)
-#         api_key = creds["api_key"]
-#         os.environ["OPENAI_API_KEY"] = api_key
-#
-#     elif model_name == 'DeepSeek':
-#         creds = ensure_model_credentials(model_name)
-#         api_key = creds["api_key"]
-#         os.environ["DEEPSEEK_API_KEY"] = api_key
-#         try:
-#             with httpx.Client(timeout=5.0) as client:
-#                 r = client.get(
-#                     "https://api.deepseek.com/v1/models",
-#                     headers={"Authorization": f"Bearer {api_key}"}
-#                 )
-#             if r.status_code != 200:
-#                 raise RuntimeError(f"DeepSeek 验证失败: {r.status_code} {r.text[:200]}")
-#         except Exception as e:
-#             raise RuntimeError(f"DeepSeek 验证失败: {e}")
-#
-#     elif model_name == 'Claude-4':
-#         import boto3
-#         from botocore.config import Config
-#         ensure_model_credentials(model_name)
-#
-#     elif model_name == 'gemini':
-#         creds = ensure_model_credentials(model_name)
-#         cred_path = creds.get("credentials_path")
-#         if not cred_path or not os.path.exists(cred_path):
-#             raise RuntimeError("Gemini 凭证验证失败: 凭证文件不存在")
-#
-#     else:
-#         raise ValueError(f"不支持的模型: {model_name}")
-
-
-# def verify_llm(llm):
-#     """
-#     对 LLM 做一次最小调用验证密钥是否可用。
-#     如果失败则抛出异常由上层处理。
-#     """
-#     try:
-#         # LangChain Chat 模型支持直接 invoke 字符串
-#         llm.invoke("ping")
-#     except Exception as e:
-#         console.print(f"❌ 密钥验证失败: {e}", style="red")
-#         raise

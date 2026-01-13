@@ -39,8 +39,8 @@ def print_banner():
     ascii_art = """
 ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗
 ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝
-██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗  
-██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝  
+██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗
+██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝
 ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗
  ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
 """
@@ -72,7 +72,8 @@ def get_model_choice() -> Optional[str]:
         "Claude-4       (think)      bedrock",
         "qwen3-max      (think)      Alibaba Cloud",
         "gpt-5.2                     OpenAI",
-        "deepseek-chat               DeepSeek",
+        "deepseek-chat               DeepSeek V3",
+        "deepseek-reasoner (think)   DeepSeek R1",
         "glm-4.6                     智普",
         "[退出程序]"
     ]
@@ -102,12 +103,12 @@ def get_model_choice() -> Optional[str]:
             return 'Grok-4.1-Fast'
         elif "gpt-5.2" in selected:
             return 'gpt-5.2'
+        elif "deepseek-reasoner" in selected:
+            return 'deepseek-reasoner'
         elif "deepseek-chat" in selected:
             return 'deepseek-chat'
         elif "glm-4.6" in selected:
             return 'glm-4.6'
-        # elif "kimi-k2" in selected:
-        #     return 'Kimi'
         elif "qwen3-max" in selected:
             return 'qwen3-max'
         elif "退出" in selected:
