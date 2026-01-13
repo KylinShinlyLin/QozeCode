@@ -23,6 +23,7 @@ from textual.widgets.option_list import Option
 from textual.events import MouseScrollDown, MouseScrollUp
 from textual.binding import Binding
 from rich.text import Text
+from rich.markup import escape
 from rich.panel import Panel
 from rich.console import Group
 from rich.markdown import Markdown
@@ -288,7 +289,7 @@ class TUIStreamOutput:
         m, s = divmod(int(elapsed), 60)
         time_str = f"{m:02d}:{s:02d}"
 
-        content = f"[dim bold cyan] {frame} {self.current_display_tool} {time_str}[/]"
+        content = f"[dim bold cyan] {frame} {escape(self.current_display_tool)} {time_str}[/]"
         self.tool_status.update(Text.from_markup(content))
 
     def flush_to_log(self, text: str, reasoning: str):
@@ -389,7 +390,7 @@ class TUIStreamOutput:
                     status_icon = "✗" if is_error else "✓"
                     color = "red" if is_error else "cyan"
                     icon_color = "red" if is_error else "green"
-                    final_msg = f"  [dim bold {icon_color}]{status_icon}[/][dim bold {color}] {tool_name} in {elapsed:.2f}s[/]"
+                    final_msg = f"  [dim bold {icon_color}]{status_icon}[/][dim bold {color}] {escape(tool_name)} in {elapsed:.2f}s[/]"
                     self.main_log.write(Text.from_markup(final_msg))
                     continue
 
@@ -479,7 +480,7 @@ class TUIStreamOutput:
             raise
         except Exception as e:
             traceback.print_exc()
-            self.main_log.write(f"[red]Stream Error: {e}[/]")
+            self.main_log.write(Text(f"Stream Error: {e}", style="red"))
             self.stream_display.styles.display = "none"
         finally:
             if total_response_text or total_reasoning_content:
@@ -798,8 +799,8 @@ class Qoze(App):
             self.input_box.focus()
 
         except Exception as e:
-            self.main_log.write(f"[red]Initialization Failed: {e}[/]")
-            self.main_log.write(f"[red]{traceback.format_exc()}[/]")
+            self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))
+            self.main_log.write(Text(traceback.format_exc(), style="red"))
 
     async def process_user_input(self, user_input):
         """处理用户输入的核心逻辑"""
@@ -897,8 +898,8 @@ class Qoze(App):
             self.input_box.value = user_input
 
         except Exception as e:
-            self.main_log.write(f"[red]Error processing input: {e}[/]")
-            self.main_log.write(f"[red]{traceback.format_exc()}[/]")
+            self.main_log.write(Text(f"Error processing input: {e}", style="red"))
+            self.main_log.write(Text(traceback.format_exc(), style="red"))
 
         finally:
             # 4. 停止请求指示器并恢复输入框显示
