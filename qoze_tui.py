@@ -38,6 +38,7 @@ skills_tui_handler = SkillsTUIHandler()
 # Dynamic Commands Import - Added by patch
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
+
 # Add current directory to path
 sys.path.append(os.getcwd())
 
@@ -585,11 +586,21 @@ class Qoze(App):
     #command-suggestions {
         display: none;
         background: #1e1e2e;
-        border: solid #414868;
-        max-height: 8;
-        width: 60%;
+        border: round #414868;
+        max-height: 12;
+        width: 70%;
         margin-left: 2;
         margin-bottom: 0;
+        padding: 1;
+        overflow-y: auto;
+    }
+    
+    #command-suggestions > .option-list--option {
+        padding: 0 1;
+    }
+    
+    #command-suggestions > .option-list--option:hover {
+        background: #414868;
     }"""
 
     BINDINGS = [
@@ -647,7 +658,7 @@ class Qoze(App):
                 # 如果动态命令获取失败，回退到静态命令
                 dynamic_commands = [
                     ("/clear", "清理会话上下文"),
-                    ("/line", "进入多行编辑模式"), 
+                    ("/line", "进入多行编辑模式"),
                     ("/qoze init", "初始化项目指引"),
                     ("/skills", "显示技能系统帮助"),
                     ("/skills list", "列出所有可用技能"),
@@ -656,7 +667,7 @@ class Qoze(App):
                     ("/skills disable", "禁用指定技能"),
                     ("/quit", "退出程序"),
                 ]
-            
+
             # 过滤匹配的命令
             filtered = [
                 Option(f"{cmd} - {desc}", id=cmd[1:])  # 移除 / 前缀用于ID

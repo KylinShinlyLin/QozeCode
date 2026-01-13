@@ -47,13 +47,13 @@ class DynamicCommandsGenerator:
                     # 技能已激活，提供禁用选项
                     commands.append((
                         f"/skills disable {skill_name}",
-                        f"(当前已激活 ✅)"
+                        f"🟢"
                     ))
                 else:
                     # 技能未激活，提供启用选项
                     commands.append((
                         f"/skills enable {skill_name}",
-                        f"(当前未激活 ⭕)"
+                        f"⭕"
                     ))
 
         except Exception as e:
@@ -93,12 +93,12 @@ class DynamicCommandsGenerator:
                 if skill_name in active_skills:
                     base_skills_commands.append((
                         f"skills disable {skill_name}",
-                        f"禁用 {skill_desc} (当前已激活 ✅)"
+                        f"禁用 {skill_desc} 🟢"
                     ))
                 else:
                     base_skills_commands.append((
                         f"skills enable {skill_name}",
-                        f"启用 {skill_desc} (当前未激活 ⭕)"
+                        f"启用 {skill_desc} ⭕"
                     ))
 
         except Exception:
