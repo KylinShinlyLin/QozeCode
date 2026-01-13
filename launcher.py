@@ -66,15 +66,15 @@ def get_model_choice() -> Optional[str]:
 
     # 定义选项 - 简洁对齐
     choices = [
-        "gemini-3-pro       (think)      Google GCP",
-        "gemini-3-flash     (think)      Google GCP",
-        "Grok 4.1 Fast      (think)      XAI",
-        "Claude-4           (think)      bedrock",
-        "qwen3-max          (think)      Alibaba Cloud",
-        "deepseek-reasoner  (think)   DeepSeek R1",
-        "deepseek-chat               DeepSeek V3",
-        "gpt-5.2                     OpenAI",
-        "glm-4.6                     智普",
+        "gemini-3-pro       (think)     Google GCP",
+        "gemini-3-flash     (think)     Google GCP",
+        "Grok 4.1 Fast      (think)     XAI",
+        "Claude-4           (think)     bedrock",
+        "qwen3-max          (think)     Alibaba Cloud",
+        "deepseek-reasoner  (think)     DeepSeek R1",
+        "deepseek-chat                  DeepSeek V3",
+        "gpt-5.2                        OpenAI",
+        "glm-4.6                        智普",
         "[退出程序]"
     ]
 
