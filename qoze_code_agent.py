@@ -20,9 +20,7 @@ limitations under the License.
 
 import base64
 import operator
-import os
 import platform
-import socket
 import traceback
 from typing import Literal, List
 from langchain_core.messages import AnyMessage
@@ -40,7 +38,7 @@ from tools.execute_command_tool import execute_command
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, get_webpage_to_markdown
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
-from utils.skill_manager import SkillManager
+from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_system_prompt
 

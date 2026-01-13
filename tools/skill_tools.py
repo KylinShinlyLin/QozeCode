@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 QozeCode Skills Tools - LLM 可调用的技能管理工具
 """
 
 from langchain_core.tools import tool
-from typing import List, Optional
-from utils.skill_manager import SkillManager
+from skills.skill_manager import SkillManager
 from shared_console import console
-from rich.panel import Panel
 from rich.table import Table
 
 # 全局技能管理器实例
@@ -50,17 +46,6 @@ async def activate_skill(skill_name: str) -> str:
         if not skill:
             return f"[SKILL_ACTIVATION_FAILED] 无法激活技能 '{skill_name}'"
 
-        # # 显示激活信息
-        # panel = Panel(
-        #     f"🎯 **技能已激活**: {skill.name}\n\n"
-        #     f"📖 **描述**: {skill.description}\n\n"
-        #     f"📁 **层级**: {skill.tier}\n\n"
-        #     f"📂 **资源**: {len(skill.resources)} 个关联资源",
-        #     title="[green]Skill Activated[/green]",
-        #     border_style="green"
-        # )
-        # console.print(panel)
-        #
         # 返回技能内容供 LLM 使用
         return f"[SKILL_ACTIVATED] 技能 '{skill_name}' 已成功激活！\n\n{skill.content}"
 

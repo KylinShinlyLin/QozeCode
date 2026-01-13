@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
-import tempfile
 import time
 
-import constant
 from utils.constants import init_prompt
 
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
@@ -32,7 +30,7 @@ from rich.markdown import Markdown
 sys.path.append(".")
 # Skills TUI Handler Import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
-from skills_tui_integration import SkillsTUIHandler
+from skills.skills_tui_integration import SkillsTUIHandler
 
 skills_tui_handler = SkillsTUIHandler()
 # Dynamic Commands Import - Added by patch

@@ -10,7 +10,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from skills_tui_integration import SkillsTUIHandler
+from skills.skills_tui_integration import SkillsTUIHandler
 from typing import List, Tuple
 
 

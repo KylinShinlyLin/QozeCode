@@ -3,7 +3,7 @@ QozeCode Skills TUI 集成模块
 为主 TUI 提供 skills 命令支持 - 简化版本
 """
 
-from utils.skill_manager import SkillManager
+from skills.skill_manager import SkillManager
 
 
 class SkillsTUIHandler:

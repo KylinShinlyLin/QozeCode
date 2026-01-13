@@ -41,8 +41,8 @@ dependencies = [
 qoze = "qoze_tui:main"
 
 [tool.setuptools]
-py-modules = ["qoze_tui", "launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant", "input_handler", "completion_handler", "stream_output", "input_processor"]
-packages = ["tools", "utils"]
+py-modules = ["qoze_tui", "launcher", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant", "input_handler", "completion_handler", "stream_output", "input_processor", "dynamic_commands_patch"]
+packages = ["tools", "utils", "skills"]
 
 [project.optional-dependencies]
 browser = ["playwright", "nest_asyncio"]
