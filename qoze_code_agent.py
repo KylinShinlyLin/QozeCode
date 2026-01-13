@@ -135,35 +135,26 @@ class MessagesState(TypedDict):
 
 
 # Step 2: Define model node
-def llm_call(state: dict):
+async def llm_call(state: dict):
+    import asyncio
     system_release = ''
     system_info = platform.system()
     system_version = "unknown"
     current_dir = os.getcwd()
-    # username = os.getenv('USER', 'unknown')
-    # hostname = socket.gethostname()
 
     shell = "unknown"
     machine_type = processor = "unknown"
     directory_tree = "无法获取目录结构"
-    # 获取系统信息
     try:
-        # 基本系统信息
         system_info = platform.system()
         system_version = platform.version()
         system_release = platform.release()
         machine_type = platform.machine()
         processor = platform.processor()
-        # 当前工作目录
         current_dir = os.getcwd()
-        # 用户信息
-        # username = os.getenv('USER') or os.getenv('USERNAME') or 'unknown'
-        # 主机名
-        # hostname = socket.gethostname()
-        # 环境变量中的重要信息
         shell = os.getenv('SHELL', 'unknown')
-        # home_dir = os.getenv('HOME', 'unknown')
-        directory_tree = get_directory_tree(current_dir)
+        # Run directory tree generation in a thread to avoid blocking
+        directory_tree = await asyncio.to_thread(get_directory_tree, current_dir)
 
     except Exception:
         print("获取设备信息异常")
@@ -173,17 +164,13 @@ def llm_call(state: dict):
                                    shell=shell, current_dir=current_dir,
                                    directory_tree=directory_tree)
 
+    # Use ainvoke for non-blocking LLM call
+    response = await llm_with_tools.ainvoke(
+        [SystemMessage(content=system_msg)] + state["messages"]
+    )
+    
     return {
-        "messages": [
-            llm_with_tools.invoke(
-                [
-                    SystemMessage(
-                        content=system_msg
-                    )
-                ]
-                + state["messages"]
-            )
-        ],
+        "messages": [response],
         "llm_calls": state.get('llm_calls', 0) + 1
     }
 

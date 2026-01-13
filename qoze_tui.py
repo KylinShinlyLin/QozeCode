@@ -510,7 +510,6 @@ class TUIStreamOutput:
 
         except asyncio.CancelledError:
             # 流式响应被用户取消
-            self.main_log.write(Text("⛔ 流式响应被用户中断", style="bold yellow"))
             self.stream_display.styles.display = "none"
             raise  # 重新抛出取消异常
         except Exception as e:
@@ -721,13 +720,13 @@ class Qoze(App):
             suggestions.styles.display = "none"
 
     @on(OptionList.OptionSelected, "#command-suggestions")
-    async def on_command_selected(self, event: OptionList.OptionSelected):
+    def on_command_selected(self, event: OptionList.OptionSelected):
         cmd = event.option_id
         if cmd:
             self.query_one("#command-suggestions").styles.display = "none"
             self.input_box.value = ""
             self.input_box.focus()
-            await self.process_user_input(str(cmd))
+            self.processing_worker = self.run_worker(self.process_user_input(str(cmd)), exclusive=True)
 
     def on_key(self, event) -> None:
         suggestions = self.query_one("#command-suggestions", OptionList)
@@ -751,7 +750,7 @@ class Qoze(App):
                     event.prevent_default()
                     event.stop()
                     # 直接执行命令
-                    self.run_worker(self.process_user_input(cmd))
+                    self.processing_worker = self.run_worker(self.process_user_input(cmd), exclusive=True)
 
     def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
         """处理鼠标向下滚动事件"""
@@ -950,7 +949,6 @@ class Qoze(App):
         """处理中断/退出逻辑"""
         # 如果有正在进行的 Worker，则取消它
         if self.processing_worker and self.processing_worker.is_running:
-            self.main_log.write(Text("⛔ 正在取消当前请求...", style="bold yellow"))
             self.processing_worker.cancel()
             # 强制停止并重置状态
             self.status_bar.update_state("Cancelled")
@@ -963,13 +961,13 @@ class Qoze(App):
         self.exit()
 
     @on(Input.Submitted)
-    async def handle_input(self, event: Input.Submitted):
+    def handle_input(self, event: Input.Submitted):
         if not self.agent_ready:
             return
 
         user_input = event.value
         self.input_box.value = ""
-        await self.process_user_input(user_input)
+        self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
 
     async def action_submit_multiline(self):
         """提交多行输入"""
