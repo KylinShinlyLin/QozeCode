@@ -35,6 +35,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 from skills_tui_integration import SkillsTUIHandler
 
 skills_tui_handler = SkillsTUIHandler()
+# Dynamic Commands Import - Added by patch
+sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
+from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
 # Add current directory to path
 sys.path.append(os.getcwd())
 
@@ -637,27 +640,48 @@ class Qoze(App):
 
         if value.startswith("/"):
             search_term = value.lower()
+            # 使用动态命令列表
+            try:
+                dynamic_commands = get_dynamic_commands()
+            except Exception:
+                # 如果动态命令获取失败，回退到静态命令
+                dynamic_commands = [
+                    ("/clear", "清理会话上下文"),
+                    ("/line", "进入多行编辑模式"), 
+                    ("/qoze init", "初始化项目指引"),
+                    ("/skills", "显示技能系统帮助"),
+                    ("/skills list", "列出所有可用技能"),
+                    ("/skills status", "显示技能系统状态"),
+                    ("/skills enable", "启用指定技能"),
+                    ("/skills disable", "禁用指定技能"),
+                    ("/quit", "退出程序"),
+                ]
+            
             # 过滤匹配的命令
             filtered = [
                 Option(f"{cmd} - {desc}", id=cmd[1:])  # 移除 / 前缀用于ID
-                for cmd, desc in COMMANDS
+                for cmd, desc in dynamic_commands
                 if cmd.lower().startswith(search_term)
             ]
             show_suggestions = len(filtered) > 0
 
         elif value.lower().startswith("skills"):
-            # Skills 命令自动补全
-            skills_commands = [
-                ("skills", "显示技能系统帮助"),
-                ("skills list", "列出所有可用技能"),
-                ("skills list --active", "列出启用的技能"),
-                ("skills status", "显示技能系统状态"),
-                ("skills enable <name>", "启用指定技能"),
-                ("skills disable <name>", "禁用指定技能"),
-                ("skills refresh", "刷新技能缓存"),
-                ("skills create", "创建新技能"),
-                ("skills help", "显示技能命令帮助"),
-            ]
+            # Skills 命令自动补全 - 使用动态技能命令
+            try:
+                skills_commands = get_skills_commands(value.lower())
+            except Exception:
+                # 回退到静态命令
+                skills_commands = [
+                    ("skills", "显示技能系统帮助"),
+                    ("skills list", "列出所有可用技能"),
+                    ("skills list active", "列出启用的技能"),
+                    ("skills status", "显示技能系统状态"),
+                    ("skills enable <name>", "启用指定技能"),
+                    ("skills disable <name>", "禁用指定技能"),
+                    ("skills refresh", "刷新技能缓存"),
+                    ("skills create", "创建新技能"),
+                    ("skills help", "显示技能命令帮助"),
+                ]
 
             search_term = value.lower()
             filtered = [
