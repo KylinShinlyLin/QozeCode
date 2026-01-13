@@ -39,9 +39,6 @@ def patch_langchain_deepseek():
                                     break
 
                         if reasoning:
-                            # 调试日志
-                            with open(".qoze/patch.log", "a") as f:
-                                f.write(f"Patching message {i} with reasoning_content\n")
                             payload["messages"][i]["reasoning_content"] = reasoning
 
             return payload
