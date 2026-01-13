@@ -47,13 +47,13 @@ class DynamicCommandsGenerator:
                     # 技能已激活，提供禁用选项
                     commands.append((
                         f"/skills disable {skill_name}",
-                        f"🟢"
+                        f"🟢 "
                     ))
                 else:
                     # 技能未激活，提供启用选项
                     commands.append((
                         f"/skills enable {skill_name}",
-                        f"⭕"
+                        f"⭕ "
                     ))
 
         except Exception as e:
