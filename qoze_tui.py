@@ -2,12 +2,8 @@
 # -*- coding: utf-8 -*-
 import os
 import time
-
-from utils.constants import init_prompt
-
-os.environ['GRPC_VERBOSITY'] = 'ERROR'
-os.environ['GLOG_minloglevel'] = '2'
-
+import platform
+import uuid
 import sys
 import asyncio
 import subprocess
@@ -33,25 +29,17 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 from skills.skills_tui_integration import SkillsTUIHandler
 
 skills_tui_handler = SkillsTUIHandler()
-# Dynamic Commands Import - Added by patch
+# Dynamic Commands Import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
+
+from utils.constants import init_prompt
 
 # Add current directory to path
 sys.path.append(os.getcwd())
 
-COMMANDS = [
-    ("/clear", "清理会话上下文"),
-    ("/line", "进入多行编辑模式"),
-    ("/qoze init", "初始化项目指引"),
-    ("/skills", "显示技能系统帮助"),
-    ("/skills list", "列出所有可用技能"),
-    ("/skills status", "显示技能系统状态"),
-    ("/skills enable", "启用指定技能"),
-    ("/skills disable", "禁用指定技能"),
-    ("/quit", "退出程序"),
-    # ("/help", "显示帮助信息"),
-]
+os.environ['GRPC_VERBOSITY'] = 'ERROR'
+os.environ['GLOG_minloglevel'] = '2'
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -66,7 +54,6 @@ except ImportError as e:
     sys.exit(1)
 
 
-# 获取 Git 信息
 def get_git_info():
     try:
         repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True,
@@ -75,24 +62,6 @@ def get_git_info():
     except:
         return "local"
 
-
-def format_repo_path(repo):
-    """格式化仓库路径显示"""
-    if repo == "local":
-        return repo
-
-    # 尝试提取仓库名
-    if repo.endswith('.git'):
-        repo = repo[:-4]
-
-    if 'github.com' in repo:
-        parts = repo.split('/')
-        if len(parts) >= 2:
-            return f"{parts[-2]}/{parts[-1]}"
-
-    return repo
-
-
 def get_git_branch():
     try:
         branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True,
@@ -100,7 +69,6 @@ def get_git_branch():
         return branch
     except:
         return None
-
 
 def get_modified_files():
     try:
@@ -118,8 +86,6 @@ def get_modified_files():
 
 
 class TopBar(Static):
-    """自定义顶部栏"""
-
     def on_mount(self):
         self.update_clock()
         self.set_interval(1, self.update_clock)
@@ -127,7 +93,7 @@ class TopBar(Static):
     def update_clock(self):
         time_str = datetime.now().strftime("%H:%M:%S")
         left = Text(" QozeCode ", style="bold white on #d75f00")
-        left.append(" v0.3.1 ", style="bold white on #005faf")
+        left.append(" v0.3.2 ", style="bold white on #005faf")
         right = Text(f" {time_str} ", style="bold white on #333333")
         total_width = self.content_size.width or 80
         spacer_width = max(0, total_width - len(left) - len(right))
@@ -136,7 +102,6 @@ class TopBar(Static):
 
 
 class Sidebar(Static):
-
     def __init__(self, *args, model_name="Unknown", **kwargs):
         self.model_name = model_name
         super().__init__(*args, **kwargs)
@@ -163,7 +128,6 @@ class Sidebar(Static):
         text.append(f"模型: ", style="dim white")
         text.append(f"{self.model_name}\n\n", style="bold cyan")
 
-        # Git Status
         if modified:
             text.append("GIT 变更记录\n", style="bold #7dcfff underline")
             for status, filename in modified:
@@ -187,8 +151,6 @@ class Sidebar(Static):
 
 
 class RequestIndicator(Static):
-    """请求状态指示器 - 显示动画和持续时间"""
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.is_active = False
@@ -196,17 +158,14 @@ class RequestIndicator(Static):
         self.update_timer = None
 
     def start_request(self):
-        """开始请求动画"""
         self.is_active = True
         self.start_time = time.time()
         self.remove_class("hidden")
-        # 启动定时更新
         if self.update_timer:
             self.update_timer.stop()
         self.update_timer = self.set_timer(0.1, self._update_display)
 
     def stop_request(self):
-        """停止请求动画"""
         self.is_active = False
         self.start_time = None
         self.add_class("hidden")
@@ -215,22 +174,14 @@ class RequestIndicator(Static):
             self.update_timer = None
 
     def _update_display(self):
-        """更新显示内容"""
         if not self.is_active or not self.start_time:
             return
-
         elapsed = time.time() - self.start_time
         frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
-        # 格式化持续时间 (HH:MM:SS)
         total_seconds = int(elapsed)
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-        time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
+        time_str = f"{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}:{total_seconds % 60:02d}"
         content = f"[bold cyan]{frame} Processing request... {time_str}[/]"
         self.update(Text.from_markup(content))
-        # 如果仍在活动状态，设置下一次更新
         if self.is_active:
             self.update_timer = self.set_timer(0.1, self._update_display)
 
@@ -239,19 +190,38 @@ class StatusBar(Static):
     def __init__(self, model_name="Unknown"):
         super().__init__()
         self.model_name = model_name
-        self.context_tokens = 0
         self.state_desc = "Idle"
+        self.view_mode = "Render" # Render or Source
 
     def update_state(self, state):
         self.state_desc = state
         self.refresh()
+        
+    def update_view_mode(self, mode):
+        self.view_mode = mode
+        self.refresh()
 
     def render(self):
-        return Text(" ctrl+c 可以终止当前请求", style="dim")
+        # 构建快捷键提示
+        shortcuts = []
+        if self.view_mode == "Source":
+            shortcuts.append("[bold yellow]Ctrl+R[/]: 切回渲染模式")
+            shortcuts.append("[bold green]Ctrl+C[/]: 复制选中")
+        else:
+            shortcuts.append("[dim]Ctrl+R[/]: 切换选择模式(源码)")
+            shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
+            
+        shortcuts_text = " | ".join(shortcuts)
+        
+        # 如果状态是 Idle，只显示快捷键，不显示状态文本
+        if self.state_desc == "Idle":
+            return Text.from_markup(f" {shortcuts_text}")
+        
+        return Text.from_markup(f" {self.state_desc} | {shortcuts_text}")
 
 
 class TUIStreamOutput:
-    """流式输出适配器 - 适配 Textual (真流式)"""
+    """流式输出适配器"""
 
     def __init__(self, main_log: RichLog, stream_display: MarkdownWidget, tool_status: Static):
         self.main_log = main_log
@@ -259,70 +229,46 @@ class TUIStreamOutput:
         self.tool_status = tool_status
         self.tool_start_time = None
         self.tool_timer = None
-        # Track active tools: {tool_call_id: tool_name}
         self.active_tools = {}
-        # Track display name for spinner (latest active tool)
         self.current_display_tool = None
         self.last_update_time = 0
 
     @staticmethod
     def _get_tool_display_name(tool_name: str, tool_args: dict) -> str:
-        """根据工具名称和参数，生成用户友好的显示名称"""
         display_name = tool_name
-
-        # 针对 execute_command 的特殊处理
         if tool_name == "execute_command":
             cmd = tool_args.get("command", "")
             if cmd:
-                # 截取前 60 个字符，如果超长则添加 ...
                 short_cmd = cmd[:50] + ("..." if len(cmd) > 50 else "")
                 display_name = f"command: {short_cmd}"
-
         return display_name
 
     def _update_tool_spinner(self):
         if not self.tool_start_time or not self.current_display_tool:
             return
-
         elapsed = time.time() - self.tool_start_time
         frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
-
-        # 格式化时间
         m, s = divmod(int(elapsed), 60)
-        time_str = f"{m:02d}:{s:02d}"
-
-        content = f"[dim bold cyan] {frame} {escape(self.current_display_tool)} {time_str}[/]"
+        content = f"[dim bold cyan] {frame} {escape(self.current_display_tool)} {m:02d}:{s:02d}[/]"
         self.tool_status.update(Text.from_markup(content))
 
     def flush_to_log(self, text: str, reasoning: str):
-        """将当前流式缓冲区的内容固化到日志中，并清空流式显示"""
         if reasoning:
             self.main_log.write(Text(reasoning, style="italic dim #565f89"))
         if text:
             self.main_log.write(Markdown(text))
-
-        # 确保滚动到底部
         self.main_log.scroll_end(animate=False)
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
 
     async def stream_response(self, current_state, conversation_state, thread_id="default_session"):
-        """核心流式处理逻辑"""
-        # 用于显示的当前片段 buffer
         current_response_text = ""
         current_reasoning_content = ""
-
-        # 用于 State 记录的完整累积
         total_response_text = ""
         total_reasoning_content = ""
-
-        # 新增：用于累积 AI 消息以解析完整的 tool calls
         accumulated_ai_message = None
 
-        # 激活流式显示区域
         self.stream_display.styles.display = "block"
-
-        # 重置更新时间
         self.last_update_time = 0
 
         try:
@@ -331,7 +277,6 @@ class TUIStreamOutput:
                     stream_mode="messages",
                     config={"recursion_limit": 150, "configurable": {"thread_id": thread_id}}
             ):
-                # 检查流式响应是否被用户取消
                 try:
                     current_task = asyncio.current_task()
                     if current_task and current_task.cancelled():
@@ -339,24 +284,20 @@ class TUIStreamOutput:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    pass  # 忽略检查异常
+                    pass
 
-                # 0. 累积 AI 消息 (用于获取完整的 tool_calls 参数)
                 if isinstance(message_chunk, AIMessage):
                     if accumulated_ai_message is None:
                         accumulated_ai_message = message_chunk
                     else:
                         accumulated_ai_message += message_chunk
 
-                # 1. 处理 ToolMessage (工具执行结果)
                 if isinstance(message_chunk, ToolMessage):
-                    # 遇到工具输出，先固化之前的 AI 文本
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
 
-                    # 尝试通过 tool_call_id 获取名称
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
                     if not tool_name and self.active_tools:
                         if len(self.active_tools) == 1:
@@ -396,7 +337,6 @@ class TUIStreamOutput:
                     self.main_log.write(Text.from_markup(final_msg))
                     continue
 
-                # 2. 处理 Tool Calls
                 if accumulated_ai_message and accumulated_ai_message.tool_calls:
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
@@ -417,17 +357,14 @@ class TUIStreamOutput:
                             self.tool_timer = self.tool_status.set_interval(0.1, self._update_tool_spinner)
                     self.stream_display.styles.display = "block"
 
-                # 3. 处理 Reasoning/Thinking
                 reasoning = ""
                 if hasattr(message_chunk, "additional_kwargs") and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get("reasoning_content", "")
                 if isinstance(message_chunk.content, list):
                     for content_item in message_chunk.content:
                         if isinstance(content_item, dict) and content_item.get("type") == "reasoning_content":
-                            reasoning_content = content_item.get("reasoning_content", {})
-                            reasoning += reasoning_content.get("text", "") if isinstance(reasoning_content,
-                                                                                         dict) else str(
-                                reasoning_content)
+                            rc = content_item.get("reasoning_content", {})
+                            reasoning += rc.get("text", "") if isinstance(rc, dict) else str(rc)
                         if isinstance(content_item, dict) and content_item.get("type") == "thinking":
                             reasoning += content_item.get("thinking", "")
 
@@ -435,7 +372,6 @@ class TUIStreamOutput:
                     current_reasoning_content += reasoning
                     total_reasoning_content += reasoning
 
-                # 4. 处理 Content
                 content = message_chunk.content
                 chunk_text = ""
                 if isinstance(content, str):
@@ -449,7 +385,6 @@ class TUIStreamOutput:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
 
-                # 5. 更新流式显示
                 if current_reasoning_content or current_response_text:
                     now = time.time()
                     if now - self.last_update_time > 0.1:
@@ -469,10 +404,8 @@ class TUIStreamOutput:
                         self.stream_display.scroll_end(animate=False)
                         self.last_update_time = now
 
-            # 循环结束后，固化最后的内容
             self.flush_to_log(current_response_text, current_reasoning_content)
 
-            # 同步 Graph 内部状态到本地历史，确保包含完整的 Tool 调用链路
             graph_state = await qoze_code_agent.agent.aget_state(config={"configurable": {"thread_id": thread_id}})
             if graph_state and graph_state.values and "messages" in graph_state.values:
                 conversation_state["messages"] = graph_state.values["messages"]
@@ -504,22 +437,33 @@ class Qoze(App):
     TopBar { dock: top; height: 1; background: #13131c; color: #c0caf5; }
 
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
-
-    /* 聊天区域布局调整 */
     #chat-area { width: 78%; height: 100%; }
-    #main-output { width: 100%; height: 1fr; background: #13131c; border: none; padding: 0;  text-align: left; }
-    /* 工具状态栏 */
-    #tool-status {
+    
+    /* 核心显示组件 */
+    #main-output { 
+        width: 100%; 
+        height: 1fr; 
+        background: #13131c; 
+        border: none; 
+        padding: 0; 
+    }
+    
+    #source-output {
         width: 100%;
-        height: auto;
-        min-height: 1;
+        height: 1fr;
         background: #13131c;
-        padding: 0 2;
-        display: none;
+        border: none;
+        color: #c0caf5;
+        padding: 1;
+        display: none; /* 默认隐藏 */
+    }
+    
+    #source-output:focus {
+        border: solid #7aa2f7; /* 聚焦时显示蓝色边框 */
     }
 
-
-    /* 流式输出区域 - 使用 Markdown Widget */
+    #tool-status { width: 100%; height: auto; min-height: 1; background: #13131c; padding: 0 2; display: none; }
+    
     #stream-output {
         width: 100%;
         height: auto;
@@ -528,11 +472,10 @@ class Qoze(App):
         padding: 0 2;
         border-top: solid #414868;
         display: none;
-        overflow-y: auto; /* 确保可滚动 */
-        scrollbar-visibility: hidden;   /* 隐藏滚动条渲染 */
+        overflow-y: auto;
+        scrollbar-visibility: hidden;
     }
-
-    /* 自定义 Markdown 样式以匹配主题 */
+    
     #stream-output > BlockQuote {
         border-left: none;
         color: #565f89;
@@ -550,36 +493,12 @@ class Qoze(App):
     Input { width: 1fr; background: #13131c; border: none; color: #c0caf5; padding: 0; }
     Input:focus { border: none; }
 
-    /* 多行输入框样式 */
-    TextArea {
-        height: 10;
-        width: 100%;
-        background: #13131c;
-        border: round #808080;
-        color: #c0caf5;
-        padding: 1;
-    }
-
-    .hidden {
-        display: none;
-    }
-
-
-    /* 请求指示器样式 */
-    #request-indicator {
-        height: 1;
-        width: 100%;
-        background: #13131c;
-        color: #7aa2f7;
-        padding: 0 1;
-
-    }
-        StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
-    LoadingIndicator { height: 100%; content-align: center middle; color: cyan; }
-
-    .hidden {
-        display: none;
-    }
+    TextArea { height: 10; width: 100%; background: #13131c; border: round #808080; color: #c0caf5; padding: 1; }
+    
+    .hidden { display: none; }
+    
+    #request-indicator { height: 1; width: 100%; background: #13131c; color: #7aa2f7; padding: 0 1; }
+    StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
 
     #command-suggestions {
         display: none;
@@ -592,21 +511,16 @@ class Qoze(App):
         padding: 1;
         overflow-y: auto;
     }
-    
-    #command-suggestions > .option-list--option {
-        padding: 0 1;
-    }
-    
-    #command-suggestions > .option-list--option:hover {
-        background: #414868;
-    }"""
+    #command-suggestions > .option-list--option { padding: 0 1; }
+    #command-suggestions > .option-list--option:hover { background: #414868; }
+    """
 
     BINDINGS = [
-        Binding("ctrl+c", "interrupt", "Cancel/Quit"),
+        Binding("ctrl+c", "interrupt_or_copy", "Cancel/Copy", priority=True),
         Binding("ctrl+l", "clear_screen", "Clear"),
-        # 使用 priority=True 确保在组件之前处理
-        Binding("ctrl+d", "submit_multiline", "Submit (Multi-line)", priority=True),
-        Binding("escape", "cancel_multiline", "Cancel (Multi-line)", priority=True),
+        Binding("ctrl+d", "submit_multiline", "Submit", priority=True),
+        Binding("escape", "cancel_multiline", "Cancel", priority=True),
+        Binding("ctrl+r", "toggle_view_mode", "Toggle View", priority=True),
     ]
 
     def __init__(self, model_name):
@@ -614,97 +528,307 @@ class Qoze(App):
         self.model_name = model_name
         self.agent_ready = False
         self.multiline_mode = False
+        self.view_mode = "Render" # Render | Source
         self.thread_id = "default_session"
         self.processing_worker = None
 
     def compose(self) -> ComposeResult:
         yield TopBar()
         with Horizontal(id="main-container"):
-            # 使用 Vertical 容器包含历史记录和流式输出
             with Vertical(id="chat-area"):
+                # Render View (默认)
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
+                # Source View (用于选择复制，默认隐藏)
+                yield TextArea(id="source-output", read_only=True, show_line_numbers=False, language="markdown")
+                
                 yield Static(id="tool-status")
-                # 使用 Textual Markdown Widget 替代 Static
                 yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar", model_name=self.model_name)
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
-            # todo 这里增加一个显示 状态的 运行
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
-                yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
-            # 添加多行输入组件，初始状态隐藏
+                yield Input(placeholder="Initializing Agent... (Ctrl+R 切换选择模式)", id="input-box", disabled=True)
             yield TextArea(id="multi-line-input", classes="hidden")
             yield RequestIndicator(id="request-indicator", classes="hidden")
             yield StatusBar(model_name=self.model_name)
+
+    def on_mount(self):
+        self.main_log = self.query_one("#main-output", RichLog)
+        self.source_output = self.query_one("#source-output", TextArea)
+        self.tool_status = self.query_one("#tool-status", Static)
+        self.stream_output = self.query_one("#stream-output", MarkdownWidget)
+        self.input_box = self.query_one("#input-box", Input)
+        self.multi_line_input = self.query_one("#multi-line-input", TextArea)
+        self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
+        self.status_bar = self.query_one(StatusBar)
+
+        self.main_log.can_focus = False
+        self.main_log.auto_scroll = True
+        self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output, self.tool_status)
+        
+        self.print_welcome()
+        self.run_worker(self.init_agent_worker(), exclusive=True)
+
+    def print_welcome(self):
+        qoze_code_art = """
+        ╭────────────────────────────────────────────────────────────────────────────╮
+        │   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
+        │   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
+        │   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
+        │   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
+        │   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
+        │    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
+        ╰────────────────────────────────────────────────────────────────────────────╯
+        """
+        from rich.align import Align
+        tips_content = Group(
+            Text(""),
+            Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
+            Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
+            Text("使用提示: ", style="bold white"),
+            Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
+            Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
+            Text("  • Ctrl+R 切换选择模式 (支持鼠标选择复制)", style="bold yellow"),
+            Text(""),
+        )
+        self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
+        self.main_log.write(Text(""))
+        self.main_log.write(Align.center(Panel(
+            tips_content,
+            title="[dim white]Tips[/]",
+            border_style="bold #414868",
+            padding=(0, 1)
+        )))
+
+    def action_toggle_view_mode(self):
+        """在 Render(RichLog) 和 Source(TextArea) 模式间切换"""
+        if self.view_mode == "Render":
+            # 切换到 Source Mode
+            self.view_mode = "Source"
+            
+            # 生成 Source 文本
+            full_text = self._generate_source_text()
+            self.source_output.text = full_text
+            self.source_output.move_cursor(self.source_output.document.end) # 滚动到底部
+            
+            self.main_log.styles.display = "none"
+            self.source_output.styles.display = "block"
+            self.source_output.focus()
+            
+            self.status_bar.update_view_mode("Source")
+            self.notify("进入选择模式: 支持鼠标选择，Ctrl+C 复制")
+            
+        else:
+            # 切换回 Render Mode
+            self.view_mode = "Render"
+            
+            self.source_output.styles.display = "none"
+            self.main_log.styles.display = "block"
+            
+            # 恢复焦点到输入框 (除非在多行模式)
+            if not self.multiline_mode:
+                self.input_box.focus()
+            
+            self.status_bar.update_view_mode("Render")
+
+    def _generate_source_text(self):
+        """从 conversation_state 重建 Markdown 源码文本"""
+        messages = qoze_code_agent.conversation_state.get("messages", [])
+        text_parts = []
+        
+        # 添加 Header
+        text_parts.append("# QozeCode Session History\n")
+        
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                content = str(msg.content)
+                text_parts.append(f"\n## 🧑 User\n{content}\n")
+            elif isinstance(msg, AIMessage):
+                content = ""
+                # 处理内容 (List or String)
+                if isinstance(msg.content, str):
+                    content = msg.content
+                elif isinstance(msg.content, list):
+                    for item in msg.content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            content += item.get("text", "")
+                
+                if content:
+                    text_parts.append(f"\n## 🤖 Assistant\n{content}\n")
+                    
+                # 处理 Tool Calls (虽然通常不需要显示细节，但为了完整性)
+                if msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        text_parts.append(f"\n> 🛠️ Call Tool: `{tc.get('name')}`\n")
+            
+            elif isinstance(msg, ToolMessage):
+                content = str(msg.content)
+                # 简化 Tool 输出显示，避免太长
+                if len(content) > 500:
+                    preview = content[:200] + "\n... (content truncated) ...\n" + content[-200:]
+                    text_parts.append(f"\n> 📦 Tool Output:\n```\n{preview}\n```\n")
+                else:
+                    text_parts.append(f"\n> 📦 Tool Output:\n```\n{content}\n```\n")
+
+        return "".join(text_parts)
+
+    def action_interrupt_or_copy(self):
+        """Ctrl+C 处理逻辑：在 Source 模式且有选中时复制，否则中断"""
+        # 1. 如果在 Source 模式且有选中内容 -> 复制
+        if self.view_mode == "Source" and self.focused == self.source_output:
+            selected_text = self.source_output.selected_text
+            if selected_text:
+                if self.copy_to_clipboard(selected_text):
+                    self.notify(f"✅ 已复制 {len(selected_text)} 字符")
+                else:
+                    self.notify("❌ 复制失败")
+                return
+
+        # 2. 否则 -> 中断/取消
+        self.action_interrupt()
+
+    def action_interrupt(self):
+        if self.processing_worker and self.processing_worker.is_running:
+            self.processing_worker.cancel()
+            self.status_bar.update_state("Cancelled")
+            self.query_one("#input-line").remove_class("hidden")
+            self.input_box.focus()
+            self.processing_worker = None
+            return
+        self.exit()
+
+    def copy_to_clipboard(self, text: str) -> bool:
+        """跨平台复制实现"""
+        try:
+            if platform.system() == "Darwin":
+                process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                process.communicate(text.encode('utf-8'))
+                return process.returncode == 0
+            elif platform.system() == "Linux":
+                try:
+                    process = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
+                    process.communicate(text.encode('utf-8'))
+                    return process.returncode == 0
+                except FileNotFoundError:
+                    process = subprocess.Popen(['xsel', '-ib'], stdin=subprocess.PIPE)
+                    process.communicate(text.encode('utf-8'))
+                    return process.returncode == 0
+            else: # Windows
+                import pyperclip
+                pyperclip.copy(text)
+                return True
+        except Exception as e:
+            self.notify(f"Copy Error: {e}")
+            return False
+
+    async def init_agent_worker(self):
+        try:
+            llm = model_initializer.initialize_llm(self.model_name)
+            qoze_code_agent.llm = llm
+            qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
+            self.agent_ready = True
+            self.input_box.disabled = False
+            self.input_box.placeholder = "Type message... (Ctrl+R 切换选择模式)"
+            self.input_box.focus()
+        except Exception as e:
+            self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))
+
+    async def process_user_input(self, user_input):
+        if not user_input.strip(): return
+        if user_input.startswith("/"): user_input = user_input[1:]
+        
+        if user_input.lower() in ["quit", "exit", "q"]:
+            self.exit()
+            return
+        
+        if user_input.lower() == "line":
+            self.multiline_mode = True
+            self.query_one("#input-line").add_class("hidden")
+            self.multi_line_input.remove_class("hidden")
+            self.multi_line_input.focus()
+            self.status_bar.update_state("Multi-line Mode")
+            return
+
+        if user_input.lower() == "clear":
+            self.main_log.clear()
+            self.thread_id = str(uuid.uuid4())
+            qoze_code_agent.conversation_state["messages"] = []
+            self.print_welcome()
+            return
+            
+        if user_input.lower().startswith('skills'):
+            success, message = skills_tui_handler.handle_skills_command(user_input.split())
+            self.main_log.write(message if success else Text(f"❌ {message}", style="red"))
+            return
+
+        if user_input.lower() in ["qoze init", "init"]:
+            user_input = init_prompt
+
+        self.request_indicator.start_request()
+        self.query_one("#input-line").add_class("hidden")
+        self.main_log.focus()
+        self.status_bar.update_state("Thinking...")
+
+        try:
+            self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
+            
+            image_folder = ".qoze/image"
+            human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
+            qoze_code_agent.conversation_state["messages"].append(human_msg)
+            
+            current_state = {
+                "messages": [human_msg],
+                "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
+            }
+            
+            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state, thread_id=self.thread_id)
+
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            self.main_log.write(Text("⛔ Interrupted", style="bold red"))
+        except Exception as e:
+            self.main_log.write(Text(f"Error: {e}", style="red"))
+        finally:
+            self.request_indicator.stop_request()
+            self.status_bar.update_state("Idle")
+            self.query_one("#input-line").remove_class("hidden")
+            self.input_box.focus()
+            self.processing_worker = None
+
+    @on(Input.Submitted)
+    def handle_input(self, event: Input.Submitted):
+        if not self.agent_ready: return
+        user_input = event.value
+        self.input_box.value = ""
+        self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
 
     @on(Input.Changed, "#input-box")
     def on_input_changed(self, event: Input.Changed):
         value = event.value
         suggestions = self.query_one("#command-suggestions", OptionList)
-
-        # 支持 / 命令和 skills 命令
+        
+        # 简单补全逻辑
         show_suggestions = False
         filtered = []
-
         if value.startswith("/"):
-            search_term = value.lower()
-            # 使用动态命令列表
             try:
-                dynamic_commands = get_dynamic_commands()
-            except Exception:
-                # 如果动态命令获取失败，回退到静态命令
-                dynamic_commands = [
-                    ("/clear", "清理会话上下文"),
-                    ("/line", "进入多行编辑模式"),
-                    ("/qoze init", "初始化项目指引"),
-                    ("/skills", "显示技能系统帮助"),
-                    ("/skills list", "列出所有可用技能"),
-                    ("/skills status", "显示技能系统状态"),
-                    ("/skills enable", "启用指定技能"),
-                    ("/skills disable", "禁用指定技能"),
-                    ("/quit", "退出程序"),
-                ]
-
-            # 过滤匹配的命令
-            filtered = [
-                Option(f"{cmd} - {desc}", id=cmd[1:])  # 移除 / 前缀用于ID
-                for cmd, desc in dynamic_commands
-                if cmd.lower().startswith(search_term)
-            ]
-            show_suggestions = len(filtered) > 0
-
+                cmds = get_dynamic_commands()
+            except:
+                cmds = [("/quit", "Quit"), ("/clear", "Clear"), ("/skills", "Skills")]
+            filtered = [Option(f"{c} - {d}", id=c[1:]) for c,d in cmds if c.startswith(value)]
+            show_suggestions = bool(filtered)
         elif value.lower().startswith("skills"):
-            # Skills 命令自动补全 - 使用动态技能命令
             try:
-                skills_commands = get_skills_commands(value.lower())
-            except Exception:
-                # 回退到静态命令
-                skills_commands = [
-                    ("skills", "显示技能系统帮助"),
-                    ("skills list", "列出所有可用技能"),
-                    ("skills list active", "列出启用的技能"),
-                    ("skills status", "显示技能系统状态"),
-                    ("skills enable <name>", "启用指定技能"),
-                    ("skills disable <name>", "禁用指定技能"),
-                    ("skills refresh", "刷新技能缓存"),
-                    ("skills create", "创建新技能"),
-                    ("skills help", "显示技能命令帮助"),
-                ]
-
-            search_term = value.lower()
-            filtered = [
-                Option(f"{cmd} - {desc}", id=cmd)
-                for cmd, desc in skills_commands
-                if cmd.lower().startswith(search_term)
-            ]
-            show_suggestions = len(filtered) > 0
-
-        if show_suggestions and filtered:
+                cmds = get_skills_commands(value)
+            except:
+                cmds = []
+            filtered = [Option(f"{c} - {d}", id=c) for c,d in cmds if c.startswith(value.lower())]
+            show_suggestions = bool(filtered)
+            
+        if show_suggestions:
             suggestions.clear_options()
             suggestions.add_options(filtered)
             suggestions.styles.display = "block"
-            suggestions.highlighted = 0
         else:
             suggestions.styles.display = "none"
 
@@ -717,313 +841,61 @@ class Qoze(App):
             self.input_box.focus()
             self.processing_worker = self.run_worker(self.process_user_input(str(cmd)), exclusive=True)
 
-    def on_key(self, event) -> None:
+    def on_key(self, event):
         suggestions = self.query_one("#command-suggestions", OptionList)
         if suggestions.styles.display != "none":
-            if event.key == "up":
-                suggestions.action_cursor_up()
-                event.prevent_default()
-            elif event.key == "down":
-                suggestions.action_cursor_down()
-                event.prevent_default()
-            elif event.key == "escape":
-                suggestions.styles.display = "none"
-                event.prevent_default()
+            if event.key in ["up", "down"]:
+                if event.key == "up": suggestions.action_cursor_up()
+                else: suggestions.action_cursor_down()
                 event.stop()
             elif event.key == "enter":
                 if suggestions.highlighted is not None:
-                    option = suggestions.get_option_at_index(suggestions.highlighted)
-                    cmd = str(option.id)
+                    opt = suggestions.get_option_at_index(suggestions.highlighted)
+                    # 修复：直接执行逻辑，避免模拟 Event 对象参数不匹配
+                    cmd = str(opt.id)
                     suggestions.styles.display = "none"
                     self.input_box.value = ""
-                    event.prevent_default()
-                    event.stop()
-                    # 直接执行命令
+                    self.input_box.focus()
                     self.processing_worker = self.run_worker(self.process_user_input(cmd), exclusive=True)
+                event.stop()
+            elif event.key == "escape":
+                suggestions.styles.display = "none"
+                event.stop()
 
-    def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
-        """处理鼠标向下滚动事件 - 优化触摸板体验"""
-        # 建议框显示时，优先让建议框处理
-        suggestions = self.query_one("#command-suggestions", OptionList)
-        if suggestions.styles.display != "none":
-            return
+    def on_mouse_scroll_down(self, event):
+        if self.view_mode == "Render" and self.main_log.styles.display != "none":
+             self.main_log.scroll_relative(y=1, animate=False)
 
-        # 无动画直接滚动，步长为1，适应触摸板的高频触发
-        if hasattr(self, 'main_log') and self.main_log:
-            self.main_log.scroll_relative(y=1, animate=False)
-
-    def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
-        """处理鼠标向上滚动事件 - 优化触摸板体验"""
-        suggestions = self.query_one("#command-suggestions", OptionList)
-        if suggestions.styles.display != "none":
-            return
-
-        if hasattr(self, 'main_log') and self.main_log:
-            self.main_log.scroll_relative(y=-1, animate=False)
-
-    def on_mount(self):
-        self.main_log = self.query_one("#main-output", RichLog)
-        self.tool_status = self.query_one("#tool-status", Static)
-        self.stream_output = self.query_one("#stream-output", MarkdownWidget)
-        self.input_box = self.query_one("#input-box", Input)
-        self.multi_line_input = self.query_one("#multi-line-input", TextArea)
-        self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
-        self.status_bar = self.query_one(StatusBar)
-
-        # 为主输出区域启用滚动功能
-        self.main_log.can_focus = False
-        self.main_log.auto_scroll = True
-
-        # 初始化流式输出适配器，传入 main_log 和 stream_output
-        self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output, self.tool_status)
-
-        # 打印欢迎信息
-        self.print_welcome()
-
-        # 异步初始化 Agent
-        self.run_worker(self.init_agent_worker(), exclusive=True)
-
-    def print_welcome(self):
-
-        qoze_code_art = """
-        ╭────────────────────────────────────────────────────────────────────────────╮
-        │   ██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗   │
-        │   ██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝  │
-        │   ██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗    │
-        │   ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝    │
-        │   ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗  │
-        │    ╚══▀▀═╝  ╚═════╝ ╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  │
-        ╰────────────────────────────────────────────────────────────────────────────╯
-        """
-
-        # 创建信息网格
-
-        from rich.align import Align
-
-        # 使用提示面板
-        tips_content = Group(
-            Text(""),
-            Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
-            Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
-            Text("使用提示: ", style="bold white"),
-            Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
-            Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
-            Text("  • ! 开头的内容会直接按命令执行 例如：!ls", style="dim bold white"),
-            Text("  • 输入 'clear' 清理整改会话上下文", style="dim bold white"),
-            Text("  • Ctrl+D 可以强制终止正在运行的请求", style="dim bold white"),
-            Text(""),
-        )
-
-        # 输出所有内容
-        self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
-        self.main_log.write(Text(""))
-        self.main_log.write(Align.center(Panel(
-            tips_content,
-            title="[dim white]Tips[/]",
-            border_style="bold #414868",
-            padding=(0, 1)
-        )))
-
-    async def init_agent_worker(self):
-        """后台初始化 Agent"""
-        try:
-            llm = model_initializer.initialize_llm(self.model_name)
-
-            # 设置 qoze_code_agent 的全局变量，注入 LLM
-            qoze_code_agent.llm = llm
-            qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
-
-            self.agent_ready = True
-            self.input_box.disabled = False
-            self.input_box.placeholder = "Type message...（输入 'line' 进入多行编辑）"
-            self.input_box.focus()
-
-        except Exception as e:
-            self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))
-            self.main_log.write(Text(traceback.format_exc(), style="red"))
-
-    async def process_user_input(self, user_input):
-        """处理用户输入的核心逻辑"""
-        if not user_input.strip():
-            return
-
-        if user_input.startswith("/"):
-            user_input = user_input[1:]
-
-        # 1. 优先处理退出命令
-        if user_input.lower() in ["quit", "exit", "q"]:
-            self.exit()
-            return
-
-        # 2. 处理特殊的本地命令 (不涉及 AI，不显示 "Thinking")
-        if user_input.lower() == "line":
-            self.main_log.write(Text("💡 进入多行编辑模式 (Ctrl+D 提交, Escape 退出)", style="dim"))
-            self.multiline_mode = True
-            self.query_one("#input-line").add_class("hidden")
-            self.multi_line_input.remove_class("hidden")
-            self.multi_line_input.focus()
-            self.status_bar.update_state("Multi-line Mode (Ctrl+D to submit)")
-            return
-
-        if user_input.lower() == "clear":
-            self.main_log.clear()
-            import uuid
-            self.thread_id = str(uuid.uuid4())
-            qoze_code_agent.conversation_state["messages"] = []
-            self.print_welcome()
-            return
-
-        # 处理 skills 命令
-        if user_input.lower().startswith('skills'):
-            try:
-                command_parts = user_input.split()
-                success, message = skills_tui_handler.handle_skills_command(command_parts)
-                if success:
-                    self.main_log.write(message)
-                else:
-                    self.main_log.write(Text(f"❌ {message}", style="red"))
-                return
-            except Exception as e:
-                self.main_log.write(Text(f"❌ Error handling skills command: {str(e)}", style="red"))
-                return
-
-        # 处理项目初始化命令
-        if user_input.lower() in ["qoze init", "init"]:
-            user_input = init_prompt
-
-        # 3. 启动请求指示器并隐藏输入框
-        self.request_indicator.start_request()
-        self.query_one("#input-line").add_class("hidden")
-        self.main_log.focus()  # 确保主日志区域获得焦点以支持滚动
-        self.status_bar.update_state("Thinking... (Ctrl+C to Cancel)")
-
-        try:
-            # 显示用户输入
-            self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
-
-            # 4. 准备消息与 AI 处理
-            image_folder = ".qoze/image"
-            human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
-
-            # 更新对话状态
-            # 将新消息添加到本地历史记录
-            qoze_code_agent.conversation_state["messages"].append(human_msg)
-
-            # 构造传递给 Graph 的状态（只包含新消息，Graph 会根据 thread_id 自动合并历史）
-            current_state = {
-                "messages": [human_msg],
-                "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
-            }
-            # 先加入历史记录（如果取消需要移除）
-            # Added to graph via stream_response
-
-            # 流式获取回复
-            await self.tui_stream.stream_response(
-                current_state,
-                qoze_code_agent.conversation_state,
-                thread_id=self.thread_id
-            )
-
-        except KeyboardInterrupt:
-            self.main_log.write(Text("⛔ 用户中断请求 (Ctrl+C)", style="bold red"))
-            if qoze_code_agent.conversation_state["messages"]:
-                qoze_code_agent.conversation_state["messages"].pop()
-            self.input_box.value = user_input
-            raise
-
-        except asyncio.CancelledError:
-            self.main_log.write(Text("⛔ 请求已被主动取消", style="bold red"))
-            if qoze_code_agent.conversation_state["messages"]:
-                qoze_code_agent.conversation_state["messages"].pop()
-            self.input_box.value = user_input
-
-        except Exception as e:
-            self.main_log.write(Text(f"Error processing input: {e}", style="red"))
-            self.main_log.write(Text(traceback.format_exc(), style="red"))
-
-        finally:
-            # 4. 停止请求指示器并恢复输入框显示
-            self.request_indicator.stop_request()
-            self.status_bar.update_state("Idle")
-            self.query_one("#input-line").remove_class("hidden")
-            self.input_box.focus()
-            self.processing_worker = None
-
-    def action_interrupt(self):
-        """处理中断/退出逻辑"""
-        # 如果有正在进行的 Worker，则取消它
-        if self.processing_worker and self.processing_worker.is_running:
-            self.processing_worker.cancel()
-            # 强制停止并重置状态
-            self.status_bar.update_state("Cancelled")
-            self.query_one("#input-line").remove_class("hidden")
-            self.input_box.focus()
-            self.processing_worker = None
-            return
-
-        # 否则，执行正常的退出
-        self.exit()
-
-    @on(Input.Submitted)
-    def handle_input(self, event: Input.Submitted):
-        if not self.agent_ready:
-            return
-
-        user_input = event.value
-        self.input_box.value = ""
-        self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
+    def on_mouse_scroll_up(self, event):
+        if self.view_mode == "Render" and self.main_log.styles.display != "none":
+             self.main_log.scroll_relative(y=-1, animate=False)
 
     async def action_submit_multiline(self):
-        """提交多行输入"""
-        if not self.multiline_mode:
-            return
-
-        # 获取内容
+        if not self.multiline_mode: return
         user_input = self.multi_line_input.text
-
-        # 退出多行模式
         self.multiline_mode = False
-        self.processing_worker = None
         self.multi_line_input.add_class("hidden")
-        self.multi_line_input.text = ""  # 清空
+        self.multi_line_input.text = ""
         self.query_one("#input-line").remove_class("hidden")
         self.input_box.focus()
-
-        # 处理输入
         if user_input.strip():
             self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
-        else:
-            self.status_bar.update_state("Idle")
 
     def action_cancel_multiline(self):
-        """取消多行输入"""
-        if not self.multiline_mode:
-            return
-
+        if not self.multiline_mode: return
         self.multiline_mode = False
-        self.processing_worker = None
         self.multi_line_input.add_class("hidden")
-        self.multi_line_input.text = ""  # 清空
+        self.multi_line_input.text = ""
         self.query_one("#input-line").remove_class("hidden")
         self.input_box.focus()
-
         self.status_bar.update_state("Idle")
-        self.main_log.write(Text("💡 已退出多行编辑模式", style="dim"))
-
 
 def main():
-    # 1. 确保配置存在
     launcher.ensure_config()
-    # 2. 获取模型选择
     model = launcher.get_model_choice()
-    # 清理 console
     os.system('cls' if os.name == 'nt' else 'clear')
-    if model is None:
-        return
-    # 3. 启动 TUI App
-    app = Qoze(model_name=model)
-    app.run()
-
+    if model:
+        Qoze(model_name=model).run()
 
 if __name__ == "__main__":
     main()
