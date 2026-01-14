@@ -192,13 +192,13 @@ try_build_binary() {
     source "$VENV_DIR/bin/activate"
     cd "$BUILD_DIR/QozeCode"
     
-    # 检查是否有 Qoze.spec 文件
-    if [ ! -f "Qoze.spec" ]; then
-#        log_warning "未找到 Qoze.spec 文件，跳过二进制构建"
+    # 检查是否有 qoze.spec 文件
+    if [ ! -f "qoze.spec" ]; then
+#        log_warning "未找到 qoze.spec 文件，跳过二进制构建"
         return 1
     fi
     
-    log_success "找到 Qoze.spec 文件"
+    log_success "找到 qoze.spec 文件"
     
     # 验证 PyInstaller 是否可用
     log_info "验证 PyInstaller 安装状态..."
@@ -230,7 +230,7 @@ try_build_binary() {
     
     # 使用 PyInstaller 构建（显示详细输出）
     log_info "开始 PyInstaller 构建..."
-    log_info "构建命令: pyinstaller Qoze.spec --clean --noconfirm"
+    log_info "构建命令: pyinstaller qoze.spec --clean --noconfirm"
     
     # 创建构建日志文件
     BUILD_LOG="$INSTALL_DIR/build.log"
@@ -245,7 +245,7 @@ try_build_binary() {
     echo "  - 工作目录: $(pwd)"
     echo "  - PYTHONPATH: $PYTHONPATH"
     
-    if pyinstaller Qoze.spec --clean --noconfirm --log-level INFO 2>&1 | tee "$BUILD_LOG"; then
+    if pyinstaller qoze.spec --clean --noconfirm --log-level INFO 2>&1 | tee "$BUILD_LOG"; then
         # 检查构建结果
         if [ -f "dist/qoze/qoze" ]; then
             log_success "二进制文件构建成功"
