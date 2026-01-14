@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # 配置变量
 REPO_URL="https://github.com/KylinShinlyLin/QozeCode.git"
-BRANCH="feat/ui_textual"
+BRANCH="main"
 INSTALL_DIR="$HOME/.qoze"
 BIN_DIR="$HOME/.local/bin"
 VENV_DIR="$INSTALL_DIR/venv"
