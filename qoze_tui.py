@@ -62,6 +62,7 @@ def get_git_info():
     except:
         return "local"
 
+
 def get_git_branch():
     try:
         branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True,
@@ -69,6 +70,7 @@ def get_git_branch():
         return branch
     except:
         return None
+
 
 def get_modified_files():
     try:
@@ -191,12 +193,12 @@ class StatusBar(Static):
         super().__init__()
         self.model_name = model_name
         self.state_desc = "Idle"
-        self.view_mode = "Render" # Render or Source
+        self.view_mode = "Render"  # Render or Source
 
     def update_state(self, state):
         self.state_desc = state
         self.refresh()
-        
+
     def update_view_mode(self, mode):
         self.view_mode = mode
         self.refresh()
@@ -210,13 +212,13 @@ class StatusBar(Static):
         else:
             shortcuts.append("[dim]Ctrl+R[/]: 切换选择模式")
             shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
-            
+
         shortcuts_text = " | ".join(shortcuts)
-        
+
         # 如果状态是 Idle，只显示快捷键，不显示状态文本
         if self.state_desc == "Idle":
             return Text.from_markup(f" {shortcuts_text}")
-        
+
         return Text.from_markup(f" {self.state_desc} | {shortcuts_text}")
 
 
@@ -528,7 +530,7 @@ class Qoze(App):
         self.model_name = model_name
         self.agent_ready = False
         self.multiline_mode = False
-        self.view_mode = "Render" # Render | Source
+        self.view_mode = "Render"  # Render | Source
         self.thread_id = "default_session"
         self.processing_worker = None
 
@@ -540,7 +542,7 @@ class Qoze(App):
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
                 # Source View (用于选择复制，默认隐藏)
                 yield TextArea(id="source-output", read_only=True, show_line_numbers=False, language="markdown")
-                
+
                 yield Static(id="tool-status")
                 yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar", model_name=self.model_name)
@@ -566,7 +568,7 @@ class Qoze(App):
         self.main_log.can_focus = False
         self.main_log.auto_scroll = True
         self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output, self.tool_status)
-        
+
         self.print_welcome()
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
@@ -589,7 +591,7 @@ class Qoze(App):
             Text("使用提示: ", style="bold white"),
             Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
             Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
-            Text("  • Ctrl+R 切换选择模式 (支持鼠标选择复制)", style="bold yellow"),
+            Text("  • Ctrl+R 切换选择模式 (支持鼠标选择复制)", style="dim bold white"),
             Text(""),
         )
         self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
@@ -606,40 +608,40 @@ class Qoze(App):
         if self.view_mode == "Render":
             # 切换到 Source Mode
             self.view_mode = "Source"
-            
+
             # 生成 Source 文本
             full_text = self._generate_source_text()
             self.source_output.text = full_text
-            self.source_output.move_cursor(self.source_output.document.end) # 滚动到底部
-            
+            self.source_output.move_cursor(self.source_output.document.end)  # 滚动到底部
+
             self.main_log.styles.display = "none"
             self.source_output.styles.display = "block"
             self.source_output.focus()
-            
+
             self.status_bar.update_view_mode("Source")
             self.notify("进入选择模式: 支持鼠标选择，Ctrl+C 复制")
-            
+
         else:
             # 切换回 Render Mode
             self.view_mode = "Render"
-            
+
             self.source_output.styles.display = "none"
             self.main_log.styles.display = "block"
-            
+
             # 恢复焦点到输入框 (除非在多行模式)
             if not self.multiline_mode:
                 self.input_box.focus()
-            
+
             self.status_bar.update_view_mode("Render")
 
     def _generate_source_text(self):
         """从 conversation_state 重建 Markdown 源码文本"""
         messages = qoze_code_agent.conversation_state.get("messages", [])
         text_parts = []
-        
+
         # 添加 Header
         text_parts.append("# QozeCode Session History\n")
-        
+
         for msg in messages:
             if isinstance(msg, HumanMessage):
                 content = str(msg.content)
@@ -653,15 +655,15 @@ class Qoze(App):
                     for item in msg.content:
                         if isinstance(item, dict) and item.get("type") == "text":
                             content += item.get("text", "")
-                
+
                 if content:
                     text_parts.append(f"\n## 🤖 Assistant\n{content}\n")
-                    
+
                 # 处理 Tool Calls (虽然通常不需要显示细节，但为了完整性)
                 if msg.tool_calls:
                     for tc in msg.tool_calls:
                         text_parts.append(f"\n> 🛠️ Call Tool: `{tc.get('name')}`\n")
-            
+
             elif isinstance(msg, ToolMessage):
                 content = str(msg.content)
                 # 简化 Tool 输出显示，避免太长
@@ -702,7 +704,8 @@ class Qoze(App):
         """跨平台复制实现"""
         try:
             if platform.system() == "Darwin":
-                process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE)
                 process.communicate(text.encode('utf-8'))
                 return process.returncode == 0
             elif platform.system() == "Linux":
@@ -714,7 +717,7 @@ class Qoze(App):
                     process = subprocess.Popen(['xsel', '-ib'], stdin=subprocess.PIPE)
                     process.communicate(text.encode('utf-8'))
                     return process.returncode == 0
-            else: # Windows
+            else:  # Windows
                 import pyperclip
                 pyperclip.copy(text)
                 return True
@@ -737,11 +740,11 @@ class Qoze(App):
     async def process_user_input(self, user_input):
         if not user_input.strip(): return
         if user_input.startswith("/"): user_input = user_input[1:]
-        
+
         if user_input.lower() in ["quit", "exit", "q"]:
             self.exit()
             return
-        
+
         if user_input.lower() == "line":
             self.multiline_mode = True
             self.query_one("#input-line").add_class("hidden")
@@ -756,7 +759,7 @@ class Qoze(App):
             qoze_code_agent.conversation_state["messages"] = []
             self.print_welcome()
             return
-            
+
         if user_input.lower().startswith('skills'):
             success, message = skills_tui_handler.handle_skills_command(user_input.split())
             self.main_log.write(message if success else Text(f"❌ {message}", style="red"))
@@ -772,17 +775,18 @@ class Qoze(App):
 
         try:
             self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
-            
+
             image_folder = ".qoze/image"
             human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
             qoze_code_agent.conversation_state["messages"].append(human_msg)
-            
+
             current_state = {
                 "messages": [human_msg],
                 "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
             }
-            
-            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state, thread_id=self.thread_id)
+
+            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state,
+                                                  thread_id=self.thread_id)
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.main_log.write(Text("⛔ Interrupted", style="bold red"))
@@ -806,7 +810,7 @@ class Qoze(App):
     def on_input_changed(self, event: Input.Changed):
         value = event.value
         suggestions = self.query_one("#command-suggestions", OptionList)
-        
+
         # 简单补全逻辑
         show_suggestions = False
         filtered = []
@@ -815,16 +819,16 @@ class Qoze(App):
                 cmds = get_dynamic_commands()
             except:
                 cmds = [("/quit", "Quit"), ("/clear", "Clear"), ("/skills", "Skills")]
-            filtered = [Option(f"{c} - {d}", id=c[1:]) for c,d in cmds if c.startswith(value)]
+            filtered = [Option(f"{c} - {d}", id=c[1:]) for c, d in cmds if c.startswith(value)]
             show_suggestions = bool(filtered)
         elif value.lower().startswith("skills"):
             try:
                 cmds = get_skills_commands(value)
             except:
                 cmds = []
-            filtered = [Option(f"{c} - {d}", id=c) for c,d in cmds if c.startswith(value.lower())]
+            filtered = [Option(f"{c} - {d}", id=c) for c, d in cmds if c.startswith(value.lower())]
             show_suggestions = bool(filtered)
-            
+
         if show_suggestions:
             suggestions.clear_options()
             suggestions.add_options(filtered)
@@ -845,8 +849,10 @@ class Qoze(App):
         suggestions = self.query_one("#command-suggestions", OptionList)
         if suggestions.styles.display != "none":
             if event.key in ["up", "down"]:
-                if event.key == "up": suggestions.action_cursor_up()
-                else: suggestions.action_cursor_down()
+                if event.key == "up":
+                    suggestions.action_cursor_up()
+                else:
+                    suggestions.action_cursor_down()
                 event.stop()
             elif event.key == "enter":
                 if suggestions.highlighted is not None:
@@ -864,11 +870,11 @@ class Qoze(App):
 
     def on_mouse_scroll_down(self, event):
         if self.view_mode == "Render" and self.main_log.styles.display != "none":
-             self.main_log.scroll_relative(y=1, animate=False)
+            self.main_log.scroll_relative(y=1, animate=False)
 
     def on_mouse_scroll_up(self, event):
         if self.view_mode == "Render" and self.main_log.styles.display != "none":
-             self.main_log.scroll_relative(y=-1, animate=False)
+            self.main_log.scroll_relative(y=-1, animate=False)
 
     async def action_submit_multiline(self):
         if not self.multiline_mode: return
@@ -890,12 +896,14 @@ class Qoze(App):
         self.input_box.focus()
         self.status_bar.update_state("Idle")
 
+
 def main():
     launcher.ensure_config()
     model = launcher.get_model_choice()
     os.system('cls' if os.name == 'nt' else 'clear')
     if model:
         Qoze(model_name=model).run()
+
 
 if __name__ == "__main__":
     main()
