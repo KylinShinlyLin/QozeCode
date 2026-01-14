@@ -1,247 +1,123 @@
-# QozeCode
-
-<img src="./assets/logo.png" alt="图片描述" style="padding: 5px 60px 5px 60px;">
-
-```QozeCode``` 是一个功能强大的命令行AI agent，基于 langGraph 进行开发设计，集成了多种AI模型和实用工具，为开发者提供智能化的编程支持和自动化能力。
-
-## 📚 目录
-
-- [目前集成模型厂商](#-目前集成模型厂商)
-- [核心功能特性](#核心功能特性)
-- [最佳使用建议](#最佳使用建议)
-- [QuickStart](#quickstart)
-    - [安装方式](#安装方式)
-    - [配置指引](#配置指引)
-        - [OpenAI](#1-openai)
-        - [DeepSeek](#2-deepseek)
-        - [智普](#3-glm-4-智谱ai)
-        - [Claude](#4-Claude-4-aws-bedrock)
-        - [Gemini](#5-gemini-google-vertex-ai)
-    - [使用方法](#使用方法)
-- [许可证](#许可证)
-
-
 <div align="center">
-  <img src="./assets/show.gif" alt="使用演示" style="padding: 5px 60px 5px 60px;">
+    <img src="assets/logo.png" width="200" alt="QozeCode Logo">
+    <h1>QozeCode</h1>
+    <p><strong>智能终端工作空间助手 | Intelligent Terminal Workspace Assistant</strong></p>
 </div>
 
+---
 
-#### 📦 目前集成模型厂商
+## 项目简介
 
-| 模型名称         | 厂商                      | 状态     | 说明                           |
-|--------------|-------------------------|--------|------------------------------|
-| DeepSeek     | DeepSeek 官方             | 🟢 可用  | 支持 DeepSeek Exp V3.2         |
-| Qwen Max     | Qwen 官方                 | 🟢 可用  | 支持 Qwen Max                  |
-| Claude-4     | Anthropic (AWS Bedrock) | 🟢 可用  | 通过 AWS Bedrock 集成            |
-| gpt-5.2      | OpenAI 官方               | 🟢 可用  | OpenAI GPT-5                 |
-| gemini-3-pro | Google Vertex AI        | 🟢 可用  | 通过 Google Cloud Vertex AI 集成 |
-| glm-4.6      | 智谱AI 官方                 | 🟢 可用  | 支持 GLM-4.6 模型                |
-| Ollama       | 自建模型                    | 🔴 计划中 | 未来支持                         |
+QozeCode 是一款基于 **LangGraph** 架构构建的专业级命令行智能体（AI Agent）。它旨在将大语言模型的推理能力与终端操作环境深度融合，通过
+**ReAct**（Reasoning and Acting）范式，实现复杂开发任务的自动化执行。
 
-[//]: # (> ## 🤔 为什么不全模型集成？)
+作为开发者的智能副驾驶，QozeCode 不仅提供代码生成与审查能力，更能直接与系统 Shell 交互，执行文件操作、系统管理及网络检索，所有操作均在现代化的
+TUI（终端用户界面）中呈现。
 
-[//]: # (>)
+### 🤖 支持模型矩阵
 
-[//]: # (> 在测试 Agent 期间，我们发现全模型支持会带来以下问题：)
+QozeCode 深度集成了全球领先的 AI 模型厂商，为不同场景提供最佳算力支持：
 
-[//]: # (>)
+| 厂商 (Provider)     | 支持模型 (Supported Models)           | 特性描述                 |
+|:------------------|:----------------------------------|:---------------------|
+| **OpenAI**        | `GPT-5.2` / `GPT-5.1`             | 强大的通用推理与代码生成能力       |
+| **DeepSeek**      | `DeepSeek V3` / `DeepSeek R1`     | 卓越的推理性能与高性价比，支持深度思考  |
+| **Anthropic**     | `Claude 4` (AWS Bedrock)          | 拥有超长上下文窗口与细腻的逻辑处理能力  |
+| **Google**        | `Gemini 3 Pro` / `Gemini 3 Flash` | 谷歌最新多模态模型，响应速度极快     |
+| **xAI**           | `Grok 4.1 Fast`                   | 极速推理，专注于实时信息处理       |
+| **Zhipu AI**      | `GLM-4.7`                         | 优秀的中文理解能力与工具调用表现     |
+| **Alibaba Cloud** | `Qwen 3 Max`                      | 通义千问最新旗舰，具备强大的逻辑思维能力 |
 
-[//]: # (> ### 💡 设计理念)
+## 核心特性
 
-[//]: # (> - **优化体验优先**：为了保证最佳的使用体验，我们选择性地集成在特定领域表现优异的模型)
+### 🧠 智能决策引擎
 
-[//]: # (> - **维护效率**：集中精力维护少数高质量模型，确保每个集成的稳定性和可靠性)
+基于 LangGraph 状态图构建的决策核心，支持复杂的任务规划与多步推理。系统严格遵循 ReAct 模式，确保每一个操作都经过"
+思考-决策-执行-观察"的完整闭环，保证任务执行的准确性与可控性。
 
-[//]: # (>)
+### 🖥️ 沉浸式终端体验
 
-[//]: # (> ### 📈 选型标准)
+采用 **Textual** 与 **Rich** 框架打造的现代化终端界面，提供语法高亮、流式输出、面板分割等视觉增强功能。在保持命令行高效特性的同时，大幅提升交互体验与可读性。
 
-[//]: # (> 经过个人体验和分析，我们按照以下标准选择集成的模型：)
+### 🧩 模块化技能系统
 
-[//]: # (> - **代码生成能力**：在编程和代码生成方面表现优异)
+拥有可扩展的技能（Skill）架构，支持按需加载专业领域的知识库与工具集：
 
-[//]: # (> - **解决问题能力**：具备强大的逻辑思维和问题分析能力)
+- **Python Code Review**: 专业的代码质量分析、安全审计与重构建议。
+- **Git Workflow**: 标准化的版本控制管理与协作流程指导。
 
-[//]: # (> - **API通畅**：提供稳定可靠的调用接口，或者能避免墙带来影响)
+### 🛠️ 全栈工具集成
 
-[//]: # (> - **性价比**：在使用成本和性能之间取得良好平衡)
+内置多维度系统工具链，打破模型与操作系统的壁垒：
 
-[//]: # (>)
+- **系统交互**: 安全执行 Shell 命令，管理文件系统。
+- **信息检索**: 集成 Tavily API，提供实时的网络搜索与知识获取能力。
+- **多模型支持**: 兼容 DeepSeek, GPT-4, Claude-3.5, Gemini Pro 等主流 LLM。
 
-[//]: # (> 💬 如果您有特殊的需求，欢迎提出 [Issues]&#40;https://github.com/KylinShinlyLin/QozeCode/issues&#41;，我会尽快与您联系沟通！)
+## 环境要求
 
-## 核心功能特性
+- **操作系统**: macOS / Linux
+- **Python 版本**: >= 3.9
+- **终端环境**: 支持 True Color 的终端模拟器 (如 iTerm2, Alacritty, Terminal.app)
 
-[//]: # (### 多窗口 agent 同时运行)
+## 快速开始
 
-[//]: # ()
+### 1. 安装
 
-[//]: # (- **并发处理**: 支持在多个终端窗口中同时启动不同的 QozeCode Agent 实例，每个实例拥有独立的会话ID和上下文记忆)
+#### 🚀 方式一：一键安装 (推荐)
 
-[//]: # ()
-
-[//]: # (<div align="center">)
-
-[//]: # (  <img src="./assets/mutilrun.png" alt="多任务" style="padding: 5px 60px 5px 60px;">)
-
-[//]: # (</div>)
-
-### 在IDE 中随时唤起执行
-
-- **快速启动**: 通过简单的 `qoze` 命令即可在任意目录下启动 AI 编程助手，无需复杂配置
-
-<div align="center">
-  <img src="./assets/idea.png" alt="唤起执行" style="padding: 5px 60px 5px 60px;">
-</div>
-
-[//]: # (### 🌐 浏览器自动化（计划中）)
-
-[//]: # ()
-
-[//]: # (- **网页操作**: 智能浏览器控制功能，可以自动化网页操作和数据抓取)
-
-### 🔧 扩展能力 (未来支持)
-
-- **MCP 工具支持**: 即将支持更多 Model Context Protocol 工具（coming soon）
-- **API 集成**: 跟多高效有价值的工具会通过API持续集成
-
-### 支持命令行多模态
-如果有ui 等方面的需求，可以将图片文件放到当前目录自动生成的 ``` qoze/image ``` 下面，会自动携带到上下文中
-
-<img src="./assets/visiual.png" alt="图片描述" style="padding: 10px 100px 10px 100px;">
-
-
-### 💰 高效缓存利用
-
-- 优化过高效 token 缓存利用
-- 运行一天需要 1 块钱人民币
-
-<img src="./assets/cache_token.png" alt="图片描述" style="padding: 10px 100px 10px 100px;">
-
-#### 最佳使用建议
-
-> 如果你考虑性价比并且还是国内用户， 建议你选择 ' deepseek ' 作为你的首选模型使用
-
-# QuickStart
-
-## 安装方式
-
-- 安装 or 更新 直接执行
+使用 curl 命令快速部署到您的系统：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
 ```
 
-- 添加环境变量，方便使用
+#### 📦 方式二：手动安装
+
+如果您更喜欢手动管理代码仓库：
 
 ```bash
-source ~/.qoze/qoze_env.sh && qoze
+# 1. 克隆仓库
+git clone https://github.com/KylinShinlyLin/QozeCode.git
+cd QozeCode
+
+# 2. 运行安装脚本
+chmod +x install.sh
+./install.sh
 ```
 
-- 卸载
+### 2. 配置
+
+QozeCode 依赖配置文件管理 API 密钥与模型参数。请参考模板创建配置文件：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KylinShinlyLin/QozeCode/main/install.sh | bash -s install
+# 配置文件默认路径优先级：/etc/conf/qoze.conf > ~/.qoze/qoze.conf
+cp qoze.conf.template ~/.qoze/qoze.conf
 ```
 
-## 配置指引
+编辑配置文件，填入您的 API Key（如 OpenAI, DeepSeek, Tavily 等）。
 
-### API 密钥配置
+### 3. 启动
 
-在使用 QozeCode Agent 之前，您需要配置相应AI模型的API密钥。配置文件位置：
-
-- **优先位置**: `/etc/conf/qoze.conf` (需要管理员权限)
-- **备用位置**: `~/.qoze/qoze.conf` (用户目录)
-
-首次运行时，系统会自动创建配置文件模板。您也可以手动创建配置文件：
+在项目根目录下运行启动器：
 
 ```bash
-# 创建配置目录
-mkdir -p ~/.qoze
+python launcher.py
 ```
 
-### 📋 各模型配置说明
+## 目录结构
 
-#### 1. OpenAI
-
-```ini
-[openai]
-api_key=your_openai_api_key_here
+```text
+QozeCode/
+├── .qoze/              # 运行时数据与规则库
+├── skills/             # 技能插件模块
+├── tools/              # 核心工具定义
+├── utils/              # 基础架构组件
+├── qoze_code_agent.py  # Agent 核心逻辑
+└── qoze_tui.py         # 终端界面实现
 ```
 
-**获取方式**:
-
-- 访问 [OpenAI Platform](https://platform.openai.com/api-keys) 获取秘钥
-
-#### 2. DeepSeek
-
-```ini
-[deepseek]
-api_key=your_deepseek_api_key_here
-```
-
-**获取方式**:
-
-- 访问 [DeepSeek 官网](https://platform.deepseek.com/)
-
-<img src="./assets/deepseek_key.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
-
-#### 3. GLM-4 (智谱AI)
-
-```ini
-[ZHIPU]
-api_key=your_zhipu_api_key_here
-```
-
-**获取方式**:
-
-- 访问 [智谱AI开放平台](https://open.bigmodel.cn/)
-
-<img src="./assets/glm_key.png" alt="图片描述" style="padding: 5px 50px 5px 50px;">
-
-#### 4. Claude-4 (AWS Bedrock)
-
-```ini
-[aws]
-session_token=your_session_key
-region_name=us-east-1
-```
-
-**获取方式**:
-
-- 登录 [AWS 控制台](https://aws.amazon.com/console/)
-- 搜索进入 bedrock
-- API秘钥 -> 生成长期 API 秘钥
-
-#### 5. Gemini (Google Vertex AI)
-
-```ini
-[vertexai]
-project=your_gcp_project_id
-location=us-central1
-credentials_path=/path/to/your/service-account-key.json
-```
-
-**获取方式**:
-
-- 本地安装 gcloud cli
-- 授权登录你的 gcp 账号
-- 搜索 Vertex AI API 并开启权限
-- 直接即可使用
-
-### 使用方法
-
-安装完成后，在终端中直接运行：
-
-```bash
-qoze
-```
-
-## 许可证
-
-本项目采用 Apache License 2.0 开源协议。详情请参阅 [LICENSE](LICENSE) 文件。
-
-Copyright 2025 QozeCode
+## 开源协议
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
