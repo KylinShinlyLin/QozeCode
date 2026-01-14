@@ -56,6 +56,11 @@ skill_manager = None
 def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
                                shell="", current_dir="", directory_tree=""):
     """获取增强的系统提示词（包含技能信息）"""
+    # 兼容 ~/.qoze/skills 下的脚本调用
+    user_qoze_path = os.path.expanduser("~/.qoze")
+    if user_qoze_path not in sys.path:
+        sys.path.append(user_qoze_path)
+
     global skill_manager
     if skill_manager is None:
         skill_manager = SkillManager()
