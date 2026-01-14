@@ -771,7 +771,6 @@ class Qoze(App):
         self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")
         self.main_log.focus()
-        self.status_bar.update_state("Thinking...")
 
         try:
             self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
