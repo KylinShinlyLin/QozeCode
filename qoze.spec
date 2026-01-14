@@ -2,70 +2,57 @@
 from PyInstaller.utils.hooks import collect_submodules, collect_all, copy_metadata
 import os
 
+# 基础隐藏导入
 hiddenimports = [
-    'textual',
-    'rich',
-    'inquirer',
-    'readchar',
-    'langchain_core',
-    'langgraph',
-    'typing_extensions',
-    'tavily',
-    'httpx',
-    'boto3',
-    'botocore',
-    'langchain_aws',
-    'langchain_deepseek',
-    'langchain_google_genai',
-    'langchain_openai',
-    'langchain_xai',
-    'langchain_qwq',
-    'jinja2',
-    'lxml',
-    'bs4',
-    'pymupdf',
+    'textual', 'rich', 'inquirer', 'readchar', 'langchain_core', 'langgraph',
+    'typing_extensions', 'tavily', 'httpx', 'boto3', 'botocore',
+    'langchain_aws', 'langchain_deepseek', 'langchain_google_genai', 
+    'langchain_openai', 'langchain_xai', 'langchain_qwq',
+    'jinja2', 'lxml', 'bs4', 'pymupdf',
 ]
 
-# 收集子模块
+# 自动收集子模块
 for pkg in hiddenimports[:]:
     hiddenimports += collect_submodules(pkg)
 
-# 添加本地模块
+# 本地模块导入
 hiddenimports += [
-    'launcher',
-    'qoze_code_agent',
-    'model_initializer',
-    'shared_console',
-    'config_manager',
-    'constant',
-    'dynamic_commands_patch',
-    'tools',
-    'utils',
-    'skills'
+    'launcher', 'qoze_code_agent', 'model_initializer', 
+    'shared_console', 'config_manager', 'constant', 
+    'dynamic_commands_patch', 'tools', 'utils', 'skills'
 ]
 
-datas = [
+# 动态构建 datas 列表，避免路径不存在导致崩溃
+datas = []
+potential_datas = [
     ('.qoze/rules', '.qoze/rules'),
     ('skills', 'skills'),
     ('tools', 'tools'),
     ('utils', 'utils'),
 ]
 
-binaries = []
-for pkg in ['certifi', 'botocore']:
-    d, b, h = collect_all(pkg)
-    datas += d
-    binaries += b
-    hiddenimports += h
+for src, dst in potential_datas:
+    if os.path.exists(src):
+        datas.append((src, dst))
+    else:
+        print(f"警告: 资源目录 {src} 未找到，跳过打包...")
 
-# 复制必要的元数据
+# 特殊包的数据和元数据收集
+for pkg in ['certifi', 'botocore']:
+    try:
+        d, b, h = collect_all(pkg)
+        datas += d
+        hiddenimports += h
+    except Exception:
+        pass
+
 datas += copy_metadata('readchar')
 datas += copy_metadata('textual')
 
 a = Analysis(
-    ['qoze_tui.py'],  # 将入口改为 qoze_tui.py
+    ['qoze_tui.py'],
     pathex=['.'],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
