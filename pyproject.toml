@@ -35,6 +35,8 @@ dependencies = [
     "python-crontab",
     "hnswlib",
     "textual",
+    "pymupdf",
+    "jinja2",
 ]
 
 [project.scripts]

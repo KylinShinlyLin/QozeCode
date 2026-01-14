@@ -1,8 +1,8 @@
-<div align="center">
-    <img src="assets/logo.png" width="200" alt="QozeCode Logo">
-    <h1>QozeCode</h1>
-    <p><strong>智能终端工作空间助手 | Intelligent Terminal Workspace Assistant</strong></p>
-</div>
+
+
+# QozeCode
+
+<p align="center"><img src="./assets/output.gif" width="800"></p>
 
 ---
 
