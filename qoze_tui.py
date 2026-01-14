@@ -742,17 +742,24 @@ class Qoze(App):
                     self.processing_worker = self.run_worker(self.process_user_input(cmd), exclusive=True)
 
     def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
-        """处理鼠标向下滚动事件"""
-        # 确保main_log获得焦点并进行滚动
+        """处理鼠标向下滚动事件 - 优化触摸板体验"""
+        # 建议框显示时，优先让建议框处理
+        suggestions = self.query_one("#command-suggestions", OptionList)
+        if suggestions.styles.display != "none":
+            return
+
+        # 无动画直接滚动，步长为1，适应触摸板的高频触发
         if hasattr(self, 'main_log') and self.main_log:
-            self.main_log.scroll_relative(y=-3, animate=True, duration=0.1)
-            event.prevent_default()
+            self.main_log.scroll_relative(y=1, animate=False)
 
     def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
-        """处理鼠标向上滚动事件"""
+        """处理鼠标向上滚动事件 - 优化触摸板体验"""
+        suggestions = self.query_one("#command-suggestions", OptionList)
+        if suggestions.styles.display != "none":
+            return
+
         if hasattr(self, 'main_log') and self.main_log:
-            self.main_log.scroll_relative(y=3, animate=True, duration=0.1)
-            event.prevent_default()
+            self.main_log.scroll_relative(y=-1, animate=False)
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
