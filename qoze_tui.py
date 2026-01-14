@@ -208,7 +208,7 @@ class StatusBar(Static):
             shortcuts.append("[bold yellow]Ctrl+R[/]: 切回渲染模式")
             shortcuts.append("[bold green]Ctrl+C[/]: 复制选中")
         else:
-            shortcuts.append("[dim]Ctrl+R[/]: 切换选择模式(源码)")
+            shortcuts.append("[dim]Ctrl+R[/]: 切换选择模式")
             shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
             
         shortcuts_text = " | ".join(shortcuts)
