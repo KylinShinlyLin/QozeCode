@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os
-import time
-import platform
-import uuid
-import sys
 import asyncio
+import os
 import subprocess
+import sys
+import time
 import traceback
+import uuid
 from datetime import datetime
 
+from rich.console import Group
+from rich.markdown import Markdown
+from rich.markup import escape
+from rich.padding import Padding
+from rich.panel import Panel
+from rich.text import Text
 from textual.app import App, ComposeResult, on
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownWidget, TextArea, OptionList
 from textual.widgets.option_list import Option
-from textual.events import MouseScrollDown, MouseScrollUp
-from textual.binding import Binding
-from rich.text import Text
-from rich.markup import escape
-from rich.panel import Panel
-from rich.console import Group
-from rich.markdown import Markdown
 
 # Skills TUI Integration
 sys.path.append(".")
@@ -245,9 +244,13 @@ class TUIStreamOutput:
 
     def flush_to_log(self, text: str, reasoning: str):
         if reasoning:
-            self.main_log.write(Text(reasoning, style="italic dim #565f89"))
+            reasoning_clean = reasoning.strip()
+            content = Text(reasoning_clean, style="italic #565f89")
+            self.main_log.write(Padding(content, (0, 0, 1, 0)))
+
         if text:
             self.main_log.write(Markdown(text))
+
         self.main_log.scroll_end(animate=False)
         self.stream_display.update("")
         self.stream_display.styles.display = "none"
@@ -436,7 +439,7 @@ class Qoze(App):
         height: 1fr; 
         background: #13131c; 
         border: none; 
-        padding: 0; 
+        padding: 1 2; 
     }
     
     #source-output {
@@ -455,7 +458,7 @@ class Qoze(App):
 
     #tool-status { width: 100%; height: auto; min-height: 1; background: #13131c; padding: 0 2; display: none; }
     
-    #stream-output {
+    #stream-output { color: #565f89;
         width: 100%;
         height: auto;
         max-height: 60%;
