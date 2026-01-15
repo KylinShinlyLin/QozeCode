@@ -193,26 +193,15 @@ class StatusBar(Static):
         super().__init__()
         self.model_name = model_name
         self.state_desc = "Idle"
-        self.view_mode = "Render"  # Render or Source
 
     def update_state(self, state):
         self.state_desc = state
         self.refresh()
 
-    def update_view_mode(self, mode):
-        self.view_mode = mode
-        self.refresh()
-
     def render(self):
         # 构建快捷键提示
         shortcuts = []
-        if self.view_mode == "Source":
-            shortcuts.append("[bold yellow]Ctrl+R[/]: 切回渲染模式")
-            shortcuts.append("[bold green]Ctrl+C[/]: 复制选中")
-        else:
-            shortcuts.append("[dim]Ctrl+R[/]: 切换选择模式")
-            shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
-
+        shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
         shortcuts_text = " | ".join(shortcuts)
 
         # 如果状态是 Idle，只显示快捷键，不显示状态文本
@@ -277,7 +266,7 @@ class TUIStreamOutput:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
                     current_state,
                     stream_mode="messages",
-                    config={"recursion_limit": 150, "configurable": {"thread_id": thread_id}}
+                    config={"recursion_limit": 300, "configurable": {"thread_id": thread_id}}
             ):
                 try:
                     current_task = asyncio.current_task()
@@ -518,11 +507,9 @@ class Qoze(App):
     """
 
     BINDINGS = [
-        Binding("ctrl+c", "interrupt_or_copy", "Cancel/Copy", priority=True),
-        Binding("ctrl+l", "clear_screen", "Clear"),
+        Binding("ctrl+c", "interrupt", "Cancel", priority=True),
         Binding("ctrl+d", "submit_multiline", "Submit", priority=True),
         Binding("escape", "cancel_multiline", "Cancel", priority=True),
-        Binding("ctrl+r", "toggle_view_mode", "Toggle View", priority=True),
     ]
 
     def __init__(self, model_name):
@@ -530,7 +517,6 @@ class Qoze(App):
         self.model_name = model_name
         self.agent_ready = False
         self.multiline_mode = False
-        self.view_mode = "Render"  # Render | Source
         self.thread_id = "default_session"
         self.processing_worker = None
 
@@ -540,8 +526,6 @@ class Qoze(App):
             with Vertical(id="chat-area"):
                 # Render View (默认)
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
-                # Source View (用于选择复制，默认隐藏)
-                yield TextArea(id="source-output", read_only=True, show_line_numbers=False, language="markdown")
 
                 yield Static(id="tool-status")
                 yield MarkdownWidget(id="stream-output")
@@ -550,14 +534,13 @@ class Qoze(App):
             yield OptionList(id="command-suggestions")
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
-                yield Input(placeholder="Initializing Agent... (Ctrl+R 切换选择模式)", id="input-box", disabled=True)
+                yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
             yield TextArea(id="multi-line-input", classes="hidden")
             yield RequestIndicator(id="request-indicator", classes="hidden")
             yield StatusBar(model_name=self.model_name)
 
     def on_mount(self):
         self.main_log = self.query_one("#main-output", RichLog)
-        self.source_output = self.query_one("#source-output", TextArea)
         self.tool_status = self.query_one("#tool-status", Static)
         self.stream_output = self.query_one("#stream-output", MarkdownWidget)
         self.input_box = self.query_one("#input-box", Input)
@@ -591,7 +574,6 @@ class Qoze(App):
             Text("使用提示: ", style="bold white"),
             Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
             Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
-            Text("  • Ctrl+R 切换选择模式 (支持鼠标选择复制)", style="dim bold white"),
             Text(""),
         )
         self.main_log.write(Align.center(Text(qoze_code_art, style="bold cyan")))
@@ -603,93 +585,6 @@ class Qoze(App):
             padding=(0, 1)
         )))
 
-    def action_toggle_view_mode(self):
-        """在 Render(RichLog) 和 Source(TextArea) 模式间切换"""
-        if self.view_mode == "Render":
-            # 切换到 Source Mode
-            self.view_mode = "Source"
-
-            # 生成 Source 文本
-            full_text = self._generate_source_text()
-            self.source_output.text = full_text
-            self.source_output.move_cursor(self.source_output.document.end)  # 滚动到底部
-
-            self.main_log.styles.display = "none"
-            self.source_output.styles.display = "block"
-            self.source_output.focus()
-
-            self.status_bar.update_view_mode("Source")
-            self.notify("进入选择模式: 支持鼠标选择，Ctrl+C 复制")
-
-        else:
-            # 切换回 Render Mode
-            self.view_mode = "Render"
-
-            self.source_output.styles.display = "none"
-            self.main_log.styles.display = "block"
-
-            # 恢复焦点到输入框 (除非在多行模式)
-            if not self.multiline_mode:
-                self.input_box.focus()
-
-            self.status_bar.update_view_mode("Render")
-
-    def _generate_source_text(self):
-        """从 conversation_state 重建 Markdown 源码文本"""
-        messages = qoze_code_agent.conversation_state.get("messages", [])
-        text_parts = []
-
-        # 添加 Header
-        text_parts.append("# QozeCode Session History\n")
-
-        for msg in messages:
-            if isinstance(msg, HumanMessage):
-                content = str(msg.content)
-                text_parts.append(f"\n## 🧑 User\n{content}\n")
-            elif isinstance(msg, AIMessage):
-                content = ""
-                # 处理内容 (List or String)
-                if isinstance(msg.content, str):
-                    content = msg.content
-                elif isinstance(msg.content, list):
-                    for item in msg.content:
-                        if isinstance(item, dict) and item.get("type") == "text":
-                            content += item.get("text", "")
-
-                if content:
-                    text_parts.append(f"\n## 🤖 Assistant\n{content}\n")
-
-                # 处理 Tool Calls (虽然通常不需要显示细节，但为了完整性)
-                if msg.tool_calls:
-                    for tc in msg.tool_calls:
-                        text_parts.append(f"\n> 🛠️ Call Tool: `{tc.get('name')}`\n")
-
-            elif isinstance(msg, ToolMessage):
-                content = str(msg.content)
-                # 简化 Tool 输出显示，避免太长
-                if len(content) > 500:
-                    preview = content[:200] + "\n... (content truncated) ...\n" + content[-200:]
-                    text_parts.append(f"\n> 📦 Tool Output:\n```\n{preview}\n```\n")
-                else:
-                    text_parts.append(f"\n> 📦 Tool Output:\n```\n{content}\n```\n")
-
-        return "".join(text_parts)
-
-    def action_interrupt_or_copy(self):
-        """Ctrl+C 处理逻辑：在 Source 模式且有选中时复制，否则中断"""
-        # 1. 如果在 Source 模式且有选中内容 -> 复制
-        if self.view_mode == "Source" and self.focused == self.source_output:
-            selected_text = self.source_output.selected_text
-            if selected_text:
-                if self.copy_to_clipboard(selected_text):
-                    self.notify(f"✅ 已复制 {len(selected_text)} 字符")
-                else:
-                    self.notify("❌ 复制失败")
-                return
-
-        # 2. 否则 -> 中断/取消
-        self.action_interrupt()
-
     def action_interrupt(self):
         if self.processing_worker and self.processing_worker.is_running:
             self.processing_worker.cancel()
@@ -700,31 +595,6 @@ class Qoze(App):
             return
         self.exit()
 
-    def copy_to_clipboard(self, text: str) -> bool:
-        """跨平台复制实现"""
-        try:
-            if platform.system() == "Darwin":
-                process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                           stderr=subprocess.PIPE)
-                process.communicate(text.encode('utf-8'))
-                return process.returncode == 0
-            elif platform.system() == "Linux":
-                try:
-                    process = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
-                    process.communicate(text.encode('utf-8'))
-                    return process.returncode == 0
-                except FileNotFoundError:
-                    process = subprocess.Popen(['xsel', '-ib'], stdin=subprocess.PIPE)
-                    process.communicate(text.encode('utf-8'))
-                    return process.returncode == 0
-            else:  # Windows
-                import pyperclip
-                pyperclip.copy(text)
-                return True
-        except Exception as e:
-            self.notify(f"Copy Error: {e}")
-            return False
-
     async def init_agent_worker(self):
         try:
             llm = model_initializer.initialize_llm(self.model_name)
@@ -732,7 +602,7 @@ class Qoze(App):
             qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
             self.agent_ready = True
             self.input_box.disabled = False
-            self.input_box.placeholder = "Type message... (Ctrl+R 切换选择模式)"
+            self.input_box.placeholder = "Type message..."
             self.input_box.focus()
         except Exception as e:
             self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))
@@ -868,11 +738,11 @@ class Qoze(App):
                 event.stop()
 
     def on_mouse_scroll_down(self, event):
-        if self.view_mode == "Render" and self.main_log.styles.display != "none":
+        if self.main_log.styles.display != "none":
             self.main_log.scroll_relative(y=1, animate=False)
 
     def on_mouse_scroll_up(self, event):
-        if self.view_mode == "Render" and self.main_log.styles.display != "none":
+        if self.main_log.styles.display != "none":
             self.main_log.scroll_relative(y=-1, animate=False)
 
     async def action_submit_multiline(self):
