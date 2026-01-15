@@ -127,7 +127,9 @@ class Sidebar(Static):
             text.append(f"{branch}\n", style="bold cyan")
 
         text.append(f"模型: ", style="dim white")
-        text.append(f"{self.model_name}\n\n", style="bold cyan")
+        text.append(f"{self.model_name}\n", style="bold cyan")
+        text.append(f"当前目录: ", style="dim white")
+        text.append(f"{os.getcwd()}\n\n", style="bold cyan")
 
         if modified:
             text.append("GIT 变更记录\n", style="bold #7dcfff underline")
@@ -575,6 +577,7 @@ class Qoze(App):
             Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
             Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
             Text("使用提示: ", style="bold white"),
+            Text("  • 输入 'clean' 清空当前会话", style="dim bold white"),
             Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
             Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
             Text(""),
