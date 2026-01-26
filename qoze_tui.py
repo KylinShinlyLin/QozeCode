@@ -293,6 +293,9 @@ class TUIStreamOutput:
                     pass
 
                 if isinstance(message_chunk, AIMessage):
+                    # FIX: Ensure content is not None to prevent concatenation errors
+                    if message_chunk.content is None:
+                        message_chunk.content = ""
                     if accumulated_ai_message is None:
                         accumulated_ai_message = message_chunk
                     else:
