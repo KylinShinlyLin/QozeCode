@@ -519,7 +519,18 @@ class Qoze(App):
     }
     #command-suggestions > .option-list--option { padding: 0 1; }
     #command-suggestions > .option-list--option:hover { background: #414868; }
-    """
+
+    /* --- Markdown Styles --- */
+    MarkdownH1 { color: #7aa2f7; text-style: bold; border-bottom: wide #7aa2f7; }
+    MarkdownH2 { color: #7dcfff; text-style: bold; border-bottom: wide #7dcfff; }
+    MarkdownH3 { color: #2ac3de; text-style: bold; }
+    MarkdownH4 { color: #9ece6a; text-style: bold; }
+    MarkdownH5 { color: #e0af68; text-style: bold; }
+    MarkdownH6 { color: #ff9e64; text-style: bold; }
+    MarkdownCode { color: #ff9e64; background: #24283b; }
+    Markdown > BlockQuote { color: #565f89; border-left: solid #565f89; }
+    /* ----------------------- */
+        """
 
     BINDINGS = [
         Binding("ctrl+c", "interrupt", "Cancel", priority=True),
