@@ -27,6 +27,7 @@ sys.path.append(".")
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 try:
     from skills.skills_tui_integration import SkillsTUIHandler
+
     skills_tui_handler = SkillsTUIHandler()
 except ImportError:
     skills_tui_handler = None
@@ -72,13 +73,16 @@ async def run_async_cmd(args, timeout=2.0):
     except Exception:
         return ""
 
+
 async def get_git_info():
     url = await run_async_cmd(['git', 'remote', 'get-url', 'origin'])
     return url if url else "local"
 
+
 async def get_git_branch():
     branch = await run_async_cmd(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
     return branch if branch else None
+
 
 async def get_modified_files():
     status = await run_async_cmd(['git', 'status', '-s'])
@@ -772,22 +776,24 @@ class Qoze(App):
 
 
 def main():
+    import shared_console
+
+    launcher.ensure_config()
+    model = launcher.get_model_choice()
+
+    if not model:
+        return
+
     # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
     # 这样可以防止工具直接使用 print/console.print 破坏界面
-    import shared_console
-    
     # 保持对文件的引用，防止被 GC 关闭
     null_file = open(os.devnull, "w")
     shared_console.console.file = null_file
-    
-    launcher.ensure_config()
-    model = launcher.get_model_choice()
-    
+
     # 清屏
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    if model:
-        Qoze(model_name=model).run()
+    os.system("cls" if os.name == "nt" else "clear")
+
+    Qoze(model_name=model).run()
 
 
 if __name__ == "__main__":
