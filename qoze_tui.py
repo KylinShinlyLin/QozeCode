@@ -44,6 +44,16 @@ from utils.constants import init_prompt
 # Add current directory to path
 sys.path.append(os.getcwd())
 
+# --- Theme Patch ---
+try:
+    sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
+    import qoze_theme
+
+    qoze_theme.apply_theme()
+except ImportError:
+    pass
+# -------------------
+
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GLOG_minloglevel'] = '2'
 
