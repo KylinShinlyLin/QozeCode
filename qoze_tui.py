@@ -25,12 +25,18 @@ from textual.widgets.option_list import Option
 sys.path.append(".")
 # Skills TUI Handler Import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
-from skills.skills_tui_integration import SkillsTUIHandler
+try:
+    from skills.skills_tui_integration import SkillsTUIHandler
+    skills_tui_handler = SkillsTUIHandler()
+except ImportError:
+    skills_tui_handler = None
 
-skills_tui_handler = SkillsTUIHandler()
 # Dynamic Commands Import
-sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
-from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
+try:
+    from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
+except ImportError:
+    get_dynamic_commands = lambda: []
+    get_skills_commands = lambda x: []
 
 from utils.constants import init_prompt
 
@@ -53,37 +59,37 @@ except ImportError as e:
     sys.exit(1)
 
 
-def get_git_info():
+# --- Async Git Helpers ---
+async def run_async_cmd(args, timeout=2.0):
     try:
-        repo_url = subprocess.check_output(['git', 'remote', 'get-url', 'origin'], text=True,
-                                           stderr=subprocess.DEVNULL).strip()
-        return repo_url
-    except:
-        return "local"
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return stdout.decode('utf-8', errors='ignore').strip()
+    except Exception:
+        return ""
 
+async def get_git_info():
+    url = await run_async_cmd(['git', 'remote', 'get-url', 'origin'])
+    return url if url else "local"
 
-def get_git_branch():
-    try:
-        branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True,
-                                         stderr=subprocess.DEVNULL).strip()
-        return branch
-    except:
-        return None
+async def get_git_branch():
+    branch = await run_async_cmd(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+    return branch if branch else None
 
-
-def get_modified_files():
-    try:
-        status = subprocess.check_output(['git', 'status', '-s'], text=True, stderr=subprocess.DEVNULL).strip()
-        if not status:
-            return []
-        files = []
-        for line in status.split('\n'):
-            parts = line.split()
-            if len(parts) >= 2:
-                files.append((parts[0], parts[-1]))
-        return files
-    except:
+async def get_modified_files():
+    status = await run_async_cmd(['git', 'status', '-s'])
+    if not status:
         return []
+    files = []
+    for line in status.split('\n'):
+        parts = line.split()
+        if len(parts) >= 2:
+            files.append((parts[0], parts[-1]))
+    return files
 
 
 class TopBar(Static):
@@ -94,7 +100,7 @@ class TopBar(Static):
     def update_clock(self):
         time_str = datetime.now().strftime("%H:%M:%S")
         left = Text(" QozeCode ", style="bold white on #d75f00")
-        left.append(" v0.3.2 ", style="bold white on #005faf")
+        left.append(" v0.3.3 ", style="bold white on #005faf")
         right = Text(f" {time_str} ", style="bold white on #333333")
         total_width = self.content_size.width or 80
         spacer_width = max(0, total_width - len(left) - len(right))
@@ -107,15 +113,17 @@ class Sidebar(Static):
         self.model_name = model_name
         super().__init__(*args, **kwargs)
 
-    def on_mount(self):
-        self.update_info()
+    async def on_mount(self):
+        # Initial update
+        await self.update_info()
+        # Scheduled update (Textual handles async callbacks correctly)
         self.set_interval(5, self.update_info)
 
-    def update_info(self):
+    async def update_info(self):
         cwd = os.getcwd()
-        repo_url = get_git_info()
-        modified = get_modified_files()
-        branch = get_git_branch()
+        repo_url = await get_git_info()
+        modified = await get_modified_files()
+        branch = await get_git_branch()
 
         text = Text()
         text.append("\n项目信息\n", style="bold #7aa2f7 underline")
@@ -200,12 +208,10 @@ class StatusBar(Static):
         self.refresh()
 
     def render(self):
-        # 构建快捷键提示
         shortcuts = []
         shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
         shortcuts_text = " | ".join(shortcuts)
 
-        # 如果状态是 Idle，只显示快捷键，不显示状态文本
         if self.state_desc == "Idle":
             return Text.from_markup(f" {shortcuts_text}")
 
@@ -289,6 +295,7 @@ class TUIStreamOutput:
                         accumulated_ai_message += message_chunk
 
                 if isinstance(message_chunk, ToolMessage):
+                    # Flush pending text before showing tool result
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
@@ -296,6 +303,7 @@ class TUIStreamOutput:
 
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
                     if not tool_name and self.active_tools:
+                        # Fallback logic to find corresponding tool
                         if len(self.active_tools) == 1:
                             _id, _name = list(self.active_tools.items())[0]
                             tool_name = _name
@@ -325,7 +333,7 @@ class TUIStreamOutput:
                         self.tool_start_time = None
 
                     content_str = str(message_chunk.content)
-                    is_error = content_str.startswith("[RUN_FAILED]")
+                    is_error = content_str.startswith("[RUN_FAILED]") or "❌" in content_str
                     status_icon = "✗" if is_error else "✓"
                     color = "red" if is_error else "cyan"
                     icon_color = "red" if is_error else "green"
@@ -434,16 +442,15 @@ class Qoze(App):
 
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
     #chat-area { width: 78%; height: 100%; }
-    
-    /* 核心显示组件 */
-    #main-output { 
-        width: 100%; 
-        height: 1fr; 
-        background: #13131c; 
-        border: none; 
-        padding: 1 2; 
+
+    #main-output {
+        width: 100%;
+        height: 1fr;
+        background: #13131c;
+        border: none;
+        padding: 1 2;
     }
-    
+
     #source-output {
         width: 100%;
         height: 1fr;
@@ -451,15 +458,11 @@ class Qoze(App):
         border: none;
         color: #c0caf5;
         padding: 1;
-        display: none; /* 默认隐藏 */
-    }
-    
-    #source-output:focus {
-        border: solid #7aa2f7; /* 聚焦时显示蓝色边框 */
+        display: none;
     }
 
     #tool-status { width: 100%; height: auto; min-height: 1; background: #13131c; padding: 0 2; display: none; }
-    
+
     #stream-output { color: #565f89;
         width: 100%;
         height: auto;
@@ -471,7 +474,7 @@ class Qoze(App):
         overflow-y: auto;
         scrollbar-visibility: hidden;
     }
-    
+
     #stream-output > BlockQuote {
         border-left: none;
         color: #565f89;
@@ -490,9 +493,9 @@ class Qoze(App):
     Input:focus { border: none; }
 
     TextArea { height: 10; width: 100%; background: #13131c; border: round #808080; color: #c0caf5; padding: 1; }
-    
+
     .hidden { display: none; }
-    
+
     #request-indicator { height: 1; width: 100%; background: #13131c; color: #7aa2f7; padding: 0 1; }
     StatusBar { height: 1; width: 100%; background: #13131c; dock: bottom; }
 
@@ -529,9 +532,7 @@ class Qoze(App):
         yield TopBar()
         with Horizontal(id="main-container"):
             with Vertical(id="chat-area"):
-                # Render View (默认)
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
-
                 yield Static(id="tool-status")
                 yield MarkdownWidget(id="stream-output")
             yield Sidebar(id="sidebar", model_name=self.model_name)
@@ -636,7 +637,7 @@ class Qoze(App):
             self.print_welcome()
             return
 
-        if user_input.lower().startswith('skills'):
+        if skills_tui_handler and user_input.lower().startswith('skills'):
             success, message = skills_tui_handler.handle_skills_command(user_input.split())
             self.main_log.write(message if success else Text(f"❌ {message}", style="red"))
             return
@@ -686,7 +687,6 @@ class Qoze(App):
         value = event.value
         suggestions = self.query_one("#command-suggestions", OptionList)
 
-        # 简单补全逻辑
         show_suggestions = False
         filtered = []
         if value.startswith("/"):
@@ -732,7 +732,6 @@ class Qoze(App):
             elif event.key == "enter":
                 if suggestions.highlighted is not None:
                     opt = suggestions.get_option_at_index(suggestions.highlighted)
-                    # 修复：直接执行逻辑，避免模拟 Event 对象参数不匹配
                     cmd = str(opt.id)
                     suggestions.styles.display = "none"
                     self.input_box.value = ""
@@ -773,9 +772,20 @@ class Qoze(App):
 
 
 def main():
+    # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
+    # 这样可以防止工具直接使用 print/console.print 破坏界面
+    import shared_console
+    
+    # 保持对文件的引用，防止被 GC 关闭
+    null_file = open(os.devnull, "w")
+    shared_console.console.file = null_file
+    
     launcher.ensure_config()
     model = launcher.get_model_choice()
+    
+    # 清屏
     os.system('cls' if os.name == 'nt' else 'clear')
+    
     if model:
         Qoze(model_name=model).run()
 

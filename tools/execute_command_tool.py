@@ -1,101 +1,79 @@
+import asyncio
+import os
 import signal
-import signal
-import subprocess
-import threading
-import time
-import traceback
-
+import platform
 from langchain_core.tools import tool
 from rich.panel import Panel
-from rich.progress import Progress, TextColumn, TimeElapsedColumn, SpinnerColumn
 
-# 导入共享的 console 实例
-from shared_console import console, CustomTimeElapsedColumn
-
-# 定义颜色常量
-CYAN = "\033[36m"
-RESET = "\033[0m"
-
+# 移除 shared_console 的直接引用，防止直接打印破坏 TUI
+# from shared_console import console 
 
 @tool
 async def execute_command(command: str, timeout: int = 120) -> str:
     """Execute a command in the current system environment and return the output with real-time progress.
-    
+
     Args:
         command: The command to execute (e.g., "ls -la", "python script.py", "npm install")
-        timeout: Maximum execution time in seconds (default: 3600)
-    
+        timeout: Maximum execution time in seconds (default: 120)
+
     Returns:
         The command output including both stdout and stderr
     """
+    
+    # 简单的清理命令字符串
+    command = command.strip()
+    if not command:
+        return "❌ Empty command"
 
     try:
-        # 使用 subprocess.Popen 来实时获取输出
-        process = subprocess.Popen(
+        # 使用 asyncio.create_subprocess_shell 非阻塞执行
+        # 设置 preexec_fn 为 setsid 以便能终止整个进程组 (Linux/macOS)
+        preexec = os.setsid if platform.system() != "Windows" else None
+        
+        process = await asyncio.create_subprocess_shell(
             command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1,
-            preexec_fn=None if subprocess.os.name == 'nt' else lambda: signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT, # 将 stderr 合并到 stdout
+            preexec_fn=preexec,
+            limit=1024*1024 # 增加 buffer limit 防止大量输出卡死
         )
 
         output_lines = []
-        start_time = time.time()
-
-        def kill_process_after_timeout():
-            """在超时后终止进程"""
-            time.sleep(timeout)
-            if process.poll() is None:  # 进程仍在运行
-                try:
-                    process.terminate()
-                    time.sleep(2)  # 给进程2秒时间优雅退出
-                    if process.poll() is None:
-                        process.kill()  # 强制终止
-                except:
-                    pass
-
-        # 启动超时监控线程
-        timeout_thread = threading.Thread(target=kill_process_after_timeout, daemon=True)
-        timeout_thread.start()
-
-        try:
-
+        
+        async def read_stream(stream):
             while True:
-                current_time = time.time()
-                elapsed_time = current_time - start_time
-
-                # 检查是否超时
-                if elapsed_time > timeout:
-                    process.kill()
-                    return f"❌ 命令执行超时 ({timeout}秒)"
-
-                # 非阻塞读取输出（不显示）
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
+                line = await stream.readline()
+                if not line:
                     break
+                # 解码并去除末尾换行
+                decoded_line = line.decode('utf-8', errors='replace').rstrip()
+                output_lines.append(decoded_line)
 
-                if output:
-                    output_lines.append(output.rstrip())
-            # 等待进程完成
-            full_output = '\n'.join(output_lines)
-            return_code = process.wait()
-            if return_code != 0:
-                full_output = "[RUN_FAILED]" + full_output
-            return full_output
-        except Exception as e:
-            traceback.print_exc()  # 打印完整堆栈到控制台
-            return f"❌ 命令执行异常: {str(e)}"
+        # 设置超时等待
+        try:
+            # 等待进程完成或超时
+            await asyncio.wait_for(read_stream(process.stdout), timeout=timeout)
+            return_code = await asyncio.wait_for(process.wait(), timeout=5) # 给一点额外时间让进程退出
+            
+        except asyncio.TimeoutError:
+            # 超时处理
+            if platform.system() != "Windows":
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.terminate()
+            
+            return f"❌ 命令执行超时 ({timeout}秒)\n已捕获输出:\n" + "\n".join(output_lines)
+
+        full_output = "\n".join(output_lines)
+        
+        if return_code != 0:
+            return f"[RUN_FAILED] (Exit Code: {return_code})\n{full_output}"
+            
+        return full_output
 
     except Exception as e:
-        error_panel = Panel(
-            f"❌ 执行命令时发生错误\n"
-            f"命令: [cyan]{command}[/cyan]\n"
-            f"错误: [red]{str(e)}[/red]",
-            title="[bold red]系统错误[/bold red]",
-            border_style="red",
-            padding=(0, 1)
-        )
-        console.print(error_panel)
-        return f"❌ 执行命令时发生错误: {str(e)}"
+        # 不要直接 print，而是返回错误信息让 Agent 显示
+        return f"❌ 执行命令时发生系统错误: {str(e)}"
