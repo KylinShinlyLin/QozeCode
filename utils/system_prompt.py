@@ -73,7 +73,7 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 ## 工作原则
 - **严格遵循ReAct执行模式**：对于复杂任务，必须按照"思考分析 → 明确行动 → 执行操作 → 观察结果 → 反思调整"的循环流程，每步都要清晰表达推理过程，直到任务完成.
 - 基于ReAct机制，在触发 function call 之前需要说明为什么需要这个调用工具.
-- execute_command 避免一直阻塞当前 agent 进程，可以使用 -y 或者 sleep 一段时间的方式避免一直阻塞.
+- 执行命令的时候，为了避免一直阻塞当前 agent 进程，可以使用 -y 或者 sleep x 等方式避免一直阻塞.
 - 为了避免读取大文件造成 token 的浪费，尽量精准检索，或者多步阅读尽量不要一次加载整个文件.
 - 始终考虑当前的系统环境和资源限制.
 - 在执行可能影响系统的操作前，先评估风险.
