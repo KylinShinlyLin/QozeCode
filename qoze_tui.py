@@ -251,7 +251,7 @@ class TUIStreamOutput:
         if tool_name == "execute_command":
             cmd = tool_args.get("command", "")
             if cmd:
-                short_cmd = cmd[:50] + ("..." if len(cmd) > 50 else "")
+                short_cmd = cmd[:120] + ("..." if len(cmd) > 120 else "")
                 display_name = f"command: {short_cmd}"
         return display_name
 
