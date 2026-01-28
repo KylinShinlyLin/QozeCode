@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import os
-import subprocess
 import sys
 import time
 import traceback
@@ -427,9 +426,7 @@ class TUIStreamOutput:
 
             self.flush_to_log(current_response_text, current_reasoning_content)
 
-            graph_state = await qoze_code_agent.agent.aget_state(config={"configurable": {"thread_id": thread_id}})
-            if graph_state and graph_state.values and "messages" in graph_state.values:
-                conversation_state["messages"] = graph_state.values["messages"]
+# State is managed by MemorySaver
 
         except asyncio.CancelledError:
             self.stream_display.styles.display = "none"
@@ -661,7 +658,7 @@ class Qoze(App):
         if user_input.lower() == "clear":
             self.main_log.clear()
             self.thread_id = str(uuid.uuid4())
-            qoze_code_agent.conversation_state["messages"] = []
+            # Memory is automatically reset by changing thread_id
             self.print_welcome()
             return
 
@@ -682,15 +679,13 @@ class Qoze(App):
 
             image_folder = ".qoze/image"
             human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
-            qoze_code_agent.conversation_state["messages"].append(human_msg)
 
+            # 只传递当前新消息，LangGraph 会根据 thread_id 自动从 MemorySaver 加载历史
             current_state = {
-                "messages": [human_msg],
-                "llm_calls": qoze_code_agent.conversation_state["llm_calls"]
+                "messages": [human_msg]
             }
 
-            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state,
-                                                  thread_id=self.thread_id)
+            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state, thread_id=self.thread_id)
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.main_log.write(Text("⛔ Interrupted", style="bold red"))

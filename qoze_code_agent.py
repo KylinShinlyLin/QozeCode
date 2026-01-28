@@ -90,8 +90,8 @@ base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_
 tools = base_tools
 browser_loaded = False
 plan_mode = False
-# 当前会话
-conversation_state = {"messages": [], "llm_calls": 0}
+conversation_state = {"llm_calls": 0}
+
 
 tools_by_name = {tool.name: tool for tool in tools}
 
@@ -132,7 +132,6 @@ async def llm_call(state: dict):
                                             processor=processor, shell=shell, current_dir=current_dir,
                                             directory_tree=directory_tree)
 
-    # Use ainvoke for non-blocking LLM call
     response = await llm_with_tools.ainvoke(
         [SystemMessage(content=system_msg)] + state["messages"]
     )
