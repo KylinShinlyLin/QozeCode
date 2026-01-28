@@ -202,8 +202,8 @@ def initialize_llm(model_name: str):
             from langchain_qwq import ChatQwen
             creds = ensure_model_credentials(model_name)
             llm = ChatQwen(
-                model="qwen3-max-preview",
-                temperature=0.3,
+                model="qwen3-max-2026-01-23",
+                # temperature=0.3,
                 api_key=creds["api_key"],
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
                 enable_thinking=True,
