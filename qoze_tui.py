@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 import asyncio
 import os
 import sys
@@ -21,6 +22,21 @@ from textual.widgets import Input, RichLog, Static, Label, Markdown as MarkdownW
 from textual.widgets.option_list import Option
 
 # Skills TUI Integration
+
+# Configure logging for debugging
+log_file = os.path.join(os.path.dirname(__file__), '.qoze', 'debug.log')
+# Ensure log directory exists
+try:
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+except Exception:
+    pass  # Fail silently if permission issues, logging might fail later but better than crashing here
+
+logging.basicConfig(
+    filename=log_file,
+    level=logging.ERROR,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 sys.path.append(".")
 # Skills TUI Handler Import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
@@ -292,6 +308,7 @@ class TUIStreamOutput:
                     stream_mode="messages",
                     config={"recursion_limit": 300, "configurable": {"thread_id": thread_id}}
             ):
+                self.main_log.write(Padding(message_chunk, (0, 0, 1, 0)))
                 try:
                     current_task = asyncio.current_task()
                     if current_task and current_task.cancelled():
@@ -426,14 +443,19 @@ class TUIStreamOutput:
 
             self.flush_to_log(current_response_text, current_reasoning_content)
 
-# State is managed by MemorySaver
+        # State is managed by MemorySaver
 
         except asyncio.CancelledError:
             self.stream_display.styles.display = "none"
             raise
         except Exception as e:
             traceback.print_exc()
-            self.main_log.write(Text(f"Stream Error: {e}", style="red"))
+            error_msg = str(e)
+            if "429" in error_msg or "overloaded" in error_msg.lower():
+                suggestion = "⚠️ 服务端负载过高，请稍后重试或切换其他模型。"
+            else:
+                suggestion = ""
+            self.main_log.write(Text(f"Stream Error: {e}{suggestion}", style="red"))
             self.stream_display.styles.display = "none"
         finally:
             if total_response_text or total_reasoning_content:
@@ -637,6 +659,7 @@ class Qoze(App):
             self.input_box.placeholder = "Type message..."
             self.input_box.focus()
         except Exception as e:
+            logging.exception("Initialization Failed")
             self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))
 
     async def process_user_input(self, user_input):
@@ -685,7 +708,8 @@ class Qoze(App):
                 "messages": [human_msg]
             }
 
-            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state, thread_id=self.thread_id)
+            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state,
+                                                  thread_id=self.thread_id)
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.main_log.write(Text("⛔ Interrupted", style="bold red"))

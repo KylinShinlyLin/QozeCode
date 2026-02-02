@@ -69,6 +69,7 @@ def get_model_choice() -> Optional[str]:
         "gemini-3-pro       (think)     Google GCP",
         "gemini-3-flash     (think)     Google GCP",
         "Grok 4.1 Fast      (think)     XAI",
+        "Kimi 2.5           (think)     月之暗面",
         "Claude-4           (think)     bedrock",
         "qwen3-max          (think)     Alibaba Cloud",
         "deepseek-reasoner  (think)     DeepSeek R1",
@@ -111,6 +112,8 @@ def get_model_choice() -> Optional[str]:
             return 'glm-4.6'
         elif "qwen3-max" in selected:
             return 'qwen3-max'
+        elif "Kimi 2.5" in selected:
+            return 'Kimi 2.5'
         elif "退出" in selected:
             console.print("\n👋 再见", style="dim")
             return None

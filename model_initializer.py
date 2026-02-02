@@ -213,5 +213,21 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 GLM 依赖")
             raise
+    elif model_name == 'Kimi 2.5':
+        try:
+            # Switch to ChatOpenAI for bind_tools support
+            from langchain_openai import ChatOpenAI
+            creds = ensure_model_credentials(model_name)
+            print(f"creds={creds}")
+            llm = ChatOpenAI(
+                api_key=creds["api_key"],
+                model="kimi-k2.5",
+                base_url="https://api.moonshot.cn/v1",
+                max_retries=1
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_openai 依赖")
+            raise
     else:
         raise ValueError(f"不支持的模型: {model_name}")

@@ -114,7 +114,7 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             fail("XAI API Key (section [XAI] -> api_key)")
         return {"api_key": api_key}
 
-    if model_name in ("deepseek-chat", "deepseek-reasoner") :
+    if model_name in ("deepseek-chat", "deepseek-reasoner"):
         section = "deepseek"
         if not cfg.has_section(section):
             fail("DeepSeek API Key (section [deepseek] -> api_key)")
@@ -158,12 +158,17 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
             fail("GLM-4.6 AI 凭证")
         return {"api_key": api_key}
     if model_name == "qwen3-max":
-        section = "Qwen3"
-        if not cfg.has_section(section):
+        if not cfg.has_section('Qwen3'):
             fail("Qwen3 AI 凭证 (section [Qwen3])")
-        api_key = cfg.get(section, "api_key", fallback=None)
+        api_key = cfg.get('Qwen3', "api_key", fallback=None)
         if not api_key:
             fail("Qwen3 AI 凭证")
         return {"api_key": api_key}
-
+    if model_name == "Kimi 2.5":
+        if not cfg.has_section("Kimi"):
+            fail("Kimi (section [Kimi])")
+        api_key = cfg.get("Kimi", "api_key", fallback=None)
+        if not api_key:
+            fail("Kimi 凭证")
+        return {"api_key": api_key}
     raise ValueError(f"不支持的模型: {model_name}")

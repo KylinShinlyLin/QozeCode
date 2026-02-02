@@ -19,4 +19,7 @@ tavily_key=
 
 [XAI]
 api_key=
+
+[Kimi]
+api_key=
 """
