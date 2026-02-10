@@ -187,6 +187,57 @@ async def browser_read_page() -> str:
         return f"Error reading page: {str(e)}"
 
 
+
+
+@tool
+async def browser_scroll(direction: str = "down", amount: str = "page") -> str:
+    """Scroll the current page content.
+
+    Args:
+        direction: The direction to scroll: "up" or "down". Default is "down".
+        amount: The amount to scroll: "page" (full screen), "half" (half screen), "top" (to the top), "bottom" (to the bottom), or specific pixels (e.g. "500"). Default is "page".
+
+    Returns:
+        Status message.
+    """
+    try:
+        if not _session.page:
+            return "Error: No active page. Use browser_navigate first."
+
+        if amount == "top":
+            await _session.page.evaluate("window.scrollTo(0, 0)")
+            return "Scrolled to the top of the page."
+        elif amount == "bottom":
+            await _session.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            return "Scrolled to the bottom of the page."
+
+        # Calculate pixels
+        if amount.isdigit():
+            pixels = int(amount)
+        else:
+            # Evaluate viewport height for relative scrolling
+            viewport_height = await _session.page.evaluate("window.innerHeight")
+            if amount == "page":
+                pixels = viewport_height
+            elif amount == "half":
+                pixels = viewport_height // 2
+            else:
+                return f"Error: Invalid amount '{amount}'"
+
+        if direction == "up":
+            pixels = -pixels
+        elif direction != "down":
+             return f"Error: Invalid direction '{direction}'"
+
+        await _session.page.evaluate(f"window.scrollBy(0, {pixels})")
+        
+        # Human-like delay after scroll
+        import random
+        await asyncio.sleep(random.uniform(0.5, 1.0))
+        
+        return f"Scrolled {direction} by {amount}"
+    except Exception as e:
+        return f"Error scrolling: {str(e)}"
 @tool
 async def browser_screenshot() -> str:
     """Take a screenshot of the current page.
@@ -225,6 +276,100 @@ async def browser_get_html() -> str:
         return await _session.page.content()
     except Exception as e:
         return f"Error getting HTML: {str(e)}"
+
+
+
+
+
+@tool
+async def browser_open_tab(url: str) -> str:
+    """Open a new browser tab and navigate to the given URL.
+
+    Args:
+        url: The URL to navigate to.
+
+    Returns:
+        Status message including the new tab index.
+    """
+    try:
+        await _session.ensure_active()
+        if not _session.context:
+            return "Error: Could not initialize browser context."
+
+        # Create new page
+        new_page = await _session.context.new_page()
+        _session.page = new_page
+        
+        # Navigate
+        await new_page.goto(url, wait_until="domcontentloaded")
+        title = await new_page.title()
+        
+        # Get index
+        pages = _session.context.pages
+        index = pages.index(new_page)
+        
+        return f"Opened new tab (Index: {index}) with URL: {url}\nPage Title: {title}"
+    except Exception as e:
+        return f"Error opening new tab: {str(e)}"
+
+@tool
+async def browser_switch_tab(index: int) -> str:
+    """Switch to a specific browser tab by index.
+
+    Args:
+        index: The index of the tab to switch to (0-based).
+
+    Returns:
+        Status message with the title of the active tab.
+    """
+    try:
+        if not _session.context:
+            return "Error: No active browser context."
+
+        pages = _session.context.pages
+        if index < 0 or index >= len(pages):
+            return f"Error: Invalid tab index {index}. Total tabs: {len(pages)}"
+
+        target_page = pages[index]
+        await target_page.bring_to_front()
+        _session.page = target_page
+        
+        title = await target_page.title()
+        url = target_page.url
+        return f"Switched to tab {index}.\nTitle: {title}\nURL: {url}"
+    except Exception as e:
+        return f"Error switching tab: {str(e)}"
+
+@tool
+async def browser_list_tabs() -> str:
+    """List all open browser tabs.
+
+    Returns:
+        A formatted list of open tabs with their indices, titles, and URLs.
+    """
+    try:
+        if not _session.context:
+            return "Error: No active browser context."
+
+        pages = _session.context.pages
+        if not pages:
+            return "No open tabs."
+
+        result = ["Open Tabs:"]
+        current_page = _session.page
+        
+        for i, page in enumerate(pages):
+            try:
+                title = await page.title()
+                url = page.url
+                prefix = "*" if page == current_page else " "
+                result.append(f"{prefix} [{i}] {title} - {url}")
+            except Exception:
+                result.append(f"  [{i}] <Error reading page info>")
+        
+        return "\n".join(result)
+    except Exception as e:
+        return f"Error listing tabs: {str(e)}"
 
 
 @tool
