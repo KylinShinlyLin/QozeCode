@@ -221,7 +221,7 @@ def initialize_llm(model_name: str):
             print(f"creds={creds}")
             llm = ChatOpenAI(
                 api_key=creds["api_key"],
-                model="kimi-k2.5",
+                model="kimi-k2-thinking",
                 base_url="https://api.moonshot.cn/v1",
                 max_retries=1
             )

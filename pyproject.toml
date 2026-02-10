@@ -37,6 +37,8 @@ dependencies = [
     "textual",
     "pymupdf",
     "jinja2",
+    "playwright",
+    "html2text"
 ]
 
 [project.scripts]

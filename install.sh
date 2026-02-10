@@ -119,6 +119,8 @@ install_dependencies() {
 
     # 安装项目
     pip install -e .
+    log_info "安装 Playwright 浏览器内核..."
+    playwright install chromium
 
     log_success "项目依赖安装完成"
 }

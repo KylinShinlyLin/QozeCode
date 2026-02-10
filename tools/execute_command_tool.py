@@ -1,9 +1,9 @@
 import asyncio
 import os
-import signal
 import platform
+import signal
+
 from langchain_core.tools import tool
-from rich.panel import Panel
 
 
 # 移除 shared_console 的直接引用，防止直接打印破坏 TUI

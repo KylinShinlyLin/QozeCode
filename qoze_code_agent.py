@@ -37,6 +37,7 @@ from tools.execute_command_tool import execute_command
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, get_webpage_to_markdown
+from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, browser_screenshot, browser_get_html, browser_close
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
@@ -83,8 +84,7 @@ llm = None
 llm_with_tools = None
 browser_tools = None
 
-base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_skill, list_available_skills,
-              deactivate_skill]
+base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_skill, list_available_skills, deactivate_skill, browser_navigate, browser_click, browser_type, browser_read_page, browser_screenshot, browser_get_html, browser_close]
 
 # 初始时不加载浏览器工具
 tools = base_tools
@@ -151,7 +151,7 @@ async def tool_node(state: dict):
         tool = tools_by_name[tool_call["name"]]
         try:
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown", "execute_command"]:
+            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown", "execute_command", "browser_navigate", "browser_click", "browser_type", "browser_read_page", "browser_screenshot", "browser_get_html", "browser_close"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])

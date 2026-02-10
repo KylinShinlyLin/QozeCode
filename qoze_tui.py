@@ -308,7 +308,7 @@ class TUIStreamOutput:
                     stream_mode="messages",
                     config={"recursion_limit": 300, "configurable": {"thread_id": thread_id}}
             ):
-                self.main_log.write(Padding(message_chunk, (0, 0, 1, 0)))
+
                 try:
                     current_task = asyncio.current_task()
                     if current_task and current_task.cancelled():
