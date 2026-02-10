@@ -187,8 +187,6 @@ async def browser_read_page() -> str:
         return f"Error reading page: {str(e)}"
 
 
-
-
 @tool
 async def browser_scroll(direction: str = "down", amount: str = "page") -> str:
     """Scroll the current page content.
@@ -227,17 +225,19 @@ async def browser_scroll(direction: str = "down", amount: str = "page") -> str:
         if direction == "up":
             pixels = -pixels
         elif direction != "down":
-             return f"Error: Invalid direction '{direction}'"
+            return f"Error: Invalid direction '{direction}'"
 
         await _session.page.evaluate(f"window.scrollBy(0, {pixels})")
-        
+
         # Human-like delay after scroll
         import random
         await asyncio.sleep(random.uniform(0.5, 1.0))
-        
+
         return f"Scrolled {direction} by {amount}"
     except Exception as e:
         return f"Error scrolling: {str(e)}"
+
+
 @tool
 async def browser_screenshot() -> str:
     """Take a screenshot of the current page.
@@ -278,39 +278,48 @@ async def browser_get_html() -> str:
         return f"Error getting HTML: {str(e)}"
 
 
-
-
-
 @tool
-async def browser_open_tab(url: str) -> str:
-    """Open a new browser tab and navigate to the given URL.
+async def browser_open_tab(urls: list[str]) -> str:
+    """Open one or multiple browser tabs and navigate to the given URLs.
 
     Args:
-        url: The URL to navigate to.
+        urls: A single URL string or a list of URL strings.
 
     Returns:
-        Status message including the new tab index.
+        Status message including the new tab indices.
     """
     try:
         await _session.ensure_active()
         if not _session.context:
             return "Error: Could not initialize browser context."
 
-        # Create new page
-        new_page = await _session.context.new_page()
-        _session.page = new_page
-        
-        # Navigate
-        await new_page.goto(url, wait_until="domcontentloaded")
-        title = await new_page.title()
-        
-        # Get index
-        pages = _session.context.pages
-        index = pages.index(new_page)
-        
-        return f"Opened new tab (Index: {index}) with URL: {url}\nPage Title: {title}"
+        # Handle single string input for backward compatibility or LLM flexibility
+        if isinstance(urls, str):
+            urls = [urls]
+
+        results = []
+        for url in urls:
+            try:
+                # Create new page
+                new_page = await _session.context.new_page()
+                _session.page = new_page
+
+                # Navigate
+                await new_page.goto(url, wait_until="domcontentloaded")
+                title = await new_page.title()
+
+                # Get index
+                pages = _session.context.pages
+                index = pages.index(new_page)
+
+                results.append(f"Tab [{index}]: {title} ({url})")
+            except Exception as e_inner:
+                results.append(f"Error opening {url}: {str(e_inner)}")
+
+        return "Opened tabs:\n" + "\n".join(results)
     except Exception as e:
-        return f"Error opening new tab: {str(e)}"
+        return f"Error opening tabs: {str(e)}"
+
 
 @tool
 async def browser_switch_tab(index: int) -> str:
@@ -333,12 +342,13 @@ async def browser_switch_tab(index: int) -> str:
         target_page = pages[index]
         await target_page.bring_to_front()
         _session.page = target_page
-        
+
         title = await target_page.title()
         url = target_page.url
         return f"Switched to tab {index}.\nTitle: {title}\nURL: {url}"
     except Exception as e:
         return f"Error switching tab: {str(e)}"
+
 
 @tool
 async def browser_list_tabs() -> str:
@@ -357,7 +367,7 @@ async def browser_list_tabs() -> str:
 
         result = ["Open Tabs:"]
         current_page = _session.page
-        
+
         for i, page in enumerate(pages):
             try:
                 title = await page.title()
@@ -366,7 +376,7 @@ async def browser_list_tabs() -> str:
                 result.append(f"{prefix} [{i}] {title} - {url}")
             except Exception:
                 result.append(f"  [{i}] <Error reading page info>")
-        
+
         return "\n".join(result)
     except Exception as e:
         return f"Error listing tabs: {str(e)}"
