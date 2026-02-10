@@ -16,6 +16,7 @@ class BrowserSession:
         self.page: Optional[Page] = None
         self._lock = asyncio.Lock()
 
+
     async def ensure_active(self):
         """Ensure browser context and page are active using persistent context for anti-detection."""
         async with self._lock:
@@ -28,33 +29,93 @@ class BrowserSession:
                 if not os.path.exists(user_data_dir):
                     os.makedirs(user_data_dir, exist_ok=True)
 
-                # Launch options for anti-detection
+                # Enhanced stealth args
                 args = [
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                     "--disable-infobars",
                     "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-accelerated-2d-canvas",
+                    "--no-first-run",
+                    "--no-zygote",
+                    "--disable-gpu",  # Can help with stability in headless environments
+                    "--hide-scrollbars",
+                    "--mute-audio",
                 ]
 
                 # Launch persistent context
-                # Note: 'channel="chrome"' uses installed Chrome if available, otherwise defaults to bundled Chromium
-                # We stick to default Chromium for stability but with stealth args
                 self.context = await self.playwright.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
-                    headless=False,  # Set to False if you need to see the browser locally
+                    headless=False,
                     args=args,
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                     viewport={"width": 1280, "height": 800},
-                    ignore_default_args=["--enable-automation"]
-                    # Hide "Chrome is being controlled by automated test software"
+                    ignore_default_args=["--enable-automation"],
+                    java_script_enabled=True,
                 )
 
-                # Inject stealth scripts to all pages
-                await self.context.add_init_script("""
+                # Inject advanced stealth scripts to all pages
+                stealth_script = """
+                    // 1. Pass the Webdriver Test
                     Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
+                        get: () => undefined,
                     });
-                """)
+
+                    // 2. Mock Chrome object
+                    if (!window.chrome) {
+                        window.chrome = {
+                            runtime: {},
+                            loadTimes: function() {},
+                            csi: function() {},
+                            app: {}
+                        };
+                    }
+
+                    // 3. Mock Permissions API
+                    if (navigator.permissions) {
+                        const originalQuery = navigator.permissions.query;
+                        navigator.permissions.query = (parameters) => (
+                            parameters.name === 'notifications' ?
+                            Promise.resolve({ state: Notification.permission }) :
+                            originalQuery(parameters)
+                        );
+                    }
+
+                    // 4. Mock Plugins
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => [1, 2, 3, 4, 5],
+                    });
+
+                    // 5. WebGL vendor/renderer spoofing
+                    const getParameter = WebGLRenderingContext.prototype.getParameter;
+                    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                        // UNMASKED_VENDOR_WEBGL
+                        if (parameter === 37445) {
+                            return 'Intel Inc.';
+                        }
+                        // UNMASKED_RENDERER_WEBGL
+                        if (parameter === 37446) {
+                            return 'Intel(R) Iris(R) Plus Graphics 640';
+                        }
+                        return getParameter(parameter);
+                    };
+                    
+                    // 6. Broken Image Handling (optional but useful)
+                    ['height', 'width'].forEach(property => {
+                        const imageDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, property);
+                        Object.defineProperty(HTMLImageElement.prototype, property, {
+                            ...imageDescriptor,
+                            get: function() {
+                                if (this.complete && this.naturalHeight == 0) {
+                                    return 20; // Fake dimensions for broken images
+                                }
+                                return imageDescriptor.get.apply(this);
+                            },
+                        });
+                    });
+                """
+                await self.context.add_init_script(stealth_script)
 
             if not self.page:
                 pages = self.context.pages
@@ -62,6 +123,7 @@ class BrowserSession:
                     self.page = pages[0]
                 else:
                     self.page = await self.context.new_page()
+
 
     async def close(self):
         """Close all browser resources."""
@@ -238,29 +300,29 @@ async def browser_scroll(direction: str = "down", amount: str = "page") -> str:
         return f"Error scrolling: {str(e)}"
 
 
-@tool
-async def browser_screenshot() -> str:
-    """Take a screenshot of the current page.
-    
-    Returns:
-        The path to the saved screenshot file.
-    """
-    try:
-        if not _session.page:
-            return "Error: No active page. Use browser_navigate first."
-
-        # Ensure .qoze directory exists
-        output_dir = ".qoze"
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-
-        filename = f"screenshot_{os.urandom(4).hex()}.png"
-        path = os.path.join(output_dir, filename)
-
-        await _session.page.screenshot(path=path)
-        return f"Screenshot saved to: {path}"
-    except Exception as e:
-        return f"Error taking screenshot: {str(e)}"
+# @tool
+# async def browser_screenshot() -> str:
+#     """Take a screenshot of the current page.
+#
+#     Returns:
+#         The path to the saved screenshot file.
+#     """
+#     try:
+#         if not _session.page:
+#             return "Error: No active page. Use browser_navigate first."
+#
+#         # Ensure .qoze directory exists
+#         output_dir = ".qoze"
+#         if not os.path.exists(output_dir):
+#             os.makedirs(output_dir)
+#
+#         filename = f"screenshot_{os.urandom(4).hex()}.png"
+#         path = os.path.join(output_dir, filename)
+#
+#         await _session.page.screenshot(path=path)
+#         return f"Screenshot saved to: {path}"
+#     except Exception as e:
+#         return f"Error taking screenshot: {str(e)}"
 
 
 @tool
