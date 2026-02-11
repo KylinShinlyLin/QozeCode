@@ -255,7 +255,7 @@ async def browser_type(selector: str, text: str) -> str:
 
 @tool
 async def browser_read_page() -> str:
-    """Extract the text content of the current page as Markdown.
+    """Convert the current page HTML to Markdown text for easy reading.
 
     Returns:
         The page content converted to Markdown format.
@@ -336,6 +336,9 @@ async def browser_scroll(direction: str = "down", amount: str = "page") -> str:
 @tool
 async def browser_get_html() -> str:
     """Get the raw HTML of the current page.
+
+    This method is primarily used to assist with page input and locating buttons/elements for clicking.
+    Warning: This returns a large amount of data and consumes a significant number of tokens.
 
     Returns:
         The raw HTML string.

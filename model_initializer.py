@@ -147,7 +147,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             model_config = {
                 "base_url": creds['base_url'],
                 "api_key": creds["api_key"],
-                "model": "gpt-5.2-chat-latest" # 对应旧逻辑
+                "model": model_type.value # 对应旧逻辑
             }
 
             llm = ChatOpenAI(**model_config)

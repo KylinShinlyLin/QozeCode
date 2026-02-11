@@ -68,6 +68,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gemini-3-pro       (think)     vertex-ai",
         "gemini-3-flash     (think)     vertex-ai",
         "Grok 4.1 Fast      (think)     XAI",
+        "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
         "claude-4                       LiteLLM",
         "claude-4           (think)     bedrock",
