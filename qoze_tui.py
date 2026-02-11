@@ -179,11 +179,24 @@ class Sidebar(Static):
                 pass
 
         if img_count > 0:
+            sent_imgs = qoze_code_agent.conversation_state.get("sent_images", {})
+            new_count = 0
+            if os.path.exists(image_folder):
+                try:
+                    for f in qoze_code_agent.get_image_files(image_folder):
+                        mtime = os.path.getmtime(f)
+                        if f not in sent_imgs or sent_imgs[f] != mtime:
+                            new_count += 1
+                except:
+                    new_count = img_count
             text.append("图片上下文: ", style="dim white")
-            text.append(f"{img_count} 张 🖼\n", style="bold yellow")
+            if new_count > 0:
+                text.append(f"{img_count} 张 ({new_count} 新)", style="bold yellow")
+            else:
+                text.append(f"{img_count} 张 (已发送)", style="dim green")
 
         if modified:
-            text.append("GIT 变更记录\n", style="bold #7dcfff underline")
+            text.append("\nGIT 变更记录\n", style="bold #7dcfff underline")
             for status, filename in modified:
                 if 'M' in status:
                     icon = "✹"
@@ -693,6 +706,7 @@ class Qoze(App):
             return
 
         if user_input.lower() == "clear":
+            qoze_code_agent.reset_conversation_state()
             self.main_log.clear()
             self.thread_id = str(uuid.uuid4())
             # Memory is automatically reset by changing thread_id

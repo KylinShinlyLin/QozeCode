@@ -93,7 +93,7 @@ base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_
 tools = base_tools
 browser_loaded = False
 plan_mode = False
-conversation_state = {"llm_calls": 0, "last_image_count": 0}
+conversation_state = {"llm_calls": 0, "last_image_count": 0, "sent_images": {}}
 
 tools_by_name = {tool.name: tool for tool in tools}
 
@@ -234,12 +234,24 @@ def image_to_base64(image_path: str) -> str:
         return None
 
 
+
+def reset_conversation_state():
+    """重置会话状态"""
+    global conversation_state
+    conversation_state["llm_calls"] = 0
+    conversation_state["last_image_count"] = 0
+    conversation_state["sent_images"] = {}
+
 def create_message_with_images(text_content: str, image_folder: str = ".qoze/image") -> HumanMessage:
     """创建包含文本和图片的消息"""
     # 基础消息内容
     message_content = [{"type": "text", "text": text_content}]
-    
+
     image_count = 0
+    
+    # 获取已发送图片记录
+    sent_images = conversation_state.get("sent_images", {})
+    new_sent_images = sent_images.copy()
 
     # 检查图片文件夹
     if os.path.exists(image_folder):
@@ -248,23 +260,34 @@ def create_message_with_images(text_content: str, image_folder: str = ".qoze/ima
         if image_files:
             # 添加图片到消息内容
             for image_path in image_files[:5]:  # 限制最多5张图片，避免请求过大
-                base64_data = image_to_base64(image_path)
-                if base64_data:
-                    # 获取图片文件名用于标识
-                    # image_name = os.path.basename(image_path)
-                    # 添加图片数据
-                    message_content.append({
-                        "mime_type": "image/jpeg",
-                        "type": "image",
-                        "source_type": "base64",
-                        "data": base64_data
-                    })
-                    image_count += 1
+                try:
+                    # 获取文件修改时间作为指纹
+                    mtime = os.path.getmtime(image_path)
+                    
+                    # 检查是否已发送过且未修改
+                    if image_path in sent_images and sent_images[image_path] == mtime:
+                        continue
+                        
+                    base64_data = image_to_base64(image_path)
+                    if base64_data:
+                        # 添加图片数据
+                        message_content.append({
+                            "mime_type": "image/jpeg",
+                            "type": "image",
+                            "source_type": "base64",
+                            "data": base64_data
+                        })
+                        image_count += 1
+                        # 更新发送记录
+                        new_sent_images[image_path] = mtime
+                except Exception as e:
+                    console.print(f"处理图片 {image_path} 时出错: {str(e)}", style="yellow")
 
             if len(image_files) > 5:
                 console.print(f"⚠️  图片数量超过5张，只发送前5张", style="yellow")
 
     # 更新全局状态
     conversation_state["last_image_count"] = image_count
+    conversation_state["sent_images"] = new_sent_images
 
     return HumanMessage(content=message_content)
