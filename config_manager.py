@@ -96,7 +96,6 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
     - 若缺失则提示用户去配置文件添加
     """
     cfg, _ = _load_config()
-
     if model_name in ("gpt-5.2", "gpt-5.1", "gpt-5-codex"):
         section = "openai"
         if not cfg.has_section(section):
@@ -105,6 +104,17 @@ def ensure_model_credentials(model_name: str) -> Dict[str, str]:
         if not api_key:
             fail("OpenAI API Key (section [openai] -> api_key)")
         return {"api_key": api_key}
+    if model_name in "LiteLLM":
+        section = "LiteLLM"
+        if not cfg.has_section(section):
+            fail("LiteLLM API Key (section [LiteLLM] -> api_key)")
+        api_key = cfg.get(section, "api_key", fallback=None)
+        if not api_key:
+            fail("LiteLLM API Key (section [LiteLLM] -> api_key)")
+        base_url = cfg.get(section, "base_url", fallback=None)
+        if not base_url:
+            fail("LiteLLM API Key (section [LiteLLM] -> base_url)")
+        return {"api_key": api_key, "base_url": base_url}
     if model_name == "Grok-4.1-Fast":
         section = "XAI"
         if not cfg.has_section(section):

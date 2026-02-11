@@ -12,7 +12,7 @@ region_name=us-east-1
 [vertexai]
 project= #你的项目id
 location=global
-credentials_path= #你的gcp credentials 文件路径
+credentials_path= #你的 gcp credentials 文件路径
 
 [tavily]
 tavily_key=
@@ -22,4 +22,8 @@ api_key=
 
 [Kimi]
 api_key=
+
+[LiteLLM]
+api_key=
+base_url=
 """

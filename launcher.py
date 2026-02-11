@@ -69,6 +69,8 @@ def get_model_choice() -> Optional[str]:
         "gemini-3-pro       (think)     Google GCP",
         "gemini-3-flash     (think)     Google GCP",
         "Grok 4.1 Fast      (think)     XAI",
+        "gpt-5.2-chat-latest            LiteLLM",
+        "Claude-4                       bedrock",
         "Kimi 2.5           (think)     月之暗面",
         "Claude-4           (think)     bedrock",
         "qwen3-max          (think)     Alibaba Cloud",

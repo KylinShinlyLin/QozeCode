@@ -29,19 +29,18 @@ class BrowserSession:
                 if not os.path.exists(user_data_dir):
                     os.makedirs(user_data_dir, exist_ok=True)
 
-                # Enhanced stealth args
+                # Enhanced stealth args to evade detection
                 args = [
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                     "--disable-infobars",
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
-                    "--disable-accelerated-2d-canvas",
                     "--no-first-run",
                     "--no-zygote",
-                    "--disable-gpu",  # Can help with stability in headless environments
-                    "--hide-scrollbars",
-                    "--mute-audio",
+                    # Remove flags that might trigger detection or break rendering
+                    # "--hide-scrollbars", # Removed: can be a bot signal
+                    # "--mute-audio",      # Removed: can be a bot signal
                 ]
 
                 # Launch persistent context
@@ -49,13 +48,17 @@ class BrowserSession:
                     user_data_dir=user_data_dir,
                     headless=False,
                     args=args,
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    # Remove hardcoded User-Agent to let Chromium use its default or a more dynamic one
+                    # Or update to a very recent one if necessary. Here we use None to let Playwright decide, 
+                    # but usually setting a common real desktop UA is safer.
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
                     viewport={"width": 1280, "height": 800},
                     ignore_default_args=["--enable-automation"],
                     java_script_enabled=True,
                 )
 
                 # Inject advanced stealth scripts to all pages
+                # Based on techniques from puppeteer-stealth / playwright-stealth
                 stealth_script = """
                     // 1. Pass the Webdriver Test
                     Object.defineProperty(navigator, 'webdriver', {
@@ -84,36 +87,49 @@ class BrowserSession:
 
                     // 4. Mock Plugins
                     Object.defineProperty(navigator, 'plugins', {
-                        get: () => [1, 2, 3, 4, 5],
+                        get: () => {
+                            const ChromePDFPlugin = {
+                                0: { type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format", enabledPlugin: Plugin },
+                                description: "Portable Document Format",
+                                filename: "internal-pdf-viewer",
+                                length: 1,
+                                name: "Chrome PDF Plugin"
+                            };
+                            const ChromePDFViewer = {
+                                0: { type: "application/pdf", suffixes: "pdf", description: "", enabledPlugin: Plugin },
+                                description: "",
+                                filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+                                length: 1,
+                                name: "Chrome PDF Viewer"
+                            };
+                            const plugins = [ChromePDFPlugin, ChromePDFViewer];
+                            return plugins;
+                        },
                     });
 
-                    // 5. WebGL vendor/renderer spoofing
-                    const getParameter = WebGLRenderingContext.prototype.getParameter;
-                    WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                        // UNMASKED_VENDOR_WEBGL
-                        if (parameter === 37445) {
-                            return 'Intel Inc.';
-                        }
-                        // UNMASKED_RENDERER_WEBGL
-                        if (parameter === 37446) {
-                            return 'Intel(R) Iris(R) Plus Graphics 640';
-                        }
-                        return getParameter(parameter);
-                    };
-                    
-                    // 6. Broken Image Handling (optional but useful)
-                    ['height', 'width'].forEach(property => {
-                        const imageDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, property);
-                        Object.defineProperty(HTMLImageElement.prototype, property, {
-                            ...imageDescriptor,
-                            get: function() {
-                                if (this.complete && this.naturalHeight == 0) {
-                                    return 20; // Fake dimensions for broken images
-                                }
-                                return imageDescriptor.get.apply(this);
-                            },
-                        });
+                    // 5. WebGL vendor/renderer spoofing (More realistic values)
+                    try {
+                        const getParameter = WebGLRenderingContext.prototype.getParameter;
+                        WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                            // UNMASKED_VENDOR_WEBGL
+                            if (parameter === 37445) {
+                                return 'Intel Inc.';
+                            }
+                            // UNMASKED_RENDERER_WEBGL
+                            if (parameter === 37446) {
+                                return 'Intel(R) Iris(R) Plus Graphics 640'; 
+                            }
+                            return getParameter(parameter);
+                        };
+                    } catch (e) {}
+
+                    // 6. Mock Languages
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => ['en-US', 'en'],
                     });
+                    
+                    // 7. Remove webdriver property entirely if possible (extra safety)
+                    delete navigator.__proto__.webdriver;
                 """
                 await self.context.add_init_script(stealth_script)
 
@@ -146,10 +162,10 @@ _session = BrowserSession()
 @tool
 async def browser_navigate(url: str) -> str:
     """Navigate the browser to a specific URL.
-    
+
     Args:
         url: The URL to navigate to (must include http:// or https://).
-    
+
     Returns:
         A message indicating success or failure, and the page title.
     """
@@ -160,7 +176,13 @@ async def browser_navigate(url: str) -> str:
 
         # Add random delay to simulate human behavior
         import random
-        await asyncio.sleep(random.uniform(0.5, 1.5))
+        await asyncio.sleep(random.uniform(1.0, 3.0))
+
+        # Randomize mouse movement to simulate human (basic)
+        try:
+             await _session.page.mouse.move(random.randint(0, 500), random.randint(0, 500))
+        except:
+             pass
 
         await _session.page.goto(url, wait_until="domcontentloaded")
         title = await _session.page.title()
@@ -172,10 +194,10 @@ async def browser_navigate(url: str) -> str:
 @tool
 async def browser_click(selector: str) -> str:
     """Click an element on the current page identified by a CSS selector.
-    
+
     Args:
         selector: The CSS selector for the element to click (e.g., 'button.submit', '#login-btn').
-    
+
     Returns:
         Status message.
     """
@@ -186,9 +208,16 @@ async def browser_click(selector: str) -> str:
         # Wait for element to be visible
         await _session.page.wait_for_selector(selector, state="visible", timeout=5000)
 
-        # Human-like delay
+        # Human-like delay and movement
         import random
-        await asyncio.sleep(random.uniform(0.2, 0.7))
+        await asyncio.sleep(random.uniform(0.5, 1.5))
+        
+        # Try to hover first
+        try:
+            await _session.page.hover(selector)
+            await asyncio.sleep(random.uniform(0.2, 0.5))
+        except:
+            pass
 
         await _session.page.click(selector)
         return f"Clicked element: {selector}"
@@ -199,11 +228,11 @@ async def browser_click(selector: str) -> str:
 @tool
 async def browser_type(selector: str, text: str) -> str:
     """Type text into an input field identified by a CSS selector.
-    
+
     Args:
         selector: The CSS selector for the input field.
         text: The text to type.
-    
+
     Returns:
         Status message.
     """
@@ -214,7 +243,11 @@ async def browser_type(selector: str, text: str) -> str:
         await _session.page.wait_for_selector(selector, state="visible", timeout=5000)
 
         # Type with random delay between keystrokes to simulate human
-        await _session.page.type(selector, text, delay=50)
+        # Slower typing speed
+        import random
+        await asyncio.sleep(random.uniform(0.5, 1.0))
+        await _session.page.click(selector)
+        await _session.page.type(selector, text, delay=random.randint(50, 150))
         return f"Typed text into {selector}"
     except Exception as e:
         return f"Error typing into {selector}: {str(e)}"
@@ -223,7 +256,7 @@ async def browser_type(selector: str, text: str) -> str:
 @tool
 async def browser_read_page() -> str:
     """Extract the text content of the current page as Markdown.
-    
+
     Returns:
         The page content converted to Markdown format.
     """
@@ -236,7 +269,7 @@ async def browser_read_page() -> str:
         # Convert HTML to Markdown
         h = html2text.HTML2Text()
         h.ignore_links = False
-        h.ignore_images = True
+        h.ignore_images = False # Keep images enabled as requested
         h.body_width = 0  # No wrapping
         markdown_content = h.handle(html_content)
 
@@ -300,35 +333,10 @@ async def browser_scroll(direction: str = "down", amount: str = "page") -> str:
         return f"Error scrolling: {str(e)}"
 
 
-# @tool
-# async def browser_screenshot() -> str:
-#     """Take a screenshot of the current page.
-#
-#     Returns:
-#         The path to the saved screenshot file.
-#     """
-#     try:
-#         if not _session.page:
-#             return "Error: No active page. Use browser_navigate first."
-#
-#         # Ensure .qoze directory exists
-#         output_dir = ".qoze"
-#         if not os.path.exists(output_dir):
-#             os.makedirs(output_dir)
-#
-#         filename = f"screenshot_{os.urandom(4).hex()}.png"
-#         path = os.path.join(output_dir, filename)
-#
-#         await _session.page.screenshot(path=path)
-#         return f"Screenshot saved to: {path}"
-#     except Exception as e:
-#         return f"Error taking screenshot: {str(e)}"
-
-
 @tool
 async def browser_get_html() -> str:
     """Get the raw HTML of the current page.
-    
+
     Returns:
         The raw HTML string.
     """
@@ -447,7 +455,7 @@ async def browser_list_tabs() -> str:
 @tool
 async def browser_close() -> str:
     """Close the browser session and release resources.
-    
+
     Returns:
         Status message.
     """

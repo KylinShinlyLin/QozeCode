@@ -132,6 +132,24 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
             raise
+    elif model_name in 'gpt-5.2-chat-latest-litellm':
+        try:
+            # 延迟导入重依赖
+            from langchain_openai import ChatOpenAI
+            import httpx
+            # 读取 OpenAI 密钥
+            creds = ensure_model_credentials("LiteLLM")
+            model_config = {
+                "base_url": creds['base_url'],
+                "api_key": creds["api_key"],
+                "model": "gpt-5.2-chat-latest"
+            }
+
+            llm = ChatOpenAI(**model_config)
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
+            raise
     elif model_name in ('gpt-5.1', 'gpt-5.2', 'gpt-5-codex'):
         try:
             # 延迟导入重依赖
