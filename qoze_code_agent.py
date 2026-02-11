@@ -93,7 +93,7 @@ base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_
 tools = base_tools
 browser_loaded = False
 plan_mode = False
-conversation_state = {"llm_calls": 0}
+conversation_state = {"llm_calls": 0, "last_image_count": 0}
 
 tools_by_name = {tool.name: tool for tool in tools}
 
@@ -238,6 +238,8 @@ def create_message_with_images(text_content: str, image_folder: str = ".qoze/ima
     """创建包含文本和图片的消息"""
     # 基础消息内容
     message_content = [{"type": "text", "text": text_content}]
+    
+    image_count = 0
 
     # 检查图片文件夹
     if os.path.exists(image_folder):
@@ -257,8 +259,12 @@ def create_message_with_images(text_content: str, image_folder: str = ".qoze/ima
                         "source_type": "base64",
                         "data": base64_data
                     })
+                    image_count += 1
 
             if len(image_files) > 5:
                 console.print(f"⚠️  图片数量超过5张，只发送前5张", style="yellow")
+
+    # 更新全局状态
+    conversation_state["last_image_count"] = image_count
 
     return HumanMessage(content=message_content)

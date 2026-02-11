@@ -168,6 +168,20 @@ class Sidebar(Static):
         text.append(f"当前目录: ", style="dim white")
         text.append(f"{os.getcwd()}\n\n", style="bold cyan")
 
+        # 实时检测图片数量
+        image_folder = ".qoze/image"
+        img_count = 0
+        if os.path.exists(image_folder):
+            try:
+                img_files = qoze_code_agent.get_image_files(image_folder)
+                img_count = len(img_files)
+            except Exception:
+                pass
+
+        if img_count > 0:
+            text.append("图片上下文: ", style="dim white")
+            text.append(f"{img_count} 张 🖼\n", style="bold yellow")
+
         if modified:
             text.append("GIT 变更记录\n", style="bold #7dcfff underline")
             for status, filename in modified:
