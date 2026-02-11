@@ -1,14 +1,14 @@
-[openai]
+[OpenAI]
 api_key=
 
-[deepseek]
+[DeepSeek]
 api_key=
 
-[aws]
+[Bedrock]
 session_token=
 region_name=us-east-1
 
-[vertexai]
+[VertexAi]
 project= #你的项目id
 location=global
 credentials_path= #你的gcp credentials 文件路径
@@ -25,3 +25,4 @@ api_key=
 [LiteLLM]
 api_key=
 base_url=
+

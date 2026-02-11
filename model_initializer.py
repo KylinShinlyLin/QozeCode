@@ -2,7 +2,9 @@
 模型初始化模块
 负责根据模型名称初始化对应的LLM实例
 """
-
+from enums import ModelProvider, ModelType
+from config_manager import ensure_model_credentials
+import os
 
 def patch_langchain_deepseek():
     """
@@ -12,8 +14,7 @@ def patch_langchain_deepseek():
     """
     try:
         from langchain_deepseek import ChatDeepSeek
-        import os
-
+        
         # 记录原始方法
         original_get_request_payload = ChatDeepSeek._get_request_payload
 
@@ -46,34 +47,37 @@ def patch_langchain_deepseek():
         # 替换类方法
         ChatDeepSeek._get_request_payload = patched_get_request_payload
     except Exception as e:
+        # 确保 .qoze 目录存在
+        os.makedirs(".qoze", exist_ok=True)
         with open(".qoze/patch.log", "a") as f:
             f.write(f"Patch failed: {str(e)}\n")
 
 
-def get_gemini_model_name(model_name):
-    if model_name == 'gemini-3-pro':
+def get_gemini_model_name(model_type: ModelType):
+    if model_type == ModelType.GEMINI_3_PRO:
         return "gemini-3-pro-preview"
-    elif model_name == 'gemini-3-flash':
+    elif model_type == ModelType.GEMINI_3_FLASH:
         return "gemini-3-flash-preview"
     return None
 
 
-def initialize_llm(model_name: str):
-    """根据模型名称初始化对应的LLM"""
-    import os
-    from config_manager import ensure_model_credentials
-
-    # 在初始化前应用补丁
-    if 'deepseek' in model_name.lower():
-        # todo 先使用猴子补丁修复 deepseek-r1 思考过程不支持 function call 的问题
+def initialize_llm(provider: ModelProvider, model_type: ModelType):
+    """根据模型厂商和类型初始化对应的LLM"""
+    
+    # 1. DeepSeek Patch
+    if provider == ModelProvider.DEEPSEEK:
         patch_langchain_deepseek()
 
-    if model_name == 'Claude-4':
+    # 2. Provider Switch
+    if provider == ModelProvider.BEDROCK:
         try:
             from langchain_aws import ChatBedrockConverse
             from botocore.config import Config
             import boto3
-            creds = ensure_model_credentials(model_name)
+            
+            # Config expects "Claude-4"
+            creds = ensure_model_credentials("Claude-4")
+            
             # 创建带代理的 boto3 配置
             config = Config(
                 region_name=creds['region_name']
@@ -99,22 +103,22 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Claude-4 初始化失败: {str(e)}")
             raise
-    elif model_name == 'Grok-4.1-Fast':
+
+    elif provider == ModelProvider.XAI:
         from langchain_xai import ChatXAI
-        creds = ensure_model_credentials(model_name)
+        creds = ensure_model_credentials("Grok-4.1-Fast")
         llm = ChatXAI(
             api_key=creds["api_key"],
             model="grok-4-1-fast-reasoning",
         )
         return llm
-    elif model_name in ('gemini-3-pro', 'gemini-3-flash'):
+
+    elif provider == ModelProvider.VERTEX_AI:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from google.oauth2 import service_account
-            import os
-            import logging
-            import warnings
-            creds = ensure_model_credentials(model_name)
+            
+            creds = ensure_model_credentials(model_type.value)
             credentials = service_account.Credentials.from_service_account_file(
                 creds['credentials_path'],
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
@@ -122,7 +126,7 @@ def initialize_llm(model_name: str):
             # 仅构建客户端，不做网络验证
             llm = ChatGoogleGenerativeAI(
                 credentials=credentials,
-                model=get_gemini_model_name(model_name),
+                model=get_gemini_model_name(model_type),
                 project=creds["project"],
                 location="global",  # gemini-3 只有全球节点
                 vertex_ai=True,
@@ -132,17 +136,18 @@ def initialize_llm(model_name: str):
         except Exception as e:
             print(f"❌ Gemini 初始化失败: {str(e)}")
             raise
-    elif model_name in 'gpt-5.2-chat-latest-litellm':
+
+    elif provider == ModelProvider.LITELLM:
         try:
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
-            import httpx
-            # 读取 OpenAI 密钥
+            
+            # 读取 OpenAI 密钥 (Config expects "LiteLLM")
             creds = ensure_model_credentials("LiteLLM")
             model_config = {
                 "base_url": creds['base_url'],
                 "api_key": creds["api_key"],
-                "model": "gpt-5.2-chat-latest"
+                "model": "gpt-5.2-chat-latest" # 对应旧逻辑
             }
 
             llm = ChatOpenAI(**model_config)
@@ -150,7 +155,8 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
             raise
-    elif model_name in ('gpt-5.1', 'gpt-5.2', 'gpt-5-codex'):
+
+    elif provider == ModelProvider.OPENAI:
         try:
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
@@ -165,7 +171,7 @@ def initialize_llm(model_name: str):
             http_client = httpx.Client(proxy=proxies["https://"])
 
             # 读取 OpenAI 密钥
-            creds = ensure_model_credentials(model_name)
+            creds = ensure_model_credentials("gpt-5.2")
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
             model_config = {
                 "api_key": creds["api_key"],
@@ -178,34 +184,24 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
             raise
-    elif model_name == 'deepseek-chat':
+
+    elif provider == ModelProvider.DEEPSEEK:
         try:
             from langchain_deepseek import ChatDeepSeek
-            creds = ensure_model_credentials(model_name)
+            creds = ensure_model_credentials(model_type.value)
             llm = ChatDeepSeek(
-                model="deepseek-chat",
+                model=model_type.value, # deepseek-chat or deepseek-reasoner
                 api_key=creds["api_key"]
             )
             return llm
         except ImportError:
             print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
             raise
-    elif model_name == 'deepseek-reasoner':
-        try:
-            from langchain_deepseek import ChatDeepSeek
-            creds = ensure_model_credentials(model_name)
-            llm = ChatDeepSeek(
-                model="deepseek-reasoner",
-                api_key=creds["api_key"]
-            )
-            return llm
-        except ImportError:
-            print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
-            raise
-    elif model_name == 'glm-4.6':
+
+    elif provider == ModelProvider.ZHIPU:
         try:
             from langchain_community.chat_models import ChatZhipuAI
-            creds = ensure_model_credentials(model_name)
+            creds = ensure_model_credentials("glm-4.6")
             llm = ChatZhipuAI(
                 model="GLM-4.6",
                 api_key=creds["api_key"],
@@ -215,13 +211,13 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 GLM 依赖")
             raise
-    elif model_name == 'qwen3-max':
+
+    elif provider == ModelProvider.ALIBABA_CLOUD:
         try:
             from langchain_qwq import ChatQwen
-            creds = ensure_model_credentials(model_name)
+            creds = ensure_model_credentials("qwen3-max")
             llm = ChatQwen(
                 model="qwen3-max-2026-01-23",
-                # temperature=0.3,
                 api_key=creds["api_key"],
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
                 enable_thinking=True,
@@ -231,11 +227,11 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 GLM 依赖")
             raise
-    elif model_name == 'Kimi 2.5':
+
+    elif provider == ModelProvider.MOONSHOT:
         try:
-            # Switch to ChatOpenAI for bind_tools support
             from langchain_openai import ChatOpenAI
-            creds = ensure_model_credentials(model_name)
+            creds = ensure_model_credentials("Kimi 2.5")
             print(f"creds={creds}")
             llm = ChatOpenAI(
                 api_key=creds["api_key"],
@@ -247,5 +243,6 @@ def initialize_llm(model_name: str):
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖")
             raise
+
     else:
-        raise ValueError(f"不支持的模型: {model_name}")
+        raise ValueError(f"不支持的模型厂商: {provider}")

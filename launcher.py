@@ -7,9 +7,10 @@ QozeCode Agent 启动器 - Inquirer版本
 import os
 import sys
 import time
-from typing import Optional
+from typing import Optional, Tuple
 
 from constant import template_content
+from enums import ModelProvider, ModelType
 
 # 屏蔽 absl 库的 STDERR 警告
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
@@ -27,6 +28,7 @@ try:
     import inquirer
     from rich.console import Console
     from rich.panel import Panel
+    from rich.padding import Padding
     from rich.text import Text
     from rich.align import Align
 except ImportError as e:
@@ -47,17 +49,13 @@ def print_banner():
     subtitle = Text("使用 ↑↓ 选择，回车确认", style="dim")
     colored_art = Text(ascii_art, style="bold bright_cyan")
     content = Align.center(colored_art + "\n" + subtitle)
-    panel = Panel(
-        content,
-        border_style="cyan",
-        padding=(1, 2)
-    )
-    console.print(panel)
+    # 使用 Padding 代替 Panel 去掉边框
+    console.print(Padding(content, (1, 2)))
     console.print()
 
 
 # 函数 get_model_choice（记录交互耗时）
-def get_model_choice() -> Optional[str]:
+def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     """获取用户的模型选择 - 支持键盘上下选择"""
     console.clear()
 
@@ -65,19 +63,20 @@ def get_model_choice() -> Optional[str]:
     print_banner()
 
     # 定义选项 - 简洁对齐
+    # 保持原有显示格式，但逻辑中我们会根据字符串反推
     choices = [
-        "gemini-3-pro       (think)     Google GCP",
-        "gemini-3-flash     (think)     Google GCP",
+        "gemini-3-pro       (think)     vertex-ai",
+        "gemini-3-flash     (think)     vertex-ai",
         "Grok 4.1 Fast      (think)     XAI",
         "gpt-5.2-chat-latest            LiteLLM",
-        "Claude-4                       bedrock",
-        "Kimi 2.5           (think)     月之暗面",
-        "Claude-4           (think)     bedrock",
-        "qwen3-max          (think)     Alibaba Cloud",
-        "deepseek-reasoner  (think)     DeepSeek R1",
-        "deepseek-chat                  DeepSeek V3",
+        "claude-4                       LiteLLM",
+        "claude-4           (think)     bedrock",
+        "deepseek-reasoner  (think)     DeepSeek",
+        "deepseek-chat                  DeepSeek",
         "gpt-5.2                        OpenAI",
-        "glm-4.6                        智普",
+        # "kimi-2.5                       Kimi",
+        # "glm-4.6                        智普",
+        # "qwen3-max          (think)     Alibaba Cloud",
         "[退出程序]"
     ]
 
@@ -95,33 +94,64 @@ def get_model_choice() -> Optional[str]:
         if answers is None:
             return None
         selected = answers['model']
-        # 根据选择返回对应的模型名
-        if "Claude-4" in selected:
-            return 'Claude-4'
-        elif "gemini-3-pro" in selected:
-            return 'gemini-3-pro'
-        elif "gemini-3-flash" in selected:
-            return 'gemini-3-flash'
-        elif "Grok 4.1 Fast" in selected:
-            return 'Grok-4.1-Fast'
-        elif "gpt-5.2" in selected:
-            return 'gpt-5.2'
-        elif "deepseek-reasoner" in selected:
-            return 'deepseek-reasoner'
-        elif "deepseek-chat" in selected:
-            return 'deepseek-chat'
-        elif "glm-4.6" in selected:
-            return 'glm-4.6'
-        elif "qwen3-max" in selected:
-            return 'qwen3-max'
-        elif "Kimi 2.5" in selected:
-            return 'Kimi 2.5'
-        elif "退出" in selected:
-            console.print("\n👋 再见", style="dim")
+
+        if "退出" in selected:
+            console.print("👋 再见", style="dim")
             return None
 
+        provider = None
+        model_type = None
+
+        # 1. 解析 Provider
+        if "vertex-ai" in selected:
+            provider = ModelProvider.VERTEX_AI
+        elif "XAI" in selected:
+            provider = ModelProvider.XAI
+        elif "LiteLLM" in selected:
+            provider = ModelProvider.LITELLM
+        elif "bedrock" in selected:
+            provider = ModelProvider.BEDROCK
+        elif "DeepSeek" in selected:
+            provider = ModelProvider.DEEPSEEK
+        elif "OpenAI" in selected:
+            provider = ModelProvider.OPENAI
+        elif "Kimi" in selected:
+            provider = ModelProvider.MOONSHOT
+        elif "智普" in selected:
+            provider = ModelProvider.ZHIPU
+        elif "Alibaba Cloud" in selected:
+            provider = ModelProvider.ALIBABA_CLOUD
+
+        # 2. 解析 ModelType
+        if "gemini-3-pro" in selected:
+            model_type = ModelType.GEMINI_3_PRO
+        elif "gemini-3-flash" in selected:
+            model_type = ModelType.GEMINI_3_FLASH
+        elif "Grok" in selected:
+            model_type = ModelType.GROK_4_1_FAST
+        elif "gpt-5.2" in selected:
+            model_type = ModelType.GPT_5_2
+        elif "claude-4" in selected or "Claude-4" in selected:
+            model_type = ModelType.CLAUDE_4
+        elif "deepseek-reasoner" in selected:
+            model_type = ModelType.DEEPSEEK_REASONER
+        elif "deepseek-chat" in selected:
+            model_type = ModelType.DEEPSEEK_CHAT
+        elif "kimi-2.5" in selected:
+            model_type = ModelType.KIMI_2_5
+        elif "glm-4.6" in selected:
+            model_type = ModelType.GLM_4_6
+        elif "qwen3-max" in selected:
+            model_type = ModelType.QWEN_3_MAX
+
+        if provider and model_type:
+            return provider, model_type
+
+        console.print(f"无法解析选项: {selected}", style="red")
+        return None
+
     except KeyboardInterrupt:
-        console.print("\n👋 再见", style="dim")
+        console.print("👋 再见", style="dim")
         return None
 
 

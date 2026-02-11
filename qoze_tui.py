@@ -1,3 +1,4 @@
+from enums import ModelProvider, ModelType
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import logging
@@ -594,9 +595,11 @@ class Qoze(App):
         Binding("escape", "cancel_multiline", "Cancel", priority=True),
     ]
 
-    def __init__(self, model_name):
+    def __init__(self, provider, model_type):
         super().__init__()
-        self.model_name = model_name
+        self.model_type = model_type
+        self.model_name = model_type.value
+        self.provider = provider
         self.agent_ready = False
         self.multiline_mode = False
         self.thread_id = "default_session"
@@ -678,7 +681,7 @@ class Qoze(App):
 
     async def init_agent_worker(self):
         try:
-            llm = model_initializer.initialize_llm(self.model_name)
+            llm = model_initializer.initialize_llm(self.provider, self.model_type)
             qoze_code_agent.llm = llm
             qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
             self.agent_ready = True
@@ -850,10 +853,12 @@ def main():
     import shared_console
 
     launcher.ensure_config()
-    model = launcher.get_model_choice()
-
-    if not model:
+    selection = launcher.get_model_choice()
+    if not selection:
         return
+    provider, model_type = selection
+    # model 变量为了兼容旧逻辑，赋值为 model_type.value
+    model = model_type.value
 
     # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
     # 这样可以防止工具直接使用 print/console.print 破坏界面
@@ -864,7 +869,7 @@ def main():
     # 清屏
     os.system("cls" if os.name == "nt" else "clear")
 
-    Qoze(model_name=model).run()
+    Qoze(provider=provider, model_type=model_type).run()
 
 
 if __name__ == "__main__":

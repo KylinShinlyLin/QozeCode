@@ -1,15 +1,16 @@
 """
 配置管理模块
 - 统一在 /etc/conf/qoze.conf 维护模型密钥
-- 缺少写权限时回退到 ~/.config/qoze/qoze.conf，并提示用户
+- 缺少写权限时回退到 ~/.qoze/qoze.conf，并提示用户
 - 首次选择模型时若缺少密钥，交互式提示输入并保存
 """
 
 import configparser
 import os
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Union
 
 from shared_console import console
+from enums import ModelProvider, ModelType
 
 CONFIG_DIR = "/etc/conf"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "qoze.conf")
@@ -89,96 +90,109 @@ def fail(missing_desc: str):
     raise RuntimeError(f"缺少模型凭证：{missing_desc}")
 
 
-# 确认配置是否存在，如果不存在提示用户
-def ensure_model_credentials(model_name: str) -> Dict[str, str]:
+def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dict[str, str]:
     """
     确保对应模型的密钥存在：
     - 若缺失则提示用户去配置文件添加
     """
     cfg, _ = _load_config()
-    if model_name in ("gpt-5.2", "gpt-5.1", "gpt-5-codex"):
-        section = "openai"
-        if not cfg.has_section(section):
-            fail("OpenAI API Key (section [openai] -> api_key)")
-        api_key = cfg.get(section, "api_key", fallback=None)
-        if not api_key:
-            fail("OpenAI API Key (section [openai] -> api_key)")
-        return {"api_key": api_key}
-    if model_name in "LiteLLM":
+    
+    # 统一化标识符处理
+    # model_initializer 可能会传递字符串（如 "Claude-4", "gpt-5.2"）或 ModelType.value
+    # 我们将其映射到对应的 Config Section
+    
+    section = None
+    required_keys = []
+    
+    # 1. OpenAI
+    if model_identifier in ("gpt-5.2", "gpt-5.1", "gpt-5-codex", "OpenAI"):
+        section = "OpenAI"
+        required_keys = ["api_key"]
+
+    # 2. LiteLLM
+    elif model_identifier == "LiteLLM":
         section = "LiteLLM"
-        if not cfg.has_section(section):
-            fail("LiteLLM API Key (section [LiteLLM] -> api_key)")
-        api_key = cfg.get(section, "api_key", fallback=None)
-        if not api_key:
-            fail("LiteLLM API Key (section [LiteLLM] -> api_key)")
-        base_url = cfg.get(section, "base_url", fallback=None)
-        if not base_url:
-            fail("LiteLLM API Key (section [LiteLLM] -> base_url)")
-        return {"api_key": api_key, "base_url": base_url}
-    if model_name == "Grok-4.1-Fast":
+        required_keys = ["api_key", "base_url"]
+
+    # 3. XAI (Grok)
+    elif model_identifier in ("Grok-4.1-Fast", "XAI"):
         section = "XAI"
-        if not cfg.has_section(section):
-            fail("XAI API Key (section [XAI] -> api_key)")
-        api_key = cfg.get(section, "api_key", fallback=None)
-        if not api_key:
-            fail("XAI API Key (section [XAI] -> api_key)")
-        return {"api_key": api_key}
+        required_keys = ["api_key"]
 
-    if model_name in ("deepseek-chat", "deepseek-reasoner"):
-        section = "deepseek"
-        if not cfg.has_section(section):
-            fail("DeepSeek API Key (section [deepseek] -> api_key)")
-        api_key = cfg.get(section, "api_key", fallback=None)
-        if not api_key:
-            fail("DeepSeek API Key (section [deepseek] -> api_key)")
-        return {"api_key": api_key}
+    # 4. DeepSeek
+    elif model_identifier in ("deepseek-chat", "deepseek-reasoner", "DeepSeek"):
+        section = "DeepSeek"
+        required_keys = ["api_key"]
 
-    if model_name == "Claude-4":
-        section = "aws"
+    # 5. Bedrock (AWS)
+    elif model_identifier in ("Claude-4", "Bedrock"):
+        section = "Bedrock"
+        # 注意：这里我们检查 session_token, 但代码逻辑也支持环境变量，这里主要检查配置
+        # 为了兼容旧逻辑，我们只检查 session_token，region 默认
+        # 如果配置文件没有 session_token，会抛出错误
+        # 实际 Bedrock 验证比较复杂，这里简化检查
         if not cfg.has_section(section):
-            fail("AWS Bedrock 凭证 (section [aws])")
-        session_token = cfg.get(section, "session_token", fallback=None)  # 支持临时凭证
+             fail(f"AWS Bedrock 凭证 (section [{section}])")
+        
+        session_token = cfg.get(section, "session_token", fallback=None)
         region = cfg.get(section, "region_name", fallback="us-east-1")
+        
         if not session_token:
-            fail("AWS Bedrock 凭证 (session_token)")
+            fail(f"AWS Bedrock 凭证 (section [{section}] -> session_token)")
 
+        # 特殊处理：设置环境变量供 boto3 使用
         os.environ['AWS_BEARER_TOKEN_BEDROCK'] = session_token
-        credentials = {
+        return {
             "aws_session_token": session_token,
             "region_name": region,
         }
-        return credentials
-    if model_name in ("gemini-3-pro", "gemini-3-flash"):
-        section = "vertexai"
+
+    # 6. Vertex AI (Gemini)
+    elif model_identifier in ("gemini-3-pro", "gemini-3-flash", "VertexAi"):
+        section = "VertexAi"
         if not cfg.has_section(section):
-            fail("Gemini/Vertex AI 凭证 (section [vertexai])")
+            fail(f"Gemini/Vertex AI 凭证 (section [{section}])")
+        
         project = cfg.get(section, "project", fallback=None)
-        location = cfg.get(section, "location", fallback="us-central1")
+        location = cfg.get(section, "location", fallback="global")
         cred_path = cfg.get(section, "credentials_path", fallback=None)
-        if not project or not cred_path:
-            fail("Gemini/Vertex AI 凭证 (project/credentials_path)")
+        
+        if not project:
+            fail(f"Vertex AI (section [{section}] -> project)")
+        if not cred_path:
+            fail(f"Vertex AI (section [{section}] -> credentials_path)")
+            
         return {"project": project, "location": location, "credentials_path": cred_path}
 
-    if model_name == "glm-4.6":
+    # 7. ZHIPU (GLM)
+    elif model_identifier in ("glm-4.6", "ZHIPU"):
         section = "ZHIPU"
-        if not cfg.has_section(section):
-            fail("GLM-4.6 AI 凭证 (section [ZHIPU])")
-        api_key = cfg.get(section, "api_key", fallback=None)
-        if not api_key:
-            fail("GLM-4.6 AI 凭证")
-        return {"api_key": api_key}
-    if model_name == "qwen3-max":
-        if not cfg.has_section('Qwen3'):
-            fail("Qwen3 AI 凭证 (section [Qwen3])")
-        api_key = cfg.get('Qwen3', "api_key", fallback=None)
-        if not api_key:
-            fail("Qwen3 AI 凭证")
-        return {"api_key": api_key}
-    if model_name == "Kimi 2.5":
-        if not cfg.has_section("Kimi"):
-            fail("Kimi (section [Kimi])")
-        api_key = cfg.get("Kimi", "api_key", fallback=None)
-        if not api_key:
-            fail("Kimi 凭证")
-        return {"api_key": api_key}
-    raise ValueError(f"不支持的模型: {model_name}")
+        required_keys = ["api_key"]
+
+    # 8. Qwen (Alibaba)
+    elif model_identifier in ("qwen3-max", "Qwen3"):
+        section = "Qwen3"
+        required_keys = ["api_key"]
+
+    # 9. Kimi (Moonshot)
+    elif model_identifier in ("Kimi 2.5", "Kimi"):
+        section = "Kimi"
+        required_keys = ["api_key"]
+
+    else:
+        # 尝试直接作为 section name
+        section = str(model_identifier)
+        required_keys = ["api_key"]
+
+    # 通用检查逻辑
+    if not cfg.has_section(section):
+        fail(f"{model_identifier} 凭证 (section [{section}])")
+    
+    creds = {}
+    for key in required_keys:
+        val = cfg.get(section, key, fallback=None)
+        if not val:
+            fail(f"{model_identifier} 凭证 (section [{section}] -> {key})")
+        creds[key] = val
+        
+    return creds

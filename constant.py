@@ -1,18 +1,18 @@
 template_content = """
-[openai]
+[OpenAI]
 api_key=
 
-[deepseek]
+[DeepSeek]
 api_key=
 
-[aws]
+[Bedrock]
 session_token=
 region_name=us-east-1
 
-[vertexai]
+[VertexAi]
 project= #你的项目id
 location=global
-credentials_path= #你的 gcp credentials 文件路径
+credentials_path= #你的gcp credentials 文件路径
 
 [tavily]
 tavily_key=
@@ -26,4 +26,10 @@ api_key=
 [LiteLLM]
 api_key=
 base_url=
+
+[ZHIPU]
+api_key=
+
+[Qwen3]
+api_key=
 """
