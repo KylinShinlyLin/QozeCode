@@ -86,7 +86,7 @@ llm_with_tools = None
 browser_tools = None
 
 base_tools = [execute_command, tavily_search, get_webpage_to_markdown, activate_skill, list_available_skills,
-              deactivate_skill, browser_navigate, browser_click, browser_type, browser_read_page, browser_screenshot,
+              deactivate_skill, browser_navigate, browser_click, browser_type, browser_read_page,
               browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs]
 
 # 初始时不加载浏览器工具
@@ -249,7 +249,7 @@ def create_message_with_images(text_content: str, image_folder: str = ".qoze/ima
                 base64_data = image_to_base64(image_path)
                 if base64_data:
                     # 获取图片文件名用于标识
-                    image_name = os.path.basename(image_path)
+                    # image_name = os.path.basename(image_path)
                     # 添加图片数据
                     message_content.append({
                         "mime_type": "image/jpeg",
