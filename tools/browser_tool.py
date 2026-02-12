@@ -52,7 +52,7 @@ class BrowserSession:
                     # Or update to a very recent one if necessary. Here we use None to let Playwright decide, 
                     # but usually setting a common real desktop UA is safer.
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
-                    viewport={"width": 1200, "height": 720},
+                    # viewport={"width": 1200, "height": 720},
                     ignore_default_args=["--enable-automation"],
                     java_script_enabled=True,
                 )
