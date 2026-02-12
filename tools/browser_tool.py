@@ -52,86 +52,86 @@ class BrowserSession:
                     # Or update to a very recent one if necessary. Here we use None to let Playwright decide, 
                     # but usually setting a common real desktop UA is safer.
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
-                    viewport={"width": 1280, "height": 800},
+                    viewport={"width": 1200, "height": 720},
                     ignore_default_args=["--enable-automation"],
                     java_script_enabled=True,
                 )
 
                 # Inject advanced stealth scripts to all pages
                 # Based on techniques from puppeteer-stealth / playwright-stealth
-                stealth_script = """
-                    // 1. Pass the Webdriver Test
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined,
-                    });
-
-                    // 2. Mock Chrome object
-                    if (!window.chrome) {
-                        window.chrome = {
-                            runtime: {},
-                            loadTimes: function() {},
-                            csi: function() {},
-                            app: {}
-                        };
-                    }
-
-                    // 3. Mock Permissions API
-                    if (navigator.permissions) {
-                        const originalQuery = navigator.permissions.query;
-                        navigator.permissions.query = (parameters) => (
-                            parameters.name === 'notifications' ?
-                            Promise.resolve({ state: Notification.permission }) :
-                            originalQuery(parameters)
-                        );
-                    }
-
-                    // 4. Mock Plugins
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: () => {
-                            const ChromePDFPlugin = {
-                                0: { type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format", enabledPlugin: Plugin },
-                                description: "Portable Document Format",
-                                filename: "internal-pdf-viewer",
-                                length: 1,
-                                name: "Chrome PDF Plugin"
-                            };
-                            const ChromePDFViewer = {
-                                0: { type: "application/pdf", suffixes: "pdf", description: "", enabledPlugin: Plugin },
-                                description: "",
-                                filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
-                                length: 1,
-                                name: "Chrome PDF Viewer"
-                            };
-                            const plugins = [ChromePDFPlugin, ChromePDFViewer];
-                            return plugins;
-                        },
-                    });
-
-                    // 5. WebGL vendor/renderer spoofing (More realistic values)
-                    try {
-                        const getParameter = WebGLRenderingContext.prototype.getParameter;
-                        WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                            // UNMASKED_VENDOR_WEBGL
-                            if (parameter === 37445) {
-                                return 'Intel Inc.';
-                            }
-                            // UNMASKED_RENDERER_WEBGL
-                            if (parameter === 37446) {
-                                return 'Intel(R) Iris(R) Plus Graphics 640'; 
-                            }
-                            return getParameter(parameter);
-                        };
-                    } catch (e) {}
-
-                    // 6. Mock Languages
-                    Object.defineProperty(navigator, 'languages', {
-                        get: () => ['en-US', 'en'],
-                    });
-                    
-                    // 7. Remove webdriver property entirely if possible (extra safety)
-                    delete navigator.__proto__.webdriver;
-                """
-                await self.context.add_init_script(stealth_script)
+                # stealth_script = """
+                #     // 1. Pass the Webdriver Test
+                #     Object.defineProperty(navigator, 'webdriver', {
+                #         get: () => undefined,
+                #     });
+                #
+                #     // 2. Mock Chrome object
+                #     if (!window.chrome) {
+                #         window.chrome = {
+                #             runtime: {},
+                #             loadTimes: function() {},
+                #             csi: function() {},
+                #             app: {}
+                #         };
+                #     }
+                #
+                #     // 3. Mock Permissions API
+                #     if (navigator.permissions) {
+                #         const originalQuery = navigator.permissions.query;
+                #         navigator.permissions.query = (parameters) => (
+                #             parameters.name === 'notifications' ?
+                #             Promise.resolve({ state: Notification.permission }) :
+                #             originalQuery(parameters)
+                #         );
+                #     }
+                #
+                #     // 4. Mock Plugins
+                #     Object.defineProperty(navigator, 'plugins', {
+                #         get: () => {
+                #             const ChromePDFPlugin = {
+                #                 0: { type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format", enabledPlugin: Plugin },
+                #                 description: "Portable Document Format",
+                #                 filename: "internal-pdf-viewer",
+                #                 length: 1,
+                #                 name: "Chrome PDF Plugin"
+                #             };
+                #             const ChromePDFViewer = {
+                #                 0: { type: "application/pdf", suffixes: "pdf", description: "", enabledPlugin: Plugin },
+                #                 description: "",
+                #                 filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+                #                 length: 1,
+                #                 name: "Chrome PDF Viewer"
+                #             };
+                #             const plugins = [ChromePDFPlugin, ChromePDFViewer];
+                #             return plugins;
+                #         },
+                #     });
+                #
+                #     // 5. WebGL vendor/renderer spoofing (More realistic values)
+                #     try {
+                #         const getParameter = WebGLRenderingContext.prototype.getParameter;
+                #         WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                #             // UNMASKED_VENDOR_WEBGL
+                #             if (parameter === 37445) {
+                #                 return 'Intel Inc.';
+                #             }
+                #             // UNMASKED_RENDERER_WEBGL
+                #             if (parameter === 37446) {
+                #                 return 'Intel(R) Iris(R) Plus Graphics 640';
+                #             }
+                #             return getParameter(parameter);
+                #         };
+                #     } catch (e) {}
+                #
+                #     // 6. Mock Languages
+                #     Object.defineProperty(navigator, 'languages', {
+                #         get: () => ['en-US', 'en'],
+                #     });
+                #
+                #     // 7. Remove webdriver property entirely if possible (extra safety)
+                #     delete navigator.__proto__.webdriver;
+                # """
+                # await self.context.add_init_script(stealth_script)
 
             if not self.page:
                 pages = self.context.pages

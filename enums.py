@@ -18,7 +18,7 @@ class ModelType(Enum):
     GEMINI_3_FLASH = "gemini-3-flash"
     GROK_4_1_FAST = "Grok-4.1-Fast"
     GPT_5_2 = "gpt-5.2"
-    CLAUDE_4 = "Claude-4"
+    CLAUDE_4 = "claude-4"
     KIMI_2_5 = "Kimi 2.5"
     QWEN_3_MAX = "qwen3-max"
     DEEPSEEK_REASONER = "deepseek-reasoner"

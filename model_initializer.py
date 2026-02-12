@@ -141,13 +141,12 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
         try:
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
-            
             # 读取 OpenAI 密钥 (Config expects "LiteLLM")
             creds = ensure_model_credentials("LiteLLM")
             model_config = {
                 "base_url": creds['base_url'],
                 "api_key": creds["api_key"],
-                "model": model_type.value # 对应旧逻辑
+                "model": model_type.value
             }
 
             llm = ChatOpenAI(**model_config)
