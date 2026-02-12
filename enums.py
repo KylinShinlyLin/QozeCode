@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class ModelProvider(Enum):
     """模型厂商枚举"""
     VERTEX_AI = "VertexAi"
@@ -10,7 +11,8 @@ class ModelProvider(Enum):
     ALIBABA_CLOUD = "Alibaba Cloud"
     DEEPSEEK = "DeepSeek"
     OPENAI = "OpenAI"
-    ZHIPU = "智普"
+    ZHIPU = "ZHIPU"
+
 
 class ModelType(Enum):
     """模型类型枚举 (对应 launcher.py 的返回值)"""
@@ -24,6 +26,8 @@ class ModelType(Enum):
     DEEPSEEK_REASONER = "deepseek-reasoner"
     DEEPSEEK_CHAT = "deepseek-chat"
     GLM_4_6 = "glm-4.6"
+    GLM_5 = "glm-5"
+
 
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）
 MODEL_PROVIDER_MAP = {

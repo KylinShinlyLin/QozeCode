@@ -72,11 +72,11 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gpt-5.2-chat-latest            LiteLLM",
         "claude-4                       LiteLLM",
         "claude-4           (think)     bedrock",
+        "glm-5                          智普",
         "deepseek-reasoner  (think)     DeepSeek",
         "deepseek-chat                  DeepSeek",
         "gpt-5.2                        OpenAI",
         # "kimi-2.5                       Kimi",
-        # "glm-4.6                        智普",
         # "qwen3-max          (think)     Alibaba Cloud",
         "[退出程序]"
     ]
@@ -145,6 +145,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GLM_4_6
         elif "qwen3-max" in selected:
             model_type = ModelType.QWEN_3_MAX
+        elif "glm-5" in selected:
+            model_type = ModelType.GLM_5
 
         if provider and model_type:
             return provider, model_type

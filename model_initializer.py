@@ -6,6 +6,37 @@ from enums import ModelProvider, ModelType
 from config_manager import ensure_model_credentials
 import os
 
+
+def patch_langchain_openai():
+    """
+    Patch langchain_openai to support reasoning_content in stream response
+    This allows models like DeepSeek-R1 (via OpenAI API), GLM-5, etc., to return their reasoning process.
+    """
+    try:
+        from langchain_openai.chat_models import base as chat_models_base
+        from langchain_openai.chat_models.base import AIMessageChunk
+
+        if hasattr(chat_models_base, "_is_patched_for_reasoning"):
+            return
+
+        original_convert = chat_models_base._convert_delta_to_message_chunk
+
+        def patched_convert_delta_to_message_chunk(_dict, default_class):
+            chunk = original_convert(_dict, default_class)
+            if "reasoning_content" in _dict and isinstance(chunk, AIMessageChunk):
+                chunk.additional_kwargs["reasoning_content"] = _dict["reasoning_content"]
+            return chunk
+
+        chat_models_base._convert_delta_to_message_chunk = patched_convert_delta_to_message_chunk
+        chat_models_base._is_patched_for_reasoning = True
+    except ImportError:
+        pass
+    except Exception as e:
+        os.makedirs(".qoze", exist_ok=True)
+        with open(".qoze/patch.log", "a") as f:
+            f.write(f"OpenAI Patch failed: {str(e)}\n")
+
+
 def patch_langchain_deepseek():
     """
     todo 先使用猴子补丁修复 deepseek-r1 思考过程不支持 function call 的问题
@@ -14,7 +45,7 @@ def patch_langchain_deepseek():
     """
     try:
         from langchain_deepseek import ChatDeepSeek
-        
+
         # 记录原始方法
         original_get_request_payload = ChatDeepSeek._get_request_payload
 
@@ -63,7 +94,10 @@ def get_gemini_model_name(model_type: ModelType):
 
 def initialize_llm(provider: ModelProvider, model_type: ModelType):
     """根据模型厂商和类型初始化对应的LLM"""
-    
+
+    # 0. Global Patch for OpenAI compatible providers
+    patch_langchain_openai()
+
     # 1. DeepSeek Patch
     if provider == ModelProvider.DEEPSEEK:
         patch_langchain_deepseek()
@@ -74,10 +108,10 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             from langchain_aws import ChatBedrockConverse
             from botocore.config import Config
             import boto3
-            
+
             # Config expects "Claude-4"
             creds = ensure_model_credentials("Claude-4")
-            
+
             # 创建带代理的 boto3 配置
             config = Config(
                 region_name=creds['region_name']
@@ -117,7 +151,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from google.oauth2 import service_account
-            
+
             creds = ensure_model_credentials(model_type.value)
             credentials = service_account.Credentials.from_service_account_file(
                 creds['credentials_path'],
@@ -189,7 +223,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             from langchain_deepseek import ChatDeepSeek
             creds = ensure_model_credentials(model_type.value)
             llm = ChatDeepSeek(
-                model=model_type.value, # deepseek-chat or deepseek-reasoner
+                model=model_type.value,  # deepseek-chat or deepseek-reasoner
                 api_key=creds["api_key"]
             )
             return llm
@@ -199,13 +233,20 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
 
     elif provider == ModelProvider.ZHIPU:
         try:
-            from langchain_community.chat_models import ChatZhipuAI
-            creds = ensure_model_credentials("glm-4.6")
-            llm = ChatZhipuAI(
-                model="GLM-4.6",
-                api_key=creds["api_key"],
-                temperature=0.3,
-            )
+            from langchain_openai import ChatOpenAI
+            # 读取 OpenAI 密钥 (Config expects "LiteLLM")
+            creds = ensure_model_credentials(ModelProvider.ZHIPU.value)
+            model_config = {
+                "base_url": creds['base_url'],
+                "api_key": creds["api_key"],
+                "model": model_type.value,
+                "extra_body": {
+                    "thinking": {
+                        "type": "enabled"
+                    }
+                }
+            }
+            llm = ChatOpenAI(**model_config)
             return llm
         except ImportError:
             print("❌ 缺少 GLM 依赖")

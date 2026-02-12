@@ -87,7 +87,7 @@ def fail(missing_desc: str):
         ]),
         style="yellow"
     )
-    raise RuntimeError(f"缺少模型凭证：{missing_desc}")
+    raise RuntimeError(f"缺少模型配置：{missing_desc}")
 
 
 def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dict[str, str]:
@@ -96,14 +96,14 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
     - 若缺失则提示用户去配置文件添加
     """
     cfg, _ = _load_config()
-    
+
     # 统一化标识符处理
     # model_initializer 可能会传递字符串（如 "Claude-4", "gpt-5.2"）或 ModelType.value
     # 我们将其映射到对应的 Config Section
-    
+
     section = None
     required_keys = []
-    
+
     # 1. OpenAI
     if model_identifier in ("gpt-5.2", "gpt-5.1", "gpt-5-codex", "OpenAI"):
         section = "OpenAI"
@@ -132,11 +132,11 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         # 如果配置文件没有 session_token，会抛出错误
         # 实际 Bedrock 验证比较复杂，这里简化检查
         if not cfg.has_section(section):
-             fail(f"AWS Bedrock 凭证 (section [{section}])")
-        
+            fail(f"AWS Bedrock 凭证 (section [{section}])")
+
         session_token = cfg.get(section, "session_token", fallback=None)
         region = cfg.get(section, "region_name", fallback="us-east-1")
-        
+
         if not session_token:
             fail(f"AWS Bedrock 凭证 (section [{section}] -> session_token)")
 
@@ -152,22 +152,27 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         section = "VertexAi"
         if not cfg.has_section(section):
             fail(f"Gemini/Vertex AI 凭证 (section [{section}])")
-        
+
         project = cfg.get(section, "project", fallback=None)
         location = cfg.get(section, "location", fallback="global")
         cred_path = cfg.get(section, "credentials_path", fallback=None)
-        
+
         if not project:
             fail(f"Vertex AI (section [{section}] -> project)")
         if not cred_path:
             fail(f"Vertex AI (section [{section}] -> credentials_path)")
-            
+
         return {"project": project, "location": location, "credentials_path": cred_path}
 
     # 7. ZHIPU (GLM)
-    elif model_identifier in ("glm-4.6", "ZHIPU"):
+    elif model_identifier in "ZHIPU":
         section = "ZHIPU"
-        required_keys = ["api_key"]
+        if not cfg.has_section(section):
+            fail(f"缺少 (section [{section}]) 配置")
+
+        api_key = cfg.get(section, "api_key", fallback=None)
+        base_url = cfg.get(section, "base_url", fallback=None)
+        return {"api_key": api_key, "base_url": base_url}
 
     # 8. Qwen (Alibaba)
     elif model_identifier in ("qwen3-max", "Qwen3"):
@@ -187,12 +192,12 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
     # 通用检查逻辑
     if not cfg.has_section(section):
         fail(f"{model_identifier} 凭证 (section [{section}])")
-    
+
     creds = {}
     for key in required_keys:
         val = cfg.get(section, key, fallback=None)
         if not val:
             fail(f"{model_identifier} 凭证 (section [{section}] -> {key})")
         creds[key] = val
-        
+
     return creds
