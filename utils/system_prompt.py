@@ -91,7 +91,6 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 - **DOM 交互策略**：仅在必须进行交互（如点击按钮、填写表单）且不确定元素定位符（Selector）时，才使用 `browser_get_html`。
 - **Token 节约警告**：`browser_get_html` 返回的原始 HTML 通常非常庞大。使用它时要极其谨慎，获取到必要的 Selector 后立即执行下一步，避免在上下文中长期保留大量 HTML 代码。
 - **人机验证阻断**：如果遇到验证码（Captcha）、Cloudflare 等待页面或强制登录墙，请**立即停止**当前操作流，并明确告知用户需要人工介入完成验证。不要尝试通过脚本绕过复杂的安全验证。
-- **动态加载处理**：对于无限滚动或懒加载的页面，在读取内容前适当使用 `browser_scroll` 确保内容已渲染。
 
 {rules_prompt}
 
