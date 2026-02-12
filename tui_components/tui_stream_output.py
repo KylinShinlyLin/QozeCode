@@ -50,8 +50,8 @@ class TUIStreamOutput:
         if reasoning:
             reasoning_clean = reasoning.strip()
             # 改进方案：使用纯文本 Header + 缩进样式，去除 Panel 边框
-            header = Text("Thinking", style="bold cyan")
-            self.main_log.write(header)
+            # header = Text("Thinking", style="bold cyan")
+            # self.main_log.write(header)
             
             # 使用灰色斜体，左缩进2个字符
             content = Text(reasoning_clean, style="italic #909090")
