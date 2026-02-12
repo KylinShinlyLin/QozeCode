@@ -49,8 +49,19 @@ class TUIStreamOutput:
     def flush_to_log(self, text: str, reasoning: str):
         if reasoning:
             reasoning_clean = reasoning.strip()
-            content = Text(reasoning_clean, style="italic #565f89")
-            self.main_log.write(Padding(content, (0, 0, 1, 0)))
+            # 改进方案：使用纯文本 Header + 缩进样式，去除 Panel 边框
+            header = Text("Thinking", style="bold cyan")
+            self.main_log.write(header)
+            
+            # 使用灰色斜体，左缩进2个字符
+            content = Text(reasoning_clean, style="italic #909090")
+            self.main_log.write(Padding(content, (0, 0, 1, 2)))
+            
+            # 或者如果更喜欢 Markdown 引用样式（带左侧竖线）：
+            # lines = reasoning_clean.split('\n')
+            # md_text = "> 🧠 **Thinking Process**\n>\n" + "\n".join([f"> *{line}*" for line in lines])
+            # self.main_log.write(Markdown(md_text))
+            # self.main_log.write(Text("")) # Spacer
 
         if text:
             self.main_log.write(Markdown(text))
@@ -194,15 +205,24 @@ class TUIStreamOutput:
                     if now - self.last_update_time > 0.1:
                         md_content = ""
                         if current_reasoning_content:
-                            md_content += current_reasoning_content + ""
+                            # 优化流式输出时的思考展示，使用 blockquote 样式
+                            # 由于 Markdown widget 更新是全量的，我们需要构造完整的 markdown
+                            md_content += f"> Thinking Process.....\n>\n"
+                            # 将每一行都加上引用符号，确保样式统一
+                            reasoning_lines = current_reasoning_content.split('\n')
+                            md_content += "\n".join([f"> *{line}*" for line in reasoning_lines])
+                            md_content += "\n\n---\n\n"
+
                         if current_response_text:
                             md_content += current_response_text
+
                         try:
                             current_task = asyncio.current_task()
                             if current_task and current_task.cancelled():
                                 break
                         except Exception:
                             pass
+
                         await self.stream_display.update(md_content)
                         self.main_log.scroll_end(animate=False)
                         self.stream_display.scroll_end(animate=False)
