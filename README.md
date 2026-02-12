@@ -6,7 +6,7 @@
 
 ## 项目简介
 
-QozeCode 是一款基于 **LangGraph** 架构构建的专业级命令行智能体（AI Agent）。它旨在将大语言模型的推理能力与终端操作环境深度融合，通过
+QozeCode 是一款轻量级的 命令行 AI agent，基于 **LangGraph** 架构构建的专业级命令行智能体（AI Agent）。它旨在将大语言模型的推理能力与终端操作环境深度融合，通过
 **ReAct**（Reasoning and Acting）范式，实现复杂开发任务的自动化执行。
 
 作为开发者的智能副驾驶，QozeCode 不仅提供代码生成与审查能力，更能直接与系统 Shell 交互，执行文件操作、系统管理及网络检索，所有操作均在现代化的
@@ -110,7 +110,7 @@ cp qoze.conf.template ~/.qoze/qoze.conf
 在项目根目录下运行启动器：
 
 ```bash
-python launcher.py
+python qoze_tui.py
 ```
 
 ## 目录结构
