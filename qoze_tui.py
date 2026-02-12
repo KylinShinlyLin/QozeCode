@@ -1,5 +1,5 @@
 from enums import ModelProvider, ModelType
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import logging
 import asyncio
@@ -139,8 +139,9 @@ class TopBar(Static):
 
 
 class Sidebar(Static):
-    def __init__(self, *args, model_name="Unknown", **kwargs):
+    def __init__(self, *args, model_name="Unknown", provider, **kwargs):
         self.model_name = model_name
+        self.provider = provider
         super().__init__(*args, **kwargs)
 
     async def on_mount(self):
@@ -166,6 +167,8 @@ class Sidebar(Static):
 
         text.append(f"模型: ", style="dim white")
         text.append(f"{self.model_name}\n", style="bold cyan")
+        text.append(f"模型厂商: ", style="dim white")
+        text.append(f"{self.provider.value}\n", style="bold cyan")
         text.append(f"当前目录: ", style="dim white")
         text.append(f"{os.getcwd()}\n\n", style="bold cyan")
 
@@ -612,7 +615,7 @@ class Qoze(App):
                 yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
                 yield Static(id="tool-status")
                 yield MarkdownWidget(id="stream-output")
-            yield Sidebar(id="sidebar", model_name=self.model_name)
+            yield Sidebar(id="sidebar", model_name=self.model_name, provider=self.provider)
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
             with Horizontal(id="input-line"):

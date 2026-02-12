@@ -98,6 +98,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
 
         if "退出" in selected:
             console.print("👋 再见", style="dim")
+            os.system("cls" if os.name == "nt" else "clear")
             return None
 
         provider = None
