@@ -269,7 +269,9 @@ class StatusBar(Static):
 
     def render(self):
         shortcuts = []
-        shortcuts.append("[dim]Ctrl+C[/]: 终止请求")
+        shortcuts.append("[dim]输入 line 多行编辑[/]")
+        shortcuts.append("[dim]Ctrl+C[/]: 终止")
+        shortcuts.append("[dim]Ctrl+D[/]: 提交")
         shortcuts_text = " | ".join(shortcuts)
 
         if self.state_desc == "Idle":
