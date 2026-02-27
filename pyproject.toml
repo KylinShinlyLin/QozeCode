@@ -42,6 +42,7 @@ dependencies = [
     "python-socks[asyncio]",
     "html2text",
     "pyaudio"
+
 ]
 
 [project.scripts]
