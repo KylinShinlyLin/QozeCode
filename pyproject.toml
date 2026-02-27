@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qoze-code"
+version = "0.1.0"
+description = "QozeCode Agent CLI"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "QozeCode" }]
+
+dependencies = [
+    "rich>=14.1.0",
+    "inquirer>=3.4.0",
+    "langgraph",
+    "typing_extensions>=4.15.0",
+    "langchain-core",
+    "langchain-deepseek",
+    "langchain-google-genai",
+    "langchain-aws",
+    "langchain-xai",
+    "langchain-community",
+    "langchain-openai",
+    "langchain-qwq",
+    "boto3",
+    "httpx[socks]>=0.28.1",
+    "tavily-python>=0.7.12",
+    "lxml>=6.0.2",
+    "beautifulsoup4>=4.14.2",
+    "pyjwt>=2.10.1",
+    "prompt_toolkit>=3.0.52",
+    "google-auth",
+    "colorama",
+    "python-crontab",
+    "hnswlib",
+    "textual",
+    "pymupdf",
+    "jinja2",
+    "playwright",
+    "soniox",
+    "python-socks[asyncio]",
+    "html2text",
+    "pyaudio"
+]
+
+[project.scripts]
+qoze = "qoze_tui:main"
+
+[tool.setuptools]
+py-modules = ["qoze_tui", "launcher", "enums", "qoze_code_agent", "model_initializer", "shared_console", "config_manager", "constant", "input_handler", "completion_handler", "stream_output", "input_processor", "dynamic_commands_patch"]
+packages = ["tools", "utils", "skills", "tui_components"]
+
+[project.optional-dependencies]
+browser = ["playwright", "nest_asyncio"]
