@@ -66,7 +66,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     # 保持原有显示格式，但逻辑中我们会根据字符串反推
     choices = [
         "gemini-3.1-pro     (think)     vertex-ai",
-        "gemini-3-pro       (think)     vertex-ai",
+        # "gemini-3-pro       (think)     vertex-ai",
         "gemini-3-flash     (think)     vertex-ai",
         # "gpt-5.2-codex                  LiteLLM",
         "gpt-5.2                        LiteLLM",
@@ -127,9 +127,9 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             provider = ModelProvider.ALIBABA_CLOUD
 
         # 2. 解析 ModelType
-        if "gemini-3-pro" in selected:
-            model_type = ModelType.GEMINI_3_PRO
-        elif "gemini-3.1-pro" in selected:
+        # if "gemini-3-pro" in selected:
+        #     model_type = ModelType.GEMINI_3_PRO
+        if "gemini-3.1-pro" in selected:
             model_type = ModelType.GEMINI_3_1_PRO
         elif "gemini-3-flash" in selected:
             model_type = ModelType.GEMINI_3_FLASH

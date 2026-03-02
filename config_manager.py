@@ -35,7 +35,6 @@ def get_tavily_key() -> str:
     return tavily_key.strip("\"'")
 
 
-
 def get_soniox_key() -> str:
     """
     获取 Soniox API Key
@@ -51,6 +50,7 @@ def get_soniox_key() -> str:
         return None
 
     return soniox_key.strip("\"'")
+
 
 def _ensure_dir(path: str):
     try:
@@ -165,7 +165,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         }
 
     # 6. Vertex AI (Gemini)
-    elif model_identifier in ("gemini-3-pro", "gemini-3.1-pro", "gemini-3-flash", "VertexAi"):
+    elif model_identifier in ("gemini-3.1-pro", "gemini-3-flash", "VertexAi"):
         section = "VertexAi"
         if not cfg.has_section(section):
             fail(f"Gemini/Vertex AI 凭证 (section [{section}])")

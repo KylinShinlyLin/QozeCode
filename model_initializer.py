@@ -85,9 +85,9 @@ def patch_langchain_deepseek():
 
 
 def get_gemini_model_name(model_type: ModelType):
-    if model_type == ModelType.GEMINI_3_PRO:
-        return "gemini-3-pro-preview"
-    elif model_type == ModelType.GEMINI_3_FLASH:
+    # if model_type == ModelType.GEMINI_3_PRO:
+    #     return "gemini-3-pro-preview"
+    if model_type == ModelType.GEMINI_3_FLASH:
         return "gemini-3-flash-preview"
     elif model_type == ModelType.GEMINI_3_1_PRO:
         return "gemini-3.1-pro-preview"

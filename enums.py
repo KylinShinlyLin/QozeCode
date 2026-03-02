@@ -17,7 +17,7 @@ class ModelProvider(Enum):
 class ModelType(Enum):
     """模型类型枚举 (对应 launcher.py 的返回值)"""
     GEMINI_3_1_PRO = "gemini-3.1-pro"
-    GEMINI_3_PRO = "gemini-3-pro"
+    # GEMINI_3_PRO = "gemini-3-pro"
     GEMINI_3_FLASH = "gemini-3-flash"
     GROK_4_1_FAST = "Grok-4.1-Fast"
     GPT_5_2 = "gpt-5.2"
