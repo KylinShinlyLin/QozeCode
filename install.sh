@@ -81,10 +81,13 @@ download_source() {
     log_info "下载 QozeCode 源码 (分支: $BRANCH)..."
 
     if [ -d "$BUILD_DIR/QozeCode" ]; then
-        log_warning "检测到已存在的源码，正在切换/更新到分支 $BRANCH..."
+        log_warning "检测到已存在的源码，正在重置并更新到分支 $BRANCH..."
         cd "$BUILD_DIR/QozeCode"
-        git fetch origin
+        # 抛弃本地所有的修改和未追踪文件
+        git clean -fd
+        git fetch origin "$BRANCH"
         git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
+        # 强制将本地分支重置为远程的最新状态
         git reset --hard "origin/$BRANCH"
     else
         cd "$BUILD_DIR"
