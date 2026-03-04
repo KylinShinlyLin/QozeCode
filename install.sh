@@ -81,13 +81,20 @@ download_source() {
     log_info "下载 QozeCode 源码 (分支: $BRANCH)..."
 
     if [ -d "$BUILD_DIR/QozeCode" ]; then
-        log_warning "检测到已存在的源码，正在重置并更新到分支 $BRANCH..."
+        log_warning "检测到已存在的源码，正在强制重置并更新到分支 $BRANCH..."
         cd "$BUILD_DIR/QozeCode"
-        # 抛弃本地所有的修改和未追踪文件
-        git clean -fd
+        
+        # 1. 强制放弃所有的本地修改（包括忽略的文件和未追踪目录）
+        git reset --hard HEAD
+        git clean -fdx
+        
+        # 2. 从远端获取最新的分支状态
         git fetch origin "$BRANCH"
-        git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
-        # 强制将本地分支重置为远程的最新状态
+        
+        # 3. 强行将本地工作分支重置到 origin/$BRANCH 的状态，无论有任何分歧
+        git checkout -f "$BRANCH" 2>/dev/null || git checkout -f -b "$BRANCH" "origin/$BRANCH"
+        
+        # 4. 彻底抛弃分歧差异，对齐远程
         git reset --hard "origin/$BRANCH"
     else
         cd "$BUILD_DIR"
