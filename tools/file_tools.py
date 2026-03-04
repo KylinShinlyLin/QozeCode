@@ -60,14 +60,13 @@ def _iter_files(directory: Path, include_hidden: bool) -> Iterable[Path]:
 
 
 @tool
-def read_file(path: str, start_line: int = 1, end_line: int = 200, max_bytes: int = 200_000) -> str:
+def read_file(path: str, start_line: int = 1, end_line: int = 200) -> str:
     """Read a file by line range with safe limits.
 
     Args:
         path: File path (relative to current working directory or absolute).
         start_line: 1-based start line (inclusive).
         end_line: 1-based end line (inclusive).
-        max_bytes: Max bytes to read from file (safety limit).
 
     Returns:
         The requested file content with line numbers or an error message.
@@ -81,10 +80,6 @@ def read_file(path: str, start_line: int = 1, end_line: int = 200, max_bytes: in
             return f"Error: File not found: {path}"
         if not target.is_file():
             return f"Error: Path is not a file: {path}"
-
-        file_size = target.stat().st_size
-        if file_size > max_bytes:
-            return f"Error: File too large ({file_size} bytes). Use a smaller file or increase max_bytes."
 
         lines: List[str] = []
         with target.open("r", encoding="utf-8", errors="replace") as f:

@@ -80,23 +80,31 @@ create_directories() {
 download_source() {
     log_info "下载 QozeCode 源码 (分支: $BRANCH)..."
 
-    if [ -d "$BUILD_DIR/QozeCode" ]; then
-        log_warning "检测到已存在的源码，正在强制重置并更新到分支 $BRANCH..."
+    if [ -d "$BUILD_DIR/QozeCode/.git" ]; then
+        log_warning "检测到已存在的源码，正在强制重置并更新到远端分支 origin/$BRANCH..."
         cd "$BUILD_DIR/QozeCode"
         
-        # 1. 强制放弃所有的本地修改（包括忽略的文件和未追踪目录）
-        git reset --hard HEAD
-        git clean -fdx
+        # 0. 中止任何可能卡住的合并、衍合或变基状态
+        git merge --abort >/dev/null 2>&1 || true
+        git rebase --abort >/dev/null 2>&1 || true
+        git am --abort >/dev/null 2>&1 || true
         
-        # 2. 从远端获取最新的分支状态
+        # 1. 获取远端最新状态
         git fetch origin "$BRANCH"
         
-        # 3. 强行将本地工作分支重置到 origin/$BRANCH 的状态，无论有任何分歧
-        git checkout -f "$BRANCH" 2>/dev/null || git checkout -f -b "$BRANCH" "origin/$BRANCH"
+        # 2. 清理所有未跟踪的文件、目录和忽略的文件
+        git clean -fdx
         
-        # 4. 彻底抛弃分歧差异，对齐远程
+        # 3. 强行检出分支，忽略本地改动
+        git checkout -f "$BRANCH" >/dev/null 2>&1 || git checkout -f -b "$BRANCH" "origin/$BRANCH"
+        
+        # 4. 【核心】强行以 origin/$BRANCH 为准，完全覆盖本地可能存在的任何冲突和修改
         git reset --hard "origin/$BRANCH"
     else
+        # 如果目录存在但不是git仓库，先清理
+        if [ -d "$BUILD_DIR/QozeCode" ]; then
+            rm -rf "$BUILD_DIR/QozeCode"
+        fi
         cd "$BUILD_DIR"
         git clone -b "$BRANCH" "$REPO_URL"
     fi
