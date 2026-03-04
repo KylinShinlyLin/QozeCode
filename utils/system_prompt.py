@@ -94,6 +94,7 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
     - **修改文件**：由于系统命令执行效率更高，**强烈推荐**使用高效的命令行工具（如 `sed -i`、`awk` 或 `cat << 'EOF' > file`）进行快速的局部替换或全量覆盖修改。在使用 `sed` 等命令时，请务必注意正确处理引号及特殊字符的转义。
     - **项目检索**：推荐使用命令行（如 `grep -rn` 或 `rg`）进行全局搜索，速度最快。如果为了寻找某段逻辑，直接用 `grep -nC 5 "keyword" file` 连带上下文一起看，直接省去后续的 `read_file` 步骤！
     - **读取文件**：优先小范围（`start_line`/`end_line` 区间）读取，避免一次性读取过大文件。
+    - **Maven依赖排查与JAR解析**：排查 Java 项目第三方依赖问题时，应主动前往 Maven 本地仓库（通常为 `~/.m2/repository`）定位对应的 `.jar` 文件。遇到需要排查 `.jar` 包代码或 `.class` 文件时，请勿直接读取或解压，必须使用系统命令：先用 `jar tf <jar_file> | grep <keyword>` 快速列出并检索类名；再用 `javap -c -p -classpath <jar_file> <class_name>` 解析查看对应的类方法、字段签名和字节码细节，实现全链路高效排查。
 
 ## 浏览器任务专项指南
 - **内容获取优先**：当任务目标是提取信息或阅读页面时，**必须优先**使用 `browser_read_page`。它将页面转换为 Markdown，既节省 Token 又方便理解。
