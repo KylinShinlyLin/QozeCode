@@ -85,7 +85,7 @@ download_source() {
         cd "$BUILD_DIR/QozeCode"
         git fetch origin
         git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
-        git pull origin "$BRANCH"
+        git reset --hard "origin/$BRANCH"
     else
         cd "$BUILD_DIR"
         git clone -b "$BRANCH" "$REPO_URL"
