@@ -33,7 +33,7 @@ class ModelType(Enum):
 
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）
 MODEL_PROVIDER_MAP = {
-    ModelType.GEMINI_3_PRO: ModelProvider.VERTEX_AI,
+    ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
     ModelType.GEMINI_3_FLASH: ModelProvider.VERTEX_AI,
     ModelType.GROK_4_1_FAST: ModelProvider.XAI,
     # ModelType.GPT_5_2: [ModelProvider.LITELLM, ModelProvider.OPENAI], # 特殊情况
