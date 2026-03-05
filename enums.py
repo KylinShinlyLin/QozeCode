@@ -21,8 +21,10 @@ class ModelType(Enum):
     GEMINI_3_FLASH = "gemini-3-flash"
     GROK_4_1_FAST = "Grok-4.1-Fast"
     GPT_5_2 = "gpt-5.2"
-    GPT_5_2_CODEX="gpt-5.2-codex"
-    CLAUDE_4 = "claude-4"
+    GPT_5_2_CODEX = "gpt-5.2-codex"
+    # CLAUDE_4 = "claude-4"
+    CLAUDE_4_6_SONNET = "claude-sonnet-4-6"
+    CLAUDE_4_6_OPUS = "claude-opus-4-6"
     KIMI_2_5 = "Kimi 2.5"
     QWEN_3_MAX = "qwen3-max"
     DEEPSEEK_REASONER = "deepseek-reasoner"
@@ -33,11 +35,13 @@ class ModelType(Enum):
 
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）
 MODEL_PROVIDER_MAP = {
+    ModelType.CLAUDE_4_6_SONNET: ModelProvider.LITELLM,
+    ModelType.CLAUDE_4_6_OPUS: ModelProvider.LITELLM,
     ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
     ModelType.GEMINI_3_FLASH: ModelProvider.VERTEX_AI,
     ModelType.GROK_4_1_FAST: ModelProvider.XAI,
     # ModelType.GPT_5_2: [ModelProvider.LITELLM, ModelProvider.OPENAI], # 特殊情况
-    ModelType.CLAUDE_4: ModelProvider.BEDROCK,
+    # ModelType.CLAUDE_4: ModelProvider.BEDROCK,
     ModelType.KIMI_2_5: ModelProvider.MOONSHOT,
     ModelType.QWEN_3_MAX: ModelProvider.ALIBABA_CLOUD,
     ModelType.DEEPSEEK_REASONER: ModelProvider.DEEPSEEK,
