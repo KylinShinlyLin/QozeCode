@@ -71,7 +71,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         # "gpt-5.2-codex                  LiteLLM",
         "claude-sonnet-4-6              LiteLLM",
         "claude-haiku-4-5               LiteLLM",
-        "claude-opus-4-6                LiteLLM",
+        # "claude-opus-4-6                LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
         # "claude-4                       LiteLLM",
