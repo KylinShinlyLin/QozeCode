@@ -25,6 +25,7 @@ class ModelType(Enum):
     # CLAUDE_4 = "claude-4"
     CLAUDE_4_6_SONNET = "claude-sonnet-4-6"
     CLAUDE_4_6_OPUS = "claude-opus-4-6"
+    CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
     KIMI_2_5 = "Kimi 2.5"
     QWEN_3_MAX = "qwen3-max"
     DEEPSEEK_REASONER = "deepseek-reasoner"
@@ -37,6 +38,7 @@ class ModelType(Enum):
 MODEL_PROVIDER_MAP = {
     ModelType.CLAUDE_4_6_SONNET: ModelProvider.LITELLM,
     ModelType.CLAUDE_4_6_OPUS: ModelProvider.LITELLM,
+    ModelType.CLAUDE_4_5_HAIKU: ModelProvider.LITELLM,
     ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
     ModelType.GEMINI_3_FLASH: ModelProvider.VERTEX_AI,
     ModelType.GROK_4_1_FAST: ModelProvider.XAI,

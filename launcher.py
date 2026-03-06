@@ -70,6 +70,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gemini-3-flash     (think)     vertex-ai",
         # "gpt-5.2-codex                  LiteLLM",
         "claude-sonnet-4-6              LiteLLM",
+        "claude-haiku-4-5               LiteLLM",
         "claude-opus-4-6                LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
@@ -135,6 +136,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GEMINI_3_1_PRO
         elif "gemini-3-flash" in selected:
             model_type = ModelType.GEMINI_3_FLASH
+        elif "claude-haiku-4-5" in selected:
+            model_type = ModelType.CLAUDE_4_5_HAIKU
         elif "claude-sonnet-4-6" in selected:
             model_type = ModelType.CLAUDE_4_6_SONNET
         elif "claude-opus-4-6" in selected:
