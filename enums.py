@@ -20,6 +20,7 @@ class ModelType(Enum):
     # GEMINI_3_PRO = "gemini-3-pro"
     GEMINI_3_FLASH = "gemini-3-flash"
     GROK_4_1_FAST = "Grok-4.1-Fast"
+    GPT_5_4 = "gpt-5.4"
     GPT_5_2 = "gpt-5.2"
     GPT_5_2_CODEX = "gpt-5.2-codex"
     # CLAUDE_4 = "claude-4"
@@ -42,6 +43,7 @@ MODEL_PROVIDER_MAP = {
     ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
     ModelType.GEMINI_3_FLASH: ModelProvider.VERTEX_AI,
     ModelType.GROK_4_1_FAST: ModelProvider.XAI,
+    ModelType.GPT_5_4: ModelProvider.LITELLM,
     # ModelType.GPT_5_2: [ModelProvider.LITELLM, ModelProvider.OPENAI], # 特殊情况
     # ModelType.CLAUDE_4: ModelProvider.BEDROCK,
     ModelType.KIMI_2_5: ModelProvider.MOONSHOT,

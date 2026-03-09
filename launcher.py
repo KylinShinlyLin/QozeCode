@@ -72,6 +72,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "claude-sonnet-4-6              LiteLLM",
         "claude-haiku-4-5               LiteLLM",
         # "claude-opus-4-6                LiteLLM",
+        "gpt-5.4                        LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
         # "claude-4                       LiteLLM",
@@ -129,9 +130,6 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         elif "Alibaba Cloud" in selected:
             provider = ModelProvider.ALIBABA_CLOUD
 
-        # 2. 解析 ModelType
-        # if "gemini-3-pro" in selected:
-        #     model_type = ModelType.GEMINI_3_PRO
         if "gemini-3.1-pro" in selected:
             model_type = ModelType.GEMINI_3_1_PRO
         elif "gemini-3-flash" in selected:
@@ -146,10 +144,10 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GROK_4_1_FAST
         elif "gpt-5.2-codex" in selected:
             model_type = ModelType.GPT_5_2_CODEX
+        elif "gpt-5.4" in selected:
+            model_type = ModelType.GPT_5_4
         elif "gpt-5.2" in selected:
             model_type = ModelType.GPT_5_2
-        # elif "claude-4" in selected or "Claude-4" in selected:
-        #     model_type = ModelType.CLAUDE_4
         elif "deepseek-reasoner" in selected:
             model_type = ModelType.DEEPSEEK_REASONER
         elif "deepseek-chat" in selected:

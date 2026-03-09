@@ -85,8 +85,6 @@ def patch_langchain_deepseek():
 
 
 def get_gemini_model_name(model_type: ModelType):
-    # if model_type == ModelType.GEMINI_3_PRO:
-    #     return "gemini-3-pro-preview"
     if model_type == ModelType.GEMINI_3_FLASH:
         return "gemini-3-flash-preview"
     elif model_type == ModelType.GEMINI_3_1_PRO:
@@ -103,42 +101,6 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
     # 1. DeepSeek Patch
     if provider == ModelProvider.DEEPSEEK:
         patch_langchain_deepseek()
-
-    # # 2. Provider Switch
-    # if provider == ModelProvider.BEDROCK:
-    #     try:
-    #         from langchain_aws import ChatBedrockConverse
-    #         from botocore.config import Config
-    #         import boto3
-    #
-    #         # Config expects "Claude-4"
-    #         creds = ensure_model_credentials("Claude-4")
-    #
-    #         # 创建带代理的 boto3 配置
-    #         config = Config(
-    #             region_name=creds['region_name']
-    #         )
-    #         # 创建 bedrock 客户端
-    #         bedrock_client = boto3.client(
-    #             service_name="bedrock-runtime",
-    #             region_name=creds['region_name'],
-    #             config=config
-    #         )
-    #         llm = ChatBedrockConverse(
-    #             client=bedrock_client,
-    #             model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
-    #             region_name=creds['region_name'],
-    #             additional_model_request_fields={
-    #                 "thinking": {"type": "enabled", "budget_tokens": 4096},
-    #             }
-    #         )
-    #         return llm
-    #     except ImportError:
-    #         print("❌ 缺少 langchain_aws 依赖，请安装: pip install langchain-aws")
-    #         raise
-    #     except Exception as e:
-    #         print(f"❌ Claude-4 初始化失败: {str(e)}")
-    #         raise
 
     if provider == ModelProvider.XAI:
         from langchain_xai import ChatXAI
