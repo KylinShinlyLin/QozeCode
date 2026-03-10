@@ -131,7 +131,7 @@ class Qoze(App):
         yield TopBar()
         with Horizontal(id="main-container"):
             with Vertical(id="chat-area"):
-                yield RichLog(id="main-output", markup=True, highlight=True, auto_scroll=True, wrap=True)
+                yield RichLog(id="main-output", markup=True, highlight=False, auto_scroll=True, wrap=True)
                 from textual.widgets import Static
                 yield Static(id="tool-status")
                 yield MarkdownWidget(id="stream-output")

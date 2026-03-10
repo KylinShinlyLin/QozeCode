@@ -2,7 +2,6 @@
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-
 CSS = """
     Screen { background: #1a1b26; color: #a9b1d6; }
     TopBar { dock: top; height: 1; background: #13131c; color: #c0caf5; }
