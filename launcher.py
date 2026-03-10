@@ -69,9 +69,10 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         # "gemini-3-pro       (think)     vertex-ai",
         "gemini-3-flash     (think)     vertex-ai",
         # "gpt-5.2-codex                  LiteLLM",
-        "claude-sonnet-4-6              LiteLLM",
-        "claude-haiku-4-5               LiteLLM",
+        # "claude-sonnet-4-6              LiteLLM",
+        # "claude-haiku-4-5               LiteLLM",
         # "claude-opus-4-6                LiteLLM",
+        "gpt-5.4                        LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
         # "claude-4                       LiteLLM",
@@ -146,6 +147,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GROK_4_1_FAST
         elif "gpt-5.2-codex" in selected:
             model_type = ModelType.GPT_5_2_CODEX
+        elif "gpt-5.4" in selected:
+            model_type = ModelType.GPT_5_4
         elif "gpt-5.2" in selected:
             model_type = ModelType.GPT_5_2
         # elif "claude-4" in selected or "Claude-4" in selected:
