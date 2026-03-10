@@ -19,3 +19,12 @@ DEFAULT_STYLES["markdown.code_block"] = "#c0caf5 on #1a1b26"
 DEFAULT_STYLES["markdown.link"] = "#7dcfff"
 DEFAULT_STYLES["markdown.link_url"] = "underline #7dcfff"
 
+# 兼容不同 rich 版本可能使用的 heading 命名，确保 RichLog 中 h2/h3/h4 不会退回到默认红色
+DEFAULT_STYLES["markdown.heading"] = "bold #c0caf5"
+DEFAULT_STYLES["markdown.heading.1"] = "bold #7aa2f7"
+DEFAULT_STYLES["markdown.heading.2"] = "bold #7dcfff"
+DEFAULT_STYLES["markdown.heading.3"] = "bold #2ac3de"
+DEFAULT_STYLES["markdown.heading.4"] = "bold #9ece6a"
+DEFAULT_STYLES["markdown.heading.5"] = "bold #e0af68"
+DEFAULT_STYLES["markdown.heading.6"] = "bold #ff9e64"
+
