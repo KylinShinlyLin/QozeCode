@@ -104,42 +104,6 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
     if provider == ModelProvider.DEEPSEEK:
         patch_langchain_deepseek()
 
-    # # 2. Provider Switch
-    # if provider == ModelProvider.BEDROCK:
-    #     try:
-    #         from langchain_aws import ChatBedrockConverse
-    #         from botocore.config import Config
-    #         import boto3
-    #
-    #         # Config expects "Claude-4"
-    #         creds = ensure_model_credentials("Claude-4")
-    #
-    #         # 创建带代理的 boto3 配置
-    #         config = Config(
-    #             region_name=creds['region_name']
-    #         )
-    #         # 创建 bedrock 客户端
-    #         bedrock_client = boto3.client(
-    #             service_name="bedrock-runtime",
-    #             region_name=creds['region_name'],
-    #             config=config
-    #         )
-    #         llm = ChatBedrockConverse(
-    #             client=bedrock_client,
-    #             model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
-    #             region_name=creds['region_name'],
-    #             additional_model_request_fields={
-    #                 "thinking": {"type": "enabled", "budget_tokens": 4096},
-    #             }
-    #         )
-    #         return llm
-    #     except ImportError:
-    #         print("❌ 缺少 langchain_aws 依赖，请安装: pip install langchain-aws")
-    #         raise
-    #     except Exception as e:
-    #         print(f"❌ Claude-4 初始化失败: {str(e)}")
-    #         raise
-
     if provider == ModelProvider.XAI:
         from langchain_xai import ChatXAI
         creds = ensure_model_credentials("Grok-4.1-Fast")
@@ -277,9 +241,8 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             print(f"creds={creds}")
             llm = ChatOpenAI(
                 api_key=creds["api_key"],
-                model="kimi-k2-thinking",
+                model=model_type.value,
                 base_url="https://api.moonshot.cn/v1",
-                max_retries=1
             )
             return llm
         except ImportError:

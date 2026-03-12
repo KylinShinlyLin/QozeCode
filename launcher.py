@@ -66,24 +66,16 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     # 保持原有显示格式，但逻辑中我们会根据字符串反推
     choices = [
         "gemini-3.1-pro     (think)     vertex-ai",
-        # "gemini-3-pro       (think)     vertex-ai",
         "gemini-3-flash     (think)     vertex-ai",
-        # "gpt-5.2-codex                  LiteLLM",
-        # "claude-sonnet-4-6              LiteLLM",
-        # "claude-haiku-4-5               LiteLLM",
-        # "claude-opus-4-6                LiteLLM",
         "gpt-5.4                        LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
-        # "claude-4                       LiteLLM",
+        "kimi-k2.5                      MoonShot",
         "Grok 4.1 Fast      (think)     XAI",
-        # "claude-4           (think)     bedrock",
         "glm-5                          智普",
         "deepseek-reasoner  (think)     DeepSeek",
         "deepseek-chat                  DeepSeek",
         "gpt-5.2                        OpenAI",
-        # "kimi-2.5                       Kimi",
-        # "qwen3-max          (think)     Alibaba Cloud",
         "[退出程序]"
     ]
 
@@ -123,7 +115,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             provider = ModelProvider.DEEPSEEK
         elif "OpenAI" in selected:
             provider = ModelProvider.OPENAI
-        elif "Kimi" in selected:
+        elif "MoonShot" in selected:
             provider = ModelProvider.MOONSHOT
         elif "智普" in selected:
             provider = ModelProvider.ZHIPU
@@ -151,8 +143,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GPT_5_4
         elif "gpt-5.2" in selected:
             model_type = ModelType.GPT_5_2
-        # elif "claude-4" in selected or "Claude-4" in selected:
-        #     model_type = ModelType.CLAUDE_4
+        elif "kimi-k2.5" in selected:
+            model_type = ModelType.KIMI_K2_5
         elif "deepseek-reasoner" in selected:
             model_type = ModelType.DEEPSEEK_REASONER
         elif "deepseek-chat" in selected:
