@@ -182,7 +182,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         return {"project": project, "location": location, "credentials_path": cred_path}
 
     # 7. ZHIPU (GLM)
-    elif model_identifier in "ZHIPU":
+    elif model_identifier == "ZHIPU":
         section = "ZHIPU"
         if not cfg.has_section(section):
             fail(f"缺少 (section [{section}]) 配置")

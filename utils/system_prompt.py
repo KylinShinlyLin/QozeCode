@@ -2,59 +2,21 @@
 # -*- coding: utf-8 -*-
 """
 系统提示词配置 - 用于 AI Agent 的系统提示
+优化后的版本：分离静态和动态内容以提升 Prompt Caching 命中率
 """
 import os
 
 
-def get_system_prompt(system_info, system_release, system_version, machine_type,
-                      processor, shell, current_dir, directory_tree):
-    # print(f"当前目录:{directory_tree}")
+def get_static_system_prompt():
     """
-    获取系统提示词模板
-
-    Args:
-        各种系统环境参数
-
+    获取静态系统提示词（可被 OpenAI Prompt Caching 缓存的部分）
+    
+    这部分内容在每次请求中保持不变，放在 SystemMessage 中以最大化缓存命中率。
+    
     Returns:
-        str: 格式化的系统提示词
-        :param plan_mode:
-        :param current_dir:
-        :param machine_type:
-        :param system_version:
-        :param shell:
-        :param username:
-        :param directory_tree:
-        :param home_dir:
-        :param processor:
-        :param hostname:
-        :param system_release:
-        :param system_info:
+        str: 静态系统提示词
     """
-
-    rules_dir = os.path.join(current_dir, '.qoze', 'rules')
-    rules_prompt = ''
-    if os.path.exists(rules_dir) and os.path.isdir(rules_dir):
-        try:
-            # 获取目录中的所有文件
-            rule_files = [f for f in os.listdir(rules_dir) if os.path.isfile(os.path.join(rules_dir, f))]
-
-            if rule_files:
-                rules_prompt += "\n## 当前自定义 agent 规则\n{"
-                for file_name in sorted(rule_files):  # 按文件名排序
-                    file_path = os.path.join(rules_dir, file_name)
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            file_content = f.read()
-                        rules_prompt += f"### {file_name}\n{file_content}\n"
-                    except Exception as e:
-                        print("")
-                rules_prompt += "}\n"
-
-        except Exception as e:
-            print("")
-
-    base_prompt = f'''
-你一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中:
+    return '''你是一名专业的终端AI agent 助手，你当前正运行在当前电脑的终端中:
 - 你当前可能处在某个项目文件夹内，需要协助我开发维护当前项目
 - 你需要根据我的诉求，利用当前支持的tools帮我完成复杂的任务
 - 当你需要在我当前电脑安装新的库，组件，或者环境依赖的时候一定要经过我的同意才能执行
@@ -63,16 +25,6 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 - 非必要的情况下，不要主动去扫描遍历当前项目文件内容
 - 当要求使用浏览器的时候，就不要再去使用 tavily_search 工具进行搜索
 - 再没有要求使用浏览器的情况下，如果我直接给的是 url 让你阅读，推荐使用 get_webpage_to_markdown
-
-## 系统环境信息
-**操作系统**: {system_info} {system_release} ({system_version})
-**架构**: {machine_type}
-**处理器**: {processor}
-**Shell**: {shell}
-**python环境**: 基本python，需要的像excel等工具库都已经安装
-
-## 当前环境
-**工作目录**: {current_dir}
 
 ## 工作原则
 - **严格遵循ReAct执行模式**：对于复杂任务，必须按照"思考分析 → 明确行动 → 执行操作 → 观察结果 → 反思调整"的循环流程，每步都要清晰表达推理过程，直到任务完成。
@@ -106,12 +58,108 @@ def get_system_prompt(system_info, system_release, system_version, machine_type,
 - **DOM 交互策略**：仅在必须进行交互（如点击按钮、填写表单）且不确定元素定位符（Selector）时，才使用 `browser_get_html`。
 - **Token 节约警告**：`browser_get_html` 返回的原始 HTML 通常非常庞大。使用它时要极其谨慎，获取到必要的 Selector 后立即执行下一步，避免在上下文中长期保留大量 HTML 代码。
 - **人机验证阻断**：如果遇到验证码（Captcha）、Cloudflare 等待页面或强制登录墙，请**立即停止**当前操作流，并明确告知用户需要人工介入完成验证。不要尝试通过脚本绕过复杂的安全验证。
+'''
 
-{rules_prompt}
+
+def get_dynamic_context(system_info, system_release, system_version, machine_type,
+                        processor, shell, current_dir, directory_tree, rules_prompt="",
+                        available_skills=None, active_skills_content=""):
+    """
+    获取动态上下文信息（每次请求可能变化的部分）
+    
+    这部分内容放在 User Message 中，避免影响 System Prompt 的缓存。
+    
+    Args:
+        system_info: 操作系统信息
+        system_release: 系统版本
+        system_version: 系统详细版本
+        machine_type: 架构类型
+        processor: 处理器信息
+        shell: Shell 类型
+        current_dir: 当前工作目录
+        directory_tree: 目录树结构
+        rules_prompt: 自定义规则提示
+        available_skills: 可用技能列表
+        active_skills_content: 当前激活的技能内容
+    
+    Returns:
+        str: 格式化的动态上下文
+    """
+    context = f"""## 系统环境信息
+**操作系统**: {system_info} {system_release} ({system_version})
+**架构**: {machine_type}
+**处理器**: {processor}
+**Shell**: {shell}
+**python环境**: 基本python，需要的像excel等工具库都已经安装
+
+## 当前环境
+**工作目录**: {current_dir}
 
 ## 当前项目目录
 {directory_tree}
+"""
+    
+    # 添加自定义规则
+    if rules_prompt:
+        context += f"\n{rules_prompt}\n"
+    
+    # 添加可用技能
+    if available_skills:
+        skills_list = [f"- **{name}**: {description}" for name, description in available_skills.items()]
+        context += "\n## 🎯 Available Skills System\n" + "\n".join(skills_list) + "\n"
+    
+    # 添加激活的技能
+    if active_skills_content:
+        context += f"\n## 🔥 Currently Active Skills:\n{active_skills_content}\n"
+    
+    return context
 
-'''
-    # print(base_prompt)
-    return base_prompt
+
+# def get_system_prompt(system_info, system_release, system_version, machine_type,
+#                       processor, shell, current_dir, directory_tree):
+#     """
+#     【向后兼容】获取完整的系统提示词（静态+动态）
+#
+#     注意：此函数保留用于向后兼容，新代码推荐使用 get_static_system_prompt() + get_dynamic_context()
+#     以获得更好的 Prompt Caching 性能。
+#
+#     Args:
+#         各种系统环境参数
+#
+#     Returns:
+#         str: 完整的系统提示词
+#     """
+#     # 获取自定义规则
+#     rules_dir = os.path.join(current_dir, '.qoze', 'rules')
+#     rules_prompt = ''
+#     if os.path.exists(rules_dir) and os.path.isdir(rules_dir):
+#         try:
+#             rule_files = [f for f in os.listdir(rules_dir) if os.path.isfile(os.path.join(rules_dir, f))]
+#             if rule_files:
+#                 rules_prompt += "\n## 当前自定义 agent 规则\n{"
+#                 for file_name in sorted(rule_files):
+#                     file_path = os.path.join(rules_dir, file_name)
+#                     try:
+#                         with open(file_path, 'r', encoding='utf-8') as f:
+#                             file_content = f.read()
+#                         rules_prompt += f"### {file_name}\n{file_content}\n"
+#                     except Exception:
+#                         pass
+#                 rules_prompt += "}\n"
+#         except Exception:
+#             pass
+#
+#     static_prompt = get_static_system_prompt()
+#     dynamic_prompt = get_dynamic_context(
+#         system_info=system_info,
+#         system_release=system_release,
+#         system_version=system_version,
+#         machine_type=machine_type,
+#         processor=processor,
+#         shell=shell,
+#         current_dir=current_dir,
+#         directory_tree=directory_tree,
+#         rules_prompt=rules_prompt
+#     )
+#
+#     return static_prompt + "\n" + dynamic_prompt

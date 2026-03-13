@@ -44,7 +44,7 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
-from utils.system_prompt import get_system_prompt
+from utils.system_prompt import get_static_system_prompt, get_dynamic_context
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -57,9 +57,52 @@ RESET = "\033[0m"
 skill_manager = None
 
 
-def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
-                               shell="", current_dir="", directory_tree=""):
-    """获取增强的系统提示词（包含技能信息）"""
+def load_qoze_rules(current_dir):
+    """
+    加载 .qoze/rules 目录下的自定义规则文件
+    
+    Args:
+        current_dir: 当前工作目录
+        
+    Returns:
+        str: 格式化的规则内容，如果没有规则则返回空字符串
+    """
+    rules_dir = os.path.join(current_dir, '.qoze', 'rules')
+    rules_prompt = ''
+
+    if os.path.exists(rules_dir) and os.path.isdir(rules_dir):
+        try:
+            # 获取目录中的所有文件
+            rule_files = [f for f in os.listdir(rules_dir) if os.path.isfile(os.path.join(rules_dir, f))]
+
+            if rule_files:
+                rules_prompt += "## 当前自定义 agent 规则\n"
+                for file_name in sorted(rule_files):  # 按文件名排序
+                    file_path = os.path.join(rules_dir, file_name)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            file_content = f.read()
+                        rules_prompt += f"### {file_name}\n{file_content}\n"
+                    except Exception:
+                        pass  # 静默处理单个文件读取错误
+                rules_prompt += "\n"
+
+        except Exception:
+            pass  # 静默处理目录读取错误
+
+    return rules_prompt
+
+
+def get_context_info(system_info="", system_release="", system_version="", machine_type="", processor="",
+                     shell="", current_dir="", directory_tree=""):
+    """
+    获取上下文信息（分离静态和动态内容以优化 Prompt Caching）
+
+    Returns:
+        tuple: (static_system_prompt, dynamic_context)
+               - static_system_prompt: 可被缓存的静态 System Prompt
+               - dynamic_context: 每次变化的动态上下文
+    """
     # 兼容 ~/.qoze/skills 下的脚本调用
     user_qoze_path = os.path.expanduser("~/.qoze")
     if user_qoze_path not in sys.path:
@@ -68,18 +111,42 @@ def get_enhanced_system_prompt(system_info="", system_release="", system_version
     global skill_manager
     if skill_manager is None:
         skill_manager = SkillManager()
-    base_prompt = get_system_prompt(system_info=system_info, system_release=system_release,
-                                    system_version=system_version, machine_type=machine_type, processor=processor,
-                                    shell=shell, current_dir=current_dir, directory_tree=directory_tree)
+
+    # 获取静态 System Prompt（可被 OpenAI Prompt Caching 缓存）
+    static_prompt = get_static_system_prompt()
+
+    # 加载自定义规则（放在动态上下文中，避免影响 System Prompt 缓存）
+    rules_prompt = load_qoze_rules(current_dir)
+
+    # 获取技能信息
     available_skills = skill_manager.get_available_skills()
     active_skills_content = skill_manager.get_active_skills_content()
-    skills_prompt = ""
-    if available_skills:
-        skills_list = [f"- **{name}**: {description}" for name, description in available_skills.items()]
-        skills_prompt = "\n\n## 🎯 Available Skills System\n" + "\n".join(skills_list)
-    if active_skills_content:
-        skills_prompt += f"\n\n## 🔥 Currently Active Skills:\n{active_skills_content}"
-    return base_prompt + skills_prompt
+
+    # 构建动态上下文（放在 User Message 中，避免影响 System Prompt 缓存）
+    dynamic_context = get_dynamic_context(
+        system_info=system_info,
+        system_release=system_release,
+        system_version=system_version,
+        machine_type=machine_type,
+        processor=processor,
+        shell=shell,
+        current_dir=current_dir,
+        directory_tree=directory_tree,
+        rules_prompt=rules_prompt,
+        available_skills=available_skills,
+        active_skills_content=active_skills_content
+    )
+
+    return static_prompt, dynamic_context
+
+
+# 保留向后兼容的函数名
+def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
+                               shell="", current_dir="", directory_tree=""):
+    """【向后兼容】获取完整的系统提示词"""
+    static, dynamic = get_context_info(system_info, system_release, system_version, machine_type,
+                                       processor, shell, current_dir, directory_tree)
+    return static + "\n" + dynamic
 
 
 # 全局 LLM 变量，将在 main 函数中初始化
@@ -154,14 +221,43 @@ async def llm_call(state: dict):
     except Exception:
         print("获取设备信息异常")
 
-    system_msg = get_enhanced_system_prompt(system_info=system_info, system_release=system_release,
-                                            system_version=system_version, machine_type=machine_type,
-                                            processor=processor, shell=shell, current_dir=current_dir,
-                                            directory_tree=directory_tree)
-
-    response = await llm_with_tools.ainvoke(
-        [SystemMessage(content=system_msg)] + state["messages"]
+    # 分离静态和动态内容以优化 Prompt Caching
+    static_prompt, dynamic_context = get_context_info(
+        system_info=system_info,
+        system_release=system_release,
+        system_version=system_version,
+        machine_type=machine_type,
+        processor=processor,
+        shell=shell,
+        current_dir=current_dir,
+        directory_tree=directory_tree
     )
+
+    # 构造消息：SystemMessage 放静态内容（可被缓存），UserMessage 放动态上下文
+    messages = [SystemMessage(content=static_prompt)]
+
+    # 将动态上下文作为第一条用户消息（或合并到现有用户消息中）
+    if state["messages"]:
+        # 如果已有消息，将动态上下文添加到第一条用户消息前面
+        first_msg = state["messages"][0]
+        if isinstance(first_msg, HumanMessage):
+            # 如果是 HumanMessage，合并内容
+            if isinstance(first_msg.content, str):
+                combined_content = f"{dynamic_context}\n\n---\n\n{first_msg.content}"
+                messages.append(HumanMessage(content=combined_content))
+            else:
+                # 内容可能是列表（多模态消息）
+                messages.append(HumanMessage(content=dynamic_context))
+                messages.append(first_msg)
+        else:
+            messages.append(HumanMessage(content=dynamic_context))
+            messages.append(first_msg)
+        # 添加剩余消息
+        messages.extend(state["messages"][1:])
+    else:
+        messages.append(HumanMessage(content=dynamic_context))
+
+    response = await llm_with_tools.ainvoke(messages)
 
     return {
         "messages": [response],

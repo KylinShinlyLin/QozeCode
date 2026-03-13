@@ -37,6 +37,61 @@ def patch_langchain_openai():
             f.write(f"OpenAI Patch failed: {str(e)}\n")
 
 
+def patch_langchain_openai_request_payload():
+    """
+    Patch langchain_openai ChatOpenAI to preserve reasoning_content
+    when sending conversation history back to OpenAI-compatible providers
+    such as Kimi / Moonshot.
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+
+        if hasattr(ChatOpenAI, "_is_patched_for_reasoning_payload"):
+            return
+
+        original_get_request_payload = ChatOpenAI._get_request_payload
+
+        def patched_get_request_payload(self, input_, *, stop=None, **kwargs):
+            payload = original_get_request_payload(self, input_, stop=stop, **kwargs)
+
+            try:
+                messages = self._convert_input(input_).to_messages()
+            except Exception:
+                messages = []
+
+            if "messages" in payload:
+                for i, msg in enumerate(messages):
+                    if i >= len(payload["messages"]):
+                        break
+
+                    reasoning = None
+
+                    if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
+                        reasoning = msg.additional_kwargs.get("reasoning_content")
+
+                    if not reasoning and isinstance(msg.content, list):
+                        for block in msg.content:
+                            if isinstance(block, dict):
+                                if block.get("type") == "reasoning_content":
+                                    reasoning = block.get("reasoning_content")
+                                    break
+                                if block.get("type") == "thinking":
+                                    reasoning = block.get("thinking")
+                                    break
+
+                    if reasoning and payload["messages"][i].get("role") == "assistant":
+                        payload["messages"][i]["reasoning_content"] = reasoning
+
+            return payload
+
+        ChatOpenAI._get_request_payload = patched_get_request_payload
+        ChatOpenAI._is_patched_for_reasoning_payload = True
+    except Exception as e:
+        os.makedirs(".qoze", exist_ok=True)
+        with open(".qoze/patch.log", "a") as f:
+            f.write(f"OpenAI payload patch failed: {str(e)}\n")
+
+
 def patch_langchain_deepseek():
     """
     todo 先使用猴子补丁修复 deepseek-r1 思考过程不支持 function call 的问题
@@ -99,6 +154,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
 
     # 0. Global Patch for OpenAI compatible providers
     patch_langchain_openai()
+    patch_langchain_openai_request_payload()
 
     # 1. DeepSeek Patch
     if provider == ModelProvider.DEEPSEEK:
