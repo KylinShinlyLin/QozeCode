@@ -35,3 +35,9 @@ base_url=
 [soniox]
 soniox_key=
 
+
+[Lark]
+# Lark (飞书) 开放平台配置
+# 访问 https://open.larksuite.com/app 创建应用获取以下凭证
+app_id=cli_xxxxxxxxxxxx
+app_secret=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
