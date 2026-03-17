@@ -16,6 +16,7 @@ from langchain_core.tools import tool
 # 尝试导入 lark-oapi
 try:
     import warnings
+
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning)
         warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -263,13 +264,18 @@ def _parse_markdown_to_blocks(content: str) -> List[Block]:
         if text_buffer:
             # 合并多行文本
             combined_text = '\n'.join(text_buffer)
+            # 跳过纯空内容（避免飞书API验证失败: 99992402）
+            if not combined_text.strip():
+                text_buffer = []
+                return
             # 限制长度
             max_text_length = 10000
             if len(combined_text) > max_text_length:
                 # 如果太长，分成多个块
                 for i in range(0, len(combined_text), max_text_length):
                     chunk = combined_text[i:i + max_text_length]
-                    blocks.append(_create_text_block(chunk))
+                    if chunk.strip():  # 确保块不是纯空白
+                        blocks.append(_create_text_block(chunk))
             else:
                 blocks.append(_create_text_block(combined_text))
             text_buffer = []
