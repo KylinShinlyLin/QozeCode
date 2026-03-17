@@ -15,9 +15,13 @@ from langchain_core.tools import tool
 
 # 尝试导入 lark-oapi
 try:
-    import lark_oapi as lark
-    from lark_oapi.api.docx.v1 import *
-    from lark_oapi.api.drive.v1 import ListFileRequest
+    import warnings
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        import lark_oapi as lark
+        from lark_oapi.api.docx.v1 import *
+        from lark_oapi.api.drive.v1 import ListFileRequest
 
     LARK_SDK_AVAILABLE = True
 except ImportError:
