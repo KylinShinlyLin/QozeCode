@@ -38,7 +38,7 @@ from tools.file_tools import read_file, list_files, search_in_files, cat_file, l
     find_files
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
-from tools.search_tool import tavily_search, get_webpage_to_markdown
+from tools.search_tool import tavily_search, read_url
 from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, \
     browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
@@ -158,7 +158,7 @@ browser_tools = None
 base_tools = [
     execute_command,
     tavily_search,
-    get_webpage_to_markdown,
+    read_url,
     activate_skill,
     list_available_skills,
     deactivate_skill,
@@ -276,7 +276,7 @@ async def tool_node(state: dict):
         tool = tools_by_name[tool_call["name"]]
         try:
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "get_webpage_to_markdown", "execute_command", "browser_navigate",
+            if tool_call["name"] in ["tavily_search", "read_url", "execute_command", "browser_navigate",
                                      "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
                                      "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
                                      "browser_switch_tab", "browser_list_tabs"]:

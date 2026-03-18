@@ -85,8 +85,8 @@ async def tavily_search(query: str, max_results: int = 5) -> str:
 
 
 @tool
-async def get_webpage_to_markdown(url: str) -> str:
-    """Visit webpage and convert its content to Markdown
+async def read_url(url: str) -> str:
+    """Visit and read url webpage and convert its content to Markdown
     
     This tool uses to fetch webpage content and convert it directly to clean Markdown format.
     - This tool is well-suited for reading URL documents or URL literature.
