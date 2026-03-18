@@ -41,8 +41,8 @@ dependencies = [
     "soniox",
     "python-socks[asyncio]",
     "html2text",
-    "pyaudio"
-
+    "pyaudio",
+    "lark-oapi"
 ]
 
 [project.scripts]
