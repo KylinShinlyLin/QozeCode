@@ -197,8 +197,13 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         required_keys = ["api_key"]
 
     # 9. Kimi (Moonshot)
-    elif model_identifier in ("Kimi 2.5", "Kimi"):
+    elif model_identifier in ("kimi-k2.5", "Kimi"):
         section = "Kimi"
+        required_keys = ["api_key"]
+
+    # 10. Kimi For Coding
+    elif model_identifier in ("kimi-for-coding", "KimiCode"):
+        section = "KimiCode"
         required_keys = ["api_key"]
 
     else:
@@ -218,6 +223,8 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         creds[key] = val
 
     if section == "Kimi":
+        creds["base_url"] = cfg.get(section, "base_url", fallback=None)
+    if section == "KimiCode":
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
 
     return creds

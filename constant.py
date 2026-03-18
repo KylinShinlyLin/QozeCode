@@ -24,6 +24,10 @@ api_key=
 api_key=
 base_url=https://api.moonshot.cn/v1
 
+[KimiCode]
+api_key=
+base_url=https://api.kimi.com/coding/v1
+
 [LiteLLM]
 api_key=
 base_url=

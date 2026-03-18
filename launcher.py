@@ -67,11 +67,11 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     choices = [
         "gemini-3.1-pro     (think)     vertex-ai",
         "gemini-3-flash     (think)     vertex-ai",
+        "kimi-k2.5                      MoonShot",
+        "kimi-for-coding                MoonShot",
         "gpt-5.4                        LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
-        "kimi-k2.5                      MoonShot",
-        "kimi-for-coding                MoonShot",
         "Grok 4.1 Fast      (think)     XAI",
         "glm-5                          智普",
         "deepseek-reasoner  (think)     DeepSeek",

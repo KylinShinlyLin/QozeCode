@@ -293,13 +293,21 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
     elif provider == ModelProvider.MOONSHOT:
         try:
             from langchain_openai import ChatOpenAI
-            creds = ensure_model_credentials("Kimi 2.5")
-            llm = ChatOpenAI(
-                api_key=creds["api_key"],
-                model=model_type.value,
-                base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
-                default_headers={"User-Agent": "RooCode/1.0"},
-            )
+            if model_type == ModelType.KIMI_FOR_CODING:
+                creds = ensure_model_credentials("kimi-for-coding")
+                llm = ChatOpenAI(
+                    api_key=creds["api_key"],
+                    model="kimi-for-coding",
+                    base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
+                    default_headers={"User-Agent": "RooCode/1.0"},
+                )
+            else:
+                creds = ensure_model_credentials("kimi-k2.5")
+                llm = ChatOpenAI(
+                    api_key=creds["api_key"],
+                    model="kimi-k2.5",
+                    base_url=creds.get("base_url") or "https://api.moonshot.cn/v1",
+                )
             return llm
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖")
