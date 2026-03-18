@@ -42,7 +42,7 @@ from tools.search_tool import tavily_search, get_webpage_to_markdown
 from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, \
     browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
-from tools.lark_tools import read_lark_document, create_lark_document, update_lark_document
+from tools.lark_tools import read_lark_document
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context
