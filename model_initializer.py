@@ -294,11 +294,11 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
         try:
             from langchain_openai import ChatOpenAI
             creds = ensure_model_credentials("Kimi 2.5")
-            print(f"creds={creds}")
             llm = ChatOpenAI(
                 api_key=creds["api_key"],
                 model=model_type.value,
-                base_url="https://api.moonshot.cn/v1",
+                base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
+                default_headers={"User-Agent": "RooCode/1.0"},
             )
             return llm
         except ImportError:

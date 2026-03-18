@@ -21,6 +21,7 @@ api_key=
 
 [Kimi]
 api_key=
+base_url=https://api.moonshot.cn/v1
 
 [LiteLLM]
 api_key=

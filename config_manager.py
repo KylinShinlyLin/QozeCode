@@ -217,4 +217,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
             fail(f"{model_identifier} 凭证 (section [{section}] -> {key})")
         creds[key] = val
 
+    if section == "Kimi":
+        creds["base_url"] = cfg.get(section, "base_url", fallback=None)
+
     return creds

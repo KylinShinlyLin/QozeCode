@@ -24,6 +24,7 @@ class ModelType(Enum):
     GPT_5_2 = "gpt-5.2"
     GPT_5_2_CODEX = "gpt-5.2-codex"
     KIMI_K2_5 = "kimi-k2.5"
+    KIMI_FOR_CODING = "kimi-for-coding"
     # CLAUDE_4 = "claude-4"
     # CLAUDE_4_6_SONNET = "claude-sonnet-4-6"
     # CLAUDE_4_6_OPUS = "claude-opus-4-6"
@@ -42,6 +43,7 @@ MODEL_PROVIDER_MAP = {
     # ModelType.CLAUDE_4_6_OPUS: ModelProvider.LITELLM,
     # ModelType.CLAUDE_4_5_HAIKU: ModelProvider.LITELLM,
     ModelType.KIMI_K2_5: ModelProvider.MOONSHOT,
+    ModelType.KIMI_FOR_CODING: ModelProvider.MOONSHOT,
     ModelType.GPT_5_4: ModelProvider.LITELLM,
     ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
     ModelType.GEMINI_3_FLASH: ModelProvider.VERTEX_AI,

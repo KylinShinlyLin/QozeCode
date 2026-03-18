@@ -71,6 +71,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
         "kimi-k2.5                      MoonShot",
+        "kimi-for-coding                MoonShot",
         "Grok 4.1 Fast      (think)     XAI",
         "glm-5                          智普",
         "deepseek-reasoner  (think)     DeepSeek",
@@ -143,6 +144,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GPT_5_4
         elif "gpt-5.2" in selected:
             model_type = ModelType.GPT_5_2
+        elif "kimi-for-coding" in selected:
+            model_type = ModelType.KIMI_FOR_CODING
         elif "kimi-k2.5" in selected:
             model_type = ModelType.KIMI_K2_5
         elif "deepseek-reasoner" in selected:
