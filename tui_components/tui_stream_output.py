@@ -57,7 +57,7 @@ class TUIStreamOutput:
                 paths_str = ", ".join([str(p) for p in paths])
             else:
                 paths_str = str(paths)
-            
+
             if paths_str:
                 short_paths = paths_str[:60] + ("..." if len(paths_str) > 60 else "")
                 display_name = f"cat_file: {short_paths}"
@@ -78,11 +78,11 @@ class TUIStreamOutput:
             # 改进方案：使用纯文本 Header + 缩进样式，去除 Panel 边框
             # header = Text("Thinking", style="bold cyan")
             # self.main_log.write(header)
-            
+
             # 使用灰色斜体，左缩进2个字符
             content = Text(reasoning_clean, style="italic #909090")
             self.main_log.write(Padding(content, (0, 0, 1, 2)))
-            
+
             # 或者如果更喜欢 Markdown 引用样式（带左侧竖线）：
             # lines = reasoning_clean.split('\n')
             # md_text = "> 🧠 **Thinking Process**\n>\n" + "\n".join([f"> *{line}*" for line in lines])
@@ -102,6 +102,10 @@ class TUIStreamOutput:
         total_response_text = ""
         total_reasoning_content = ""
         accumulated_ai_message = None
+
+        # 新增：行计数器，用于定期 flush 避免积累过多内容导致卡顿
+        accumulated_lines = 0
+        LINES_FLUSH_THRESHOLD = 10  # 每累积 30 行就 flush 一次
 
         self.stream_display.styles.display = "block"
         self.last_update_time = 0
@@ -137,6 +141,7 @@ class TUIStreamOutput:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
+                        accumulated_lines = 0
 
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
                     if not tool_name and self.active_tools:
@@ -188,7 +193,8 @@ class TUIStreamOutput:
                     icon_color = "red" if is_error else "green"
                     if tool_name == "read_file" and content_str:
                         max_len = 4000
-                        snippet = content_str if len(content_str) <= max_len else content_str[:max_len] + "\n... (truncated)"
+                        snippet = content_str if len(content_str) <= max_len else content_str[
+                                                                                      :max_len] + "\n... (truncated)"
                         self.main_log.write(Markdown(f"```\n{snippet}\n```"))
                     error_hint = ""
                     if is_error:
@@ -210,6 +216,7 @@ class TUIStreamOutput:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
+                        accumulated_lines = 0
 
                     for tool_call in accumulated_ai_message.tool_calls:
                         t_name = tool_call.get("name", "Unknown Tool")
@@ -239,6 +246,7 @@ class TUIStreamOutput:
                 if reasoning:
                     current_reasoning_content += reasoning
                     total_reasoning_content += reasoning
+                    accumulated_lines += reasoning.count('\n')
 
                 content = message_chunk.content
                 chunk_text = ""
@@ -252,10 +260,14 @@ class TUIStreamOutput:
                 if chunk_text:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
+                    accumulated_lines += chunk_text.count('\n')
+
+                # 检查是否需要自动 flush（每累积一定行数就刷新到日志，避免卡顿）
+                should_auto_flush = accumulated_lines >= LINES_FLUSH_THRESHOLD
 
                 if current_reasoning_content or current_response_text:
                     now = time.time()
-                    if now - self.last_update_time > 0.1:
+                    if now - self.last_update_time > 0.1 or should_auto_flush:
                         md_content = ""
                         if current_reasoning_content:
                             # 优化流式输出时的思考展示，使用 blockquote 样式
@@ -280,6 +292,14 @@ class TUIStreamOutput:
                         self.main_log.scroll_end(animate=False)
                         self.stream_display.scroll_end(animate=False)
                         self.last_update_time = now
+
+                        # 如果达到行数阈值，执行 flush 并重置
+                        if should_auto_flush:
+                            self.flush_to_log(current_response_text, current_reasoning_content)
+                            current_response_text = ""
+                            current_reasoning_content = ""
+                            accumulated_lines = 0
+                            self.stream_display.styles.display = "block"
 
             self.flush_to_log(current_response_text, current_reasoning_content)
 
