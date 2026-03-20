@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import re
 import time
 import asyncio
 import traceback
@@ -26,6 +27,97 @@ class TUIStreamOutput:
         self.active_tools = {}
         self.current_display_tool = None
         self.last_update_time = 0
+
+    @staticmethod
+    def _is_incomplete_markdown(text: str) -> bool:
+        """
+        检测当前文本是否处于未完成的 Markdown 结构中。
+        如果在代码块、引用块、表格等未闭合的结构中，返回 True。
+        """
+        if not text:
+            return False
+
+        lines = text.split('\n')
+
+        # 确保 lines 不为空
+        if not lines:
+            return False
+
+        # 1. 检测未闭合的代码块 ``` 或 ~~~
+        in_code_block = False
+        code_fence_char = None
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('```') or stripped.startswith('~~~'):
+                fence = stripped[:3]
+                if not in_code_block:
+                    in_code_block = True
+                    code_fence_char = fence
+                elif fence == code_fence_char:
+                    in_code_block = False
+                    code_fence_char = None
+
+        if in_code_block:
+            return True
+
+        # 2. 检测行内代码 ` 是否成对
+        backtick_count = text.count('`')
+        if backtick_count % 2 != 0:
+            return True
+
+        # 3. 检测未闭合的 HTML 标签
+        text_no_code = re.sub(r'```[\s\S]*?```', '', text)
+        text_no_code = re.sub(r'`[^`]*`', '', text_no_code)
+
+        html_tags = re.findall(r'<(/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*?>', text_no_code)
+        tag_stack = []
+        for is_close, tag in html_tags:
+            if tag in ['br', 'hr', 'img', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source',
+                       'track', 'wbr']:
+                continue
+            if is_close:
+                if tag_stack and tag_stack[-1] == tag:
+                    tag_stack.pop()
+            else:
+                tag_stack.append(tag)
+        if tag_stack:
+            return True
+
+        # 4. 检测表格是否完整
+        last_lines = [l for l in lines[-5:] if l.strip()] if lines else []
+        if last_lines:
+            table_lines = [l for l in last_lines if '|' in l]
+            if table_lines:
+                has_separator = any(re.search(r'\|[\s:]*[-]+', l) for l in last_lines)
+                last_line = lines[-1].strip() if lines else ""
+                if '|' in last_line and not last_line.rstrip().endswith('|'):
+                    return True
+                if table_lines and not has_separator:
+                    return True
+
+        # 5. 检测列表是否可能未完成
+        last_line = lines[-1].strip() if lines else ""
+        if re.match(r'^[\s]*[-*+][\s]', last_line) or re.match(r'^[\s]*\d+\.[\s]', last_line):
+            if len(last_line) < 50:
+                return True
+
+        # 6. 检测数学公式块
+        dollar_matches = re.findall(r"(?<!\\)\$\$", text)
+        if len(dollar_matches) % 2 != 0:
+            return True
+
+        # 7. 检测链接或图片语法是否完整
+        if re.search(r'!?\[[^\]]*\]\([^)]*$', text):
+            return True
+
+        # 8. 检测引用块是否可能未完成
+        quote_lines = [l for l in last_lines if l.strip().startswith('>')] if last_lines else []
+        if quote_lines:
+            last_quote_line = quote_lines[-1] if quote_lines else ""
+            if len(last_quote_line.strip()) < 30:
+                return True
+
+        return False
 
     @staticmethod
     def _get_tool_display_name(tool_name: str, tool_args: dict) -> str:
@@ -263,7 +355,8 @@ class TUIStreamOutput:
                     accumulated_lines += chunk_text.count('\n')
 
                 # 检查是否需要自动 flush（每累积一定行数就刷新到日志，避免卡顿）
-                should_auto_flush = accumulated_lines >= LINES_FLUSH_THRESHOLD
+                should_auto_flush = accumulated_lines >= LINES_FLUSH_THRESHOLD and not self._is_incomplete_markdown(
+                    current_response_text)
 
                 if current_reasoning_content or current_response_text:
                     now = time.time()
