@@ -28,6 +28,7 @@ from textual.widgets.option_list import Option
 
 # Import Enums
 from enums import ModelProvider, ModelType
+import tui_components  # 加载 Rich Markdown 样式覆盖
 from tui_components import tui_constants
 
 # Configure logging for debugging
