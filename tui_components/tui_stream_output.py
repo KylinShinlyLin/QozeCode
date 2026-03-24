@@ -37,6 +37,38 @@ class TUIStreamOutput:
         self._accumulated_content = ""  # 累积的内容用于 token 估算
         self.token_callback = token_callback  # 保存 token 回调函数
 
+    def _normalize_markdown_for_terminal(self, text: str) -> str:
+        """
+        规范化 Markdown，减少 Rich 在终端中对深层标题的块状渲染带来的“漂浮/居中感”。
+        - 保留 h1/h2/h3
+        - 将 h4/h5/h6 转成加粗正文，保持更稳定的左对齐视觉
+        - 代码块内部内容不做处理
+        """
+        if not text:
+            return text
+
+        normalized_lines = []
+        in_code_block = False
+
+        for line in text.splitlines():
+            stripped = line.strip()
+
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                in_code_block = not in_code_block
+                normalized_lines.append(line)
+                continue
+
+            if not in_code_block:
+                match = re.match(r"^(\s*)(#{4,6})\s+(.+?)\s*$", line)
+                if match:
+                    indent, _hashes, content = match.groups()
+                    normalized_lines.append(f"{indent}**{content}**")
+                    continue
+
+            normalized_lines.append(line)
+
+        return "\n".join(normalized_lines)
+
     def _is_incomplete_markdown(self, text: str) -> bool:
         """
         检测当前文本是否处于未完成的 Markdown 结构中。
@@ -152,7 +184,8 @@ class TUIStreamOutput:
             self.main_log.write(Padding(content, (0, 0, 1, 2)))
 
         if text:
-            self.main_log.write(Markdown(text))
+            normalized_text = self._normalize_markdown_for_terminal(text)
+            self.main_log.write(Markdown(normalized_text))
 
         self.main_log.scroll_end(animate=False)
 
@@ -191,7 +224,6 @@ class TUIStreamOutput:
                     stream_mode="messages",
                     config={"recursion_limit": 300, "configurable": {"thread_id": thread_id}}
             ):
-                # self.main_log.write(message_chunk)
                 try:
                     current_task = asyncio.current_task()
                     if current_task and current_task.cancelled():
@@ -202,10 +234,8 @@ class TUIStreamOutput:
                     pass
 
                 if isinstance(message_chunk, AIMessage):
-                    # FIX: Ensure content is not None to prevent concatenation errors
                     if message_chunk.content is None:
                         message_chunk.content = ""
-                    # 累积 AI 消息内容用于 token 估算
                     if isinstance(message_chunk.content, str):
                         self._accumulated_content += message_chunk.content
                     elif isinstance(message_chunk.content, list):
@@ -218,10 +248,8 @@ class TUIStreamOutput:
                         accumulated_ai_message += message_chunk
 
                 if isinstance(message_chunk, ToolMessage):
-                    # 累积 ToolMessage 内容用于 token 估算
                     if hasattr(message_chunk, 'content') and message_chunk.content:
                         self._accumulated_content += str(message_chunk.content)
-                    # Flush pending text before showing tool result
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
@@ -230,7 +258,6 @@ class TUIStreamOutput:
 
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
                     if not tool_name and self.active_tools:
-                        # Fallback logic to find corresponding tool
                         if len(self.active_tools) == 1:
                             _id, _name = list(self.active_tools.items())[0]
                             tool_name = _name
@@ -278,8 +305,7 @@ class TUIStreamOutput:
                     icon_color = "red" if is_error else "green"
                     if tool_name == "read_file" and content_str:
                         max_len = 4000
-                        snippet = content_str if len(content_str) <= max_len else content_str[
-                                                                                      :max_len] + "\n... (truncated)"
+                        snippet = content_str if len(content_str) <= max_len else content_str[:max_len] + "\n... (truncated)"
                         self.main_log.write(Markdown(f"```\n{snippet}\n```"))
                     error_hint = ""
                     if is_error:
@@ -346,24 +372,17 @@ class TUIStreamOutput:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
                     accumulated_chars += len(chunk_text)
-                    # 累积内容用于 token 估算
                     self._accumulated_content += chunk_text
 
-                # 检查是否需要更新界面
                 now = time.time()
                 time_since_update = now - self.last_update_time
-
-                # 强制更新条件：时间间隔足够长，或累积字符足够多
                 should_update = time_since_update > self.UPDATE_INTERVAL or accumulated_chars > 500
-
-                # 强制 flush 条件：内容太长，且在合适的断开点
                 should_force_flush = (
                         len(current_response_text) > self.MAX_STREAM_LENGTH and
                         not self._is_incomplete_markdown(current_response_text)
                 )
 
                 if should_update and (current_reasoning_content or current_response_text):
-                    # 构建显示内容 - 使用 RichLog 直接写入，避免 Markdown Widget 的全量解析
                     display_lines = []
 
                     if current_reasoning_content:
@@ -373,10 +392,8 @@ class TUIStreamOutput:
                         display_lines.append(Text(""))
 
                     if current_response_text:
-                        # 直接写入文本，让 RichLog 处理渲染
                         display_lines.append(Text(current_response_text))
 
-                    # 清空并重新写入（RichLog 的 clear + write 比 Markdown 的 update 快得多）
                     self.stream_display.clear()
                     for line in display_lines:
                         self.stream_display.write(line)
@@ -384,7 +401,6 @@ class TUIStreamOutput:
                     self.last_update_time = now
                     self._pending_scroll = True
 
-                    # 如果需要强制 flush，将内容移到主日志
                     if should_force_flush:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
@@ -392,10 +408,7 @@ class TUIStreamOutput:
                         accumulated_chars = 0
                         self.stream_display.styles.display = "block"
 
-            # 最终 flush
             self.flush_to_log(current_response_text, current_reasoning_content)
-
-        # State is managed by MemorySaver
 
         except asyncio.CancelledError:
             self.stream_display.styles.display = "none"
@@ -421,9 +434,7 @@ class TUIStreamOutput:
             self.current_display_tool = None
             self.tool_start_time = None
             self.last_update_time = 0
-            # 调用 token 回调函数，传入估算的 token 数
             if self.token_callback:
-                # 估算 token 数：累积字符数 * 0.3
                 content_len = len(self._accumulated_content)
                 estimated_tokens = int(content_len * 0.3)
                 self.token_callback(estimated_tokens)

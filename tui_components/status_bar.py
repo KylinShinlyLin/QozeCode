@@ -35,7 +35,7 @@ class StatusBar(Static):
             token_str = str(count)
 
         # 构建左侧文本
-        shortcuts = "输入 line | Ctrl+Q:语音 | Ctrl+C:终止 | Ctrl+D:提交"
+        shortcuts = "输入 line | Ctrl+Q:语音输入 | Ctrl+C:终止 | Ctrl+D:提交"
         if self.state_desc == "Idle":
             left = f" {shortcuts}"
         else:

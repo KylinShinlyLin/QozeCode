@@ -508,10 +508,14 @@ class Qoze(App):
     def on_mouse_scroll_down(self, event):
         if self.main_log.styles.display != "none":
             self.main_log.scroll_relative(y=1, animate=False)
+            event.stop()
+            event.prevent_default()
 
     def on_mouse_scroll_up(self, event):
         if self.main_log.styles.display != "none":
             self.main_log.scroll_relative(y=-1, animate=False)
+            event.stop()
+            event.prevent_default()
 
     async def action_submit_multiline(self):
         if not self.multiline_mode: return
