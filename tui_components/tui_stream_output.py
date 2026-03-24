@@ -8,7 +8,7 @@ from rich.markdown import Markdown
 from rich.markup import escape
 from rich.padding import Padding
 from rich.text import Text
-from textual.widgets import RichLog, Static, Markdown as MarkdownWidget
+from textual.widgets import RichLog, Static
 from langchain_core.messages import AIMessage, ToolMessage
 
 import qoze_code_agent
@@ -16,9 +16,15 @@ from .tui_constants import SPINNER_FRAMES
 
 
 class TUIStreamOutput:
-    """流式输出适配器"""
+    """流式输出适配器 - 优化版"""
 
-    def __init__(self, main_log: RichLog, stream_display: MarkdownWidget, tool_status: Static):
+    # 性能调优参数
+    UPDATE_INTERVAL = 0.2  # 最小更新间隔（秒）
+    CHAR_FLUSH_THRESHOLD = 300  # 字符数阈值，避免频繁 flush
+    MAX_STREAM_LENGTH = 6000  # stream_display 最大长度，超过则强制 flush
+    INCOMPLETE_CHECK_MIN_LEN = 200  # 只有文本超过此长度才检查 markdown 完整性
+
+    def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static):
         self.main_log = main_log
         self.stream_display = stream_display
         self.tool_status = tool_status
@@ -27,26 +33,25 @@ class TUIStreamOutput:
         self.active_tools = {}
         self.current_display_tool = None
         self.last_update_time = 0
+        self._pending_scroll = False  # 防抖标记
 
-    @staticmethod
-    def _is_incomplete_markdown(text: str) -> bool:
+    def _is_incomplete_markdown(self, text: str) -> bool:
         """
         检测当前文本是否处于未完成的 Markdown 结构中。
-        如果在代码块、引用块、表格等未闭合的结构中，返回 True。
+        优化：只有文本超过一定长度才执行完整检查，减少正则开销。
         """
         if not text:
             return False
 
+        text_len = len(text)
         lines = text.split('\n')
 
-        # 确保 lines 不为空
-        if not lines:
-            return False
-
-        # 1. 检测未闭合的代码块 ``` 或 ~~~
+        # 快速检查：代码块（最常见的情况）
+        # 只检查最后几行，避免遍历整个文本
+        last_20_lines = lines[-20:] if len(lines) > 20 else lines
         in_code_block = False
         code_fence_char = None
-        for line in lines:
+        for line in last_20_lines:
             stripped = line.strip()
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 fence = stripped[:3]
@@ -60,61 +65,33 @@ class TUIStreamOutput:
         if in_code_block:
             return True
 
-        # 2. 检测行内代码 ` 是否成对
-        backtick_count = text.count('`')
-        if backtick_count % 2 != 0:
+        # 短文本直接认为不完整（避免过早 flush 导致格式错乱）
+        if text_len < self.INCOMPLETE_CHECK_MIN_LEN:
             return True
 
-        # 3. 检测未闭合的 HTML 标签
-        text_no_code = re.sub(r'```[\s\S]*?```', '', text)
-        text_no_code = re.sub(r'`[^`]*`', '', text_no_code)
-
-        html_tags = re.findall(r'<(/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*?>', text_no_code)
-        tag_stack = []
-        for is_close, tag in html_tags:
-            if tag in ['br', 'hr', 'img', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source',
-                       'track', 'wbr']:
-                continue
-            if is_close:
-                if tag_stack and tag_stack[-1] == tag:
-                    tag_stack.pop()
-            else:
-                tag_stack.append(tag)
-        if tag_stack:
+        # 检查行内代码是否成对（只检查最后 500 字符）
+        last_chunk = text[-500:] if text_len > 500 else text
+        if last_chunk.count('`') % 2 != 0:
             return True
 
-        # 4. 检测表格是否完整
-        last_lines = [l for l in lines[-5:] if l.strip()] if lines else []
+        # 检查链接或图片语法是否完整（只检查最后 200 字符）
+        tail = text[-200:] if text_len > 200 else text
+        if re.search(r'!?\[[^\]]*\]\([^)]*$', tail):
+            return True
+
+        # 检查最后几行是否有未完成的表格
+        last_lines = [l for l in lines[-5:] if l.strip()]
         if last_lines:
             table_lines = [l for l in last_lines if '|' in l]
             if table_lines:
-                has_separator = any(re.search(r'\|[\s:]*[-]+', l) for l in last_lines)
-                last_line = lines[-1].strip() if lines else ""
+                last_line = lines[-1].strip()
                 if '|' in last_line and not last_line.rstrip().endswith('|'):
                     return True
-                if table_lines and not has_separator:
-                    return True
 
-        # 5. 检测列表是否可能未完成
+        # 检查列表是否可能未完成（只检查最后一行）
         last_line = lines[-1].strip() if lines else ""
         if re.match(r'^[\s]*[-*+][\s]', last_line) or re.match(r'^[\s]*\d+\.[\s]', last_line):
             if len(last_line) < 50:
-                return True
-
-        # 6. 检测数学公式块
-        dollar_matches = re.findall(r"(?<!\\)\$\$", text)
-        if len(dollar_matches) % 2 != 0:
-            return True
-
-        # 7. 检测链接或图片语法是否完整
-        if re.search(r'!?\[[^\]]*\]\([^)]*$', text):
-            return True
-
-        # 8. 检测引用块是否可能未完成
-        quote_lines = [l for l in last_lines if l.strip().startswith('>')] if last_lines else []
-        if quote_lines:
-            last_quote_line = quote_lines[-1] if quote_lines else ""
-            if len(last_quote_line.strip()) < 30:
                 return True
 
         return False
@@ -165,27 +142,20 @@ class TUIStreamOutput:
         self.tool_status.update(Text.from_markup(content))
 
     def flush_to_log(self, text: str, reasoning: str):
+        """将累积的内容刷新到主日志，清空流式显示区"""
         if reasoning:
             reasoning_clean = reasoning.strip()
-            # 改进方案：使用纯文本 Header + 缩进样式，去除 Panel 边框
-            # header = Text("Thinking", style="bold cyan")
-            # self.main_log.write(header)
-
             # 使用灰色斜体，左缩进2个字符
             content = Text(reasoning_clean, style="italic #909090")
             self.main_log.write(Padding(content, (0, 0, 1, 2)))
-
-            # 或者如果更喜欢 Markdown 引用样式（带左侧竖线）：
-            # lines = reasoning_clean.split('\n')
-            # md_text = "> 🧠 **Thinking Process**\n>\n" + "\n".join([f"> *{line}*" for line in lines])
-            # self.main_log.write(Markdown(md_text))
-            # self.main_log.write(Text("")) # Spacer
 
         if text:
             self.main_log.write(Markdown(text))
 
         self.main_log.scroll_end(animate=False)
-        self.stream_display.update("")
+
+        # 清空流式显示区
+        self.stream_display.clear()
         self.stream_display.styles.display = "none"
 
     async def stream_response(self, current_state, conversation_state, thread_id="default_session"):
@@ -195,9 +165,8 @@ class TUIStreamOutput:
         total_reasoning_content = ""
         accumulated_ai_message = None
 
-        # 新增：行计数器，用于定期 flush 避免积累过多内容导致卡顿
-        accumulated_lines = 0
-        LINES_FLUSH_THRESHOLD = 10  # 每累积 30 行就 flush 一次
+        # 使用字符数而非行数作为阈值，更准确
+        accumulated_chars = 0
 
         self.stream_display.styles.display = "block"
         self.last_update_time = 0
@@ -338,7 +307,7 @@ class TUIStreamOutput:
                 if reasoning:
                     current_reasoning_content += reasoning
                     total_reasoning_content += reasoning
-                    accumulated_lines += reasoning.count('\n')
+                    accumulated_chars += len(reasoning)
 
                 content = message_chunk.content
                 chunk_text = ""
@@ -352,48 +321,52 @@ class TUIStreamOutput:
                 if chunk_text:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
-                    accumulated_lines += chunk_text.count('\n')
+                    accumulated_chars += len(chunk_text)
 
-                # 检查是否需要自动 flush（每累积一定行数就刷新到日志，避免卡顿）
-                should_auto_flush = accumulated_lines >= LINES_FLUSH_THRESHOLD and not self._is_incomplete_markdown(
-                    current_response_text)
+                # 检查是否需要更新界面
+                now = time.time()
+                time_since_update = now - self.last_update_time
 
-                if current_reasoning_content or current_response_text:
-                    now = time.time()
-                    if now - self.last_update_time > 0.1 or should_auto_flush:
-                        md_content = ""
-                        if current_reasoning_content:
-                            # 优化流式输出时的思考展示，使用 blockquote 样式
-                            # 由于 Markdown widget 更新是全量的，我们需要构造完整的 markdown
-                            md_content += f"> Thinking Process.....\n>\n"
-                            # 将每一行都加上引用符号，确保样式统一
-                            reasoning_lines = current_reasoning_content.split('\n')
-                            md_content += "\n".join([f"> *{line}*" for line in reasoning_lines])
-                            md_content += "\n\n---\n\n"
+                # 强制更新条件：时间间隔足够长，或累积字符足够多
+                should_update = time_since_update > self.UPDATE_INTERVAL or accumulated_chars > 500
 
-                        if current_response_text:
-                            md_content += current_response_text
+                # 强制 flush 条件：内容太长，且在合适的断开点
+                should_force_flush = (
+                        len(current_response_text) > self.MAX_STREAM_LENGTH and
+                        not self._is_incomplete_markdown(current_response_text)
+                )
 
-                        try:
-                            current_task = asyncio.current_task()
-                            if current_task and current_task.cancelled():
-                                break
-                        except Exception:
-                            pass
+                if should_update and (current_reasoning_content or current_response_text):
+                    # 构建显示内容 - 使用 RichLog 直接写入，避免 Markdown Widget 的全量解析
+                    display_lines = []
 
-                        await self.stream_display.update(md_content)
-                        self.main_log.scroll_end(animate=False)
-                        self.stream_display.scroll_end(animate=False)
-                        self.last_update_time = now
+                    if current_reasoning_content:
+                        display_lines.append(Text("Thinking Process.....", style="italic #565f89"))
+                        for line in current_reasoning_content.split('\n'):
+                            display_lines.append(Text(f"  {line}", style="italic #565f89"))
+                        display_lines.append(Text(""))
 
-                        # 如果达到行数阈值，执行 flush 并重置
-                        if should_auto_flush:
-                            self.flush_to_log(current_response_text, current_reasoning_content)
-                            current_response_text = ""
-                            current_reasoning_content = ""
-                            accumulated_lines = 0
-                            self.stream_display.styles.display = "block"
+                    if current_response_text:
+                        # 直接写入文本，让 RichLog 处理渲染
+                        display_lines.append(Text(current_response_text))
 
+                    # 清空并重新写入（RichLog 的 clear + write 比 Markdown 的 update 快得多）
+                    self.stream_display.clear()
+                    for line in display_lines:
+                        self.stream_display.write(line)
+
+                    self.last_update_time = now
+                    self._pending_scroll = True
+
+                    # 如果需要强制 flush，将内容移到主日志
+                    if should_force_flush:
+                        self.flush_to_log(current_response_text, current_reasoning_content)
+                        current_response_text = ""
+                        current_reasoning_content = ""
+                        accumulated_chars = 0
+                        self.stream_display.styles.display = "block"
+
+            # 最终 flush
             self.flush_to_log(current_response_text, current_reasoning_content)
 
         # State is managed by MemorySaver

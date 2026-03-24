@@ -23,7 +23,7 @@ from rich.align import Align
 from textual.app import App, ComposeResult, on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, RichLog, Label, Markdown as MarkdownWidget, TextArea, OptionList
+from textual.widgets import Input, RichLog, Label, TextArea, OptionList
 from textual.widgets.option_list import Option
 
 # Import Enums
@@ -135,7 +135,7 @@ class Qoze(App):
                 yield RichLog(id="main-output", markup=True, highlight=False, auto_scroll=True, wrap=True)
                 from textual.widgets import Static
                 yield Static(id="tool-status")
-                yield MarkdownWidget(id="stream-output")
+                yield RichLog(id="stream-output", markup=True, highlight=False, auto_scroll=True, wrap=True)
             yield Sidebar(id="sidebar", model_name=self.model_name, provider=self.provider)
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
@@ -151,7 +151,7 @@ class Qoze(App):
         self.main_log = self.query_one("#main-output", RichLog)
         from textual.widgets import Static
         self.tool_status = self.query_one("#tool-status", Static)
-        self.stream_output = self.query_one("#stream-output", MarkdownWidget)
+        self.stream_output = self.query_one("#stream-output", RichLog)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
