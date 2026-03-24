@@ -8,6 +8,8 @@ import uuid
 
 import queue
 
+from tui_components import tui_constants
+
 try:
     from utils.audio_transcriber import AudioTranscriber
 
@@ -28,8 +30,8 @@ from textual.widgets.option_list import Option
 
 # Import Enums
 from enums import ModelProvider, ModelType
-import tui_components  # 加载 Rich Markdown 样式覆盖
-from tui_components import tui_constants
+# import tui_components  # 加载 Rich Markdown 样式覆盖
+# from tui_components import tui_constants
 
 # Configure logging for debugging
 log_file = os.path.join(os.path.dirname(__file__), '.qoze', 'debug.log')
@@ -127,6 +129,7 @@ class Qoze(App):
         self.audio_mode = False
         self.audio_original_text = ""
         self.audio_check_timer = None
+        self.total_tokens = 0  # 累计 token 数
 
     def compose(self) -> ComposeResult:
         yield TopBar()
@@ -159,13 +162,55 @@ class Qoze(App):
 
         self.main_log.can_focus = False
         self.main_log.auto_scroll = True
-        self.tui_stream = TUIStreamOutput(self.main_log, self.stream_output, self.tool_status)
+        # 传入 token 回调函数（累加本次对话的 token 数）
+        self.tui_stream = TUIStreamOutput(
+            self.main_log, 
+            self.stream_output, 
+            self.tool_status,
+            token_callback=self.add_tokens
+        )
 
         self.print_welcome()
         if AUDIO_TRANSCRIBER_IMPORT_ERROR:
             self.main_log.write(
                 Text(f"AudioTranscriber import failed: {AUDIO_TRANSCRIBER_IMPORT_ERROR}", style="bold red"))
         self.run_worker(self.init_agent_worker(), exclusive=True)
+
+    def add_tokens(self, new_tokens: int):
+        """累加本次对话新增的 token 数"""
+        self.total_tokens += new_tokens
+        self.status_bar.update_token_count(self.total_tokens)
+
+    def update_token_count(self):
+        """更新状态栏中的 token 数量（从 agent state 重新计算）"""
+        try:
+            # 尝试从 agent 的 checkpointer 获取当前状态
+            config = {"configurable": {"thread_id": self.thread_id}}
+            state = qoze_code_agent.agent.get_state(config)
+            
+            messages = None
+            if state:
+                # StateSnapshot 对象可能有不同的属性
+                if hasattr(state, 'values') and state.values:
+                    messages = state.values.get('messages')
+                elif isinstance(state, dict):
+                    messages = state.get('values', {}).get('messages')
+                elif hasattr(state, 'messages'):
+                    messages = state.messages
+            
+            if messages:
+                token_count = qoze_code_agent.estimate_token_count(messages)
+                self.total_tokens = token_count  # 同步累计值
+                self.status_bar.update_token_count(token_count)
+            else:
+                # 如果没有消息，显示 0
+                self.total_tokens = 0
+                self.status_bar.update_token_count(0)
+        except Exception as e:
+            # 调试时取消注释查看错误
+            import logging
+            logging.error(f"Token count update failed: {e}")
+            pass
 
     def print_welcome(self):
 
@@ -180,6 +225,7 @@ class Qoze(App):
             Text("  • 按 'Ctrl+Q' 开始语音输入, 'Esc' 或 'Ctrl+E' 停止", style="dim bold white"),
             Text(""),
         )
+        # self.main_log.write(Align.center(Text(tui_constants.QOZE_CODE_ART, style="bold cyan")))
         self.main_log.write(Align.center(Text(tui_constants.QOZE_CODE_ART, style="bold cyan")))
         self.main_log.write(Text(""))
         self.main_log.write(Align.center(Panel(
@@ -336,6 +382,8 @@ class Qoze(App):
             qoze_code_agent.reset_conversation_state()
             self.main_log.clear()
             self.thread_id = str(uuid.uuid4())
+            self.total_tokens = 0  # 重置累计 token 数
+            self.status_bar.update_token_count(0)
             self.print_welcome()
             return
 
@@ -374,6 +422,7 @@ class Qoze(App):
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
+            # token 数量已由 stream_response 的回调更新
 
     @on(Input.Submitted)
     def handle_input(self, event: Input.Submitted):

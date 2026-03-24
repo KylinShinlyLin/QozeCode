@@ -24,7 +24,7 @@ class TUIStreamOutput:
     MAX_STREAM_LENGTH = 6000  # stream_display 最大长度，超过则强制 flush
     INCOMPLETE_CHECK_MIN_LEN = 200  # 只有文本超过此长度才检查 markdown 完整性
 
-    def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static):
+    def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static, token_callback=None):
         self.main_log = main_log
         self.stream_display = stream_display
         self.tool_status = tool_status
@@ -34,6 +34,8 @@ class TUIStreamOutput:
         self.current_display_tool = None
         self.last_update_time = 0
         self._pending_scroll = False  # 防抖标记
+        self._accumulated_content = ""  # 累积的内容用于 token 估算
+        self.token_callback = token_callback  # 保存 token 回调函数
 
     def _is_incomplete_markdown(self, text: str) -> bool:
         """
@@ -168,6 +170,18 @@ class TUIStreamOutput:
         # 使用字符数而非行数作为阈值，更准确
         accumulated_chars = 0
 
+        # 重置累积内容，并添加当前状态中的用户消息
+        self._accumulated_content = ""
+        if current_state and "messages" in current_state:
+            for msg in current_state["messages"]:
+                if hasattr(msg, 'content'):
+                    if isinstance(msg.content, str):
+                        self._accumulated_content += msg.content
+                    elif isinstance(msg.content, list):
+                        for item in msg.content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                self._accumulated_content += item.get("text", "")
+
         self.stream_display.styles.display = "block"
         self.last_update_time = 0
 
@@ -191,12 +205,22 @@ class TUIStreamOutput:
                     # FIX: Ensure content is not None to prevent concatenation errors
                     if message_chunk.content is None:
                         message_chunk.content = ""
+                    # 累积 AI 消息内容用于 token 估算
+                    if isinstance(message_chunk.content, str):
+                        self._accumulated_content += message_chunk.content
+                    elif isinstance(message_chunk.content, list):
+                        for item in message_chunk.content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                self._accumulated_content += item.get("text", "")
                     if accumulated_ai_message is None:
                         accumulated_ai_message = message_chunk
                     else:
                         accumulated_ai_message += message_chunk
 
                 if isinstance(message_chunk, ToolMessage):
+                    # 累积 ToolMessage 内容用于 token 估算
+                    if hasattr(message_chunk, 'content') and message_chunk.content:
+                        self._accumulated_content += str(message_chunk.content)
                     # Flush pending text before showing tool result
                     if current_response_text or current_reasoning_content:
                         self.flush_to_log(current_response_text, current_reasoning_content)
@@ -322,6 +346,8 @@ class TUIStreamOutput:
                     current_response_text += chunk_text
                     total_response_text += chunk_text
                     accumulated_chars += len(chunk_text)
+                    # 累积内容用于 token 估算
+                    self._accumulated_content += chunk_text
 
                 # 检查是否需要更新界面
                 now = time.time()
@@ -395,3 +421,9 @@ class TUIStreamOutput:
             self.current_display_tool = None
             self.tool_start_time = None
             self.last_update_time = 0
+            # 调用 token 回调函数，传入估算的 token 数
+            if self.token_callback:
+                # 估算 token 数：累积字符数 * 0.3
+                content_len = len(self._accumulated_content)
+                estimated_tokens = int(content_len * 0.3)
+                self.token_callback(estimated_tokens)

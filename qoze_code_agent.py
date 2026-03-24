@@ -365,6 +365,72 @@ def reset_conversation_state():
     conversation_state["sent_images"] = {}
 
 
+def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
+    """
+    估算消息的 token 数量
+    优先使用 tiktoken 进行精确计算，如果失败则使用字符估算
+    """
+    total_tokens = 0
+
+    # 尝试使用 tiktoken 进行精确计算
+    try:
+        import tiktoken
+
+        # 尝试获取对应模型的编码器
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+        except (KeyError, Exception):
+            # 如果模型未识别或出错，使用 cl100k_base（适用于 GPT-4, GPT-3.5 等）
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")
+            except Exception:
+                # tiktoken 初始化失败（如网络问题），回退到字符估算
+                raise ImportError("tiktoken initialization failed")
+
+        for msg in messages:
+            if hasattr(msg, 'content'):
+                content = msg.content
+
+                # 计算消息内容的 token
+                if isinstance(content, str):
+                    tokens = encoding.encode(content)
+                    total_tokens += len(tokens)
+                elif isinstance(content, list):
+                    # 多模态消息，计算文本部分
+                    for item in content:
+                        if isinstance(item, dict) and item.get('type') == 'text':
+                            text = item.get('text', '')
+                            tokens = encoding.encode(text)
+                            total_tokens += len(tokens)
+
+                # 每条消息有固定的开销（角色标记等）
+                total_tokens += 4
+
+        # 每次回复有固定的开销
+        total_tokens += 3
+
+        return total_tokens
+
+    except (ImportError, Exception):
+        # tiktoken 不可用或初始化失败，使用字符估算作为 fallback
+        pass
+
+    # Fallback：使用字符数估算
+    total_chars = 0
+    for msg in messages:
+        if hasattr(msg, 'content'):
+            content = msg.content
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get('type') == 'text':
+                        total_chars += len(item.get('text', ''))
+
+    # 粗略估算：平均每个字符约 0.3 token
+    return int(total_chars * 0.3)
+
+
 def create_message_with_images(text_content: str, image_folder: str = ".qoze/image") -> HumanMessage:
     """创建包含文本和图片的消息"""
     # 基础消息内容

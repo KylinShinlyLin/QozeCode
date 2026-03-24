@@ -42,7 +42,8 @@ dependencies = [
     "python-socks[asyncio]",
     "html2text",
     "pyaudio",
-    "lark-oapi"
+    "lark-oapi",
+    "tiktoken"
 ]
 
 [project.scripts]

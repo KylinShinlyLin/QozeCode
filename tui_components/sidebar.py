@@ -68,7 +68,7 @@ class Sidebar(Static):
         text.append(f"模型厂商: ", style="dim white")
         text.append(f"{self.provider.value}\n", style="bold cyan")
         text.append(f"当前目录: ", style="dim white")
-        text.append(f"{os.getcwd()}\n\n", style="bold cyan")
+        text.append(f"\n{os.getcwd()}\n\n", style="bold cyan")
 
         # 实时检测图片数量
         image_folder = ".qoze/image"

@@ -50,7 +50,7 @@ CSS = """
         padding: 0 1;
     }
 
-    #sidebar { width: 22%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
+    #sidebar { width: 18%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
     #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
@@ -88,6 +88,7 @@ CSS = """
     MarkdownH6 { color: #ff9e64; text-style: bold; }
     MarkdownCode { color: #ff9e64; background: #24283b; }
     Markdown > BlockQuote { color: #565f89; border-left: solid #565f89; }
+    MarkdownHorizontalRule { color: #414868; }
     /* ----------------------- */
         """
 
