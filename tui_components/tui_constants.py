@@ -87,7 +87,7 @@ CSS = """
     MarkdownH4 { color: #c0caf5; text-style: bold; }
     MarkdownH5 { color: #c0caf5; text-style: bold; }
     MarkdownH6 { color: #a9b1d6; text-style: bold; }
-    MarkdownCode { color: #ffd580; background: #2f3549; }
+    MarkdownCode { color: #7dcfff; background: #3a3a3a; }
     Markdown > BlockQuote { color: #565f89; border-left: solid #565f89; }
     MarkdownHorizontalRule { color: #414868; }
     /* ----------------------- */

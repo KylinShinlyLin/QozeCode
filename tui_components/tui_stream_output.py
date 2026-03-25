@@ -19,10 +19,10 @@ class TUIStreamOutput:
     """流式输出适配器 - 优化版"""
 
     # 性能调优参数
-    UPDATE_INTERVAL = 0.2  # 最小更新间隔（秒）
+    UPDATE_INTERVAL = 0.15  # 最小更新间隔（秒）
     CHAR_FLUSH_THRESHOLD = 300  # 字符数阈值，避免频繁 flush
-    MAX_STREAM_LENGTH = 6000  # stream_display 最大长度，超过则强制 flush
-    INCOMPLETE_CHECK_MIN_LEN = 200  # 只有文本超过此长度才检查 markdown 完整性
+    MAX_STREAM_LENGTH = 2000  # stream_display 最大长度，超过则强制 flush
+    INCOMPLETE_CHECK_MIN_LEN = 100  # 只有文本超过此长度才检查 markdown 完整性
 
     def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static, token_callback=None):
         self.main_log = main_log
@@ -174,6 +174,50 @@ class TUIStreamOutput:
         m, s = divmod(int(elapsed), 60)
         content = f"[dim bold cyan] {frame} {escape(self.current_display_tool)} {m:02d}:{s:02d}[/]"
         self.tool_status.update(Text.from_markup(content))
+
+    def _has_natural_break_point(self, text: str) -> bool:
+        """
+        检查文本是否包含自然的断点，适合在此处 flush。
+        自然断点包括：代码块结束、段落结束（空行）、表格结束、标题行等。
+        """
+        if not text:
+            return False
+
+        lines = text.split('\n')
+        if len(lines) < 2:
+            return False
+
+        # 检查最后几行是否有自然断点
+        last_lines = lines[-5:] if len(lines) > 5 else lines
+
+        # 1. 代码块结束（以 ``` 或 ~~~ 开头的行）
+        for line in reversed(last_lines):
+            stripped = line.strip()
+            if stripped.startswith('```') or stripped.startswith('~~~'):
+                # 确保这是结束标记（前面有内容说明代码块已结束）
+                return True
+
+        # 2. 空行（段落结束）
+        if len(lines) >= 2 and lines[-1].strip() == '' and lines[-2].strip() != '':
+            return True
+
+        # 3. 表格结束（当前行以 | 结尾，且前面有表格行）
+        if len(lines) >= 2:
+            last_line = lines[-1].strip()
+            prev_line = lines[-2].strip()
+            if '|' in last_line and last_line.rstrip().endswith('|'):
+                # 检查是否是表格的结束行（前面有 | 行）
+                if '|' in prev_line:
+                    return True
+
+        # 4. 标题行（以 # 开头）后面有内容
+        if len(lines) >= 2:
+            last_line = lines[-1].strip()
+            prev_line = lines[-2].strip()
+            if re.match(r'^#{1,6}\s+', prev_line) and last_line:
+                return True
+
+        return False
 
     def flush_to_log(self, text: str, reasoning: str):
         """将累积的内容刷新到主日志，清空流式显示区"""
@@ -377,9 +421,24 @@ class TUIStreamOutput:
                 now = time.time()
                 time_since_update = now - self.last_update_time
                 should_update = time_since_update > self.UPDATE_INTERVAL or accumulated_chars > 500
+
+                # Flush 策略：
+                # 1. 内容过长时，寻找自然断点 flush
+                # 2. 内容超长时强制 flush（即使 markdown 不完整）
+                text_len = len(current_response_text)
+                has_natural_break = self._has_natural_break_point(current_response_text)
+                is_incomplete = self._is_incomplete_markdown(current_response_text)
+
+                # 自然断点 + 内容足够长 -> 优雅 flush
+                should_flush_at_break = (
+                    text_len > self.CHAR_FLUSH_THRESHOLD and
+                    has_natural_break and
+                    not is_incomplete
+                )
+                # 内容超长 -> 强制 flush
                 should_force_flush = (
-                        len(current_response_text) > self.MAX_STREAM_LENGTH and
-                        not self._is_incomplete_markdown(current_response_text)
+                    text_len > self.MAX_STREAM_LENGTH and
+                    not is_incomplete
                 )
 
                 if should_update and (current_reasoning_content or current_response_text):
@@ -401,7 +460,15 @@ class TUIStreamOutput:
                     self.last_update_time = now
                     self._pending_scroll = True
 
-                    if should_force_flush:
+                    # 优先处理自然断点 flush（更频繁但优雅）
+                    if should_flush_at_break:
+                        self.flush_to_log(current_response_text, current_reasoning_content)
+                        current_response_text = ""
+                        current_reasoning_content = ""
+                        accumulated_chars = 0
+                        self.stream_display.styles.display = "block"
+                    # 强制 flush（超长内容）
+                    elif should_force_flush:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
