@@ -80,12 +80,11 @@ class TUIStreamOutput:
         text_len = len(text)
         lines = text.split('\n')
 
-        # 快速检查：代码块（最常见的情况）
-        # 只检查最后几行，避免遍历整个文本
-        last_20_lines = lines[-20:] if len(lines) > 20 else lines
+        # 检查代码块状态 - 必须完整扫描所有行
+        # 如果只检查最后20行，长代码块（>20行）会被误判为已结束
         in_code_block = False
         code_fence_char = None
-        for line in last_20_lines:
+        for line in lines:
             stripped = line.strip()
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 fence = stripped[:3]
@@ -190,12 +189,25 @@ class TUIStreamOutput:
         # 检查最后几行是否有自然断点
         last_lines = lines[-5:] if len(lines) > 5 else lines
 
-        # 1. 代码块结束（以 ``` 或 ~~~ 开头的行）
-        for line in reversed(last_lines):
+        # 1. 代码块结束 - 需要跟踪状态确保是真正的结束
+        in_code_block = False
+        code_fence_char = None
+        for line in lines:  # 完整扫描跟踪状态
             stripped = line.strip()
             if stripped.startswith('```') or stripped.startswith('~~~'):
-                # 确保这是结束标记（前面有内容说明代码块已结束）
-                return True
+                fence = stripped[:3]
+                if not in_code_block:
+                    in_code_block = True
+                    code_fence_char = fence
+                elif fence == code_fence_char:
+                    in_code_block = False
+                    code_fence_char = None
+        # 如果不在代码块中且最后几行有 ```，说明代码块刚结束
+        if not in_code_block:
+            for line in reversed(last_lines):
+                stripped = line.strip()
+                if stripped.startswith('```') or stripped.startswith('~~~'):
+                    return True
 
         # 2. 空行（段落结束）
         if len(lines) >= 2 and lines[-1].strip() == '' and lines[-2].strip() != '':
