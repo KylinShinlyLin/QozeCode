@@ -7,6 +7,7 @@ import sys
 import uuid
 
 import queue
+import time
 
 from tui_components import tui_constants
 
@@ -30,6 +31,7 @@ from textual.widgets.option_list import Option
 
 # Import Enums
 from enums import ModelProvider, ModelType
+
 # import tui_components  # 加载 Rich Markdown 样式覆盖
 # from tui_components import tui_constants
 
@@ -131,6 +133,11 @@ class Qoze(App):
         self.audio_check_timer = None
         self.total_tokens = 0  # 累计 token 数
 
+        # 滚动节流 - 防止触摸板惯性滚动导致乱飘
+        self._last_scroll_time = 0
+        self._scroll_throttle_ms = 50  # 最小滚动间隔（毫秒），改为50ms滚动更流畅
+        self._scroll_accumulator = 0  # 滚动累积器
+
     def compose(self) -> ComposeResult:
         yield TopBar()
         with Horizontal(id="main-container"):
@@ -164,8 +171,8 @@ class Qoze(App):
         self.main_log.auto_scroll = True
         # 传入 token 回调函数（累加本次对话的 token 数）
         self.tui_stream = TUIStreamOutput(
-            self.main_log, 
-            self.stream_output, 
+            self.main_log,
+            self.stream_output,
             self.tool_status,
             token_callback=self.add_tokens
         )
@@ -187,7 +194,7 @@ class Qoze(App):
             # 尝试从 agent 的 checkpointer 获取当前状态
             config = {"configurable": {"thread_id": self.thread_id}}
             state = qoze_code_agent.agent.get_state(config)
-            
+
             messages = None
             if state:
                 # StateSnapshot 对象可能有不同的属性
@@ -197,7 +204,7 @@ class Qoze(App):
                     messages = state.get('values', {}).get('messages')
                 elif hasattr(state, 'messages'):
                     messages = state.messages
-            
+
             if messages:
                 token_count = qoze_code_agent.estimate_token_count(messages)
                 self.total_tokens = token_count  # 同步累计值
@@ -507,15 +514,57 @@ class Qoze(App):
                 suggestions.styles.display = "none"
                 event.stop()
 
+    def _should_process_scroll(self) -> bool:
+        """检查是否应该处理滚动事件（节流控制）"""
+        current_time = int(time.time() * 1000)
+        elapsed = current_time - self._last_scroll_time
+        if elapsed >= self._scroll_throttle_ms:
+            self._last_scroll_time = current_time
+            return True
+        return False
+
+    def _get_scroll_lines(self, direction: int) -> int:
+        """
+        获取应该滚动的行数。
+        使用累积器来平滑处理触摸板的高频滚动事件。
+        """
+        # 累积滚动值
+        self._scroll_accumulator += direction
+
+        # 当累积值达到阈值时才执行滚动
+        if abs(self._scroll_accumulator) >= 1:
+            lines = self._scroll_accumulator
+            self._scroll_accumulator = 0
+            return lines
+        return 0
+
     def on_mouse_scroll_down(self, event):
         if self.main_log.styles.display != "none":
-            self.main_log.scroll_relative(y=1, animate=False)
+            # 节流检查
+            if not self._should_process_scroll():
+                event.stop()
+                event.prevent_default()
+                return
+
+            # 获取累积后的滚动行数
+            lines = self._get_scroll_lines(5)  # 每次滚动5行，更快速
+            if lines != 0:
+                self.main_log.scroll_relative(y=lines, animate=False)
             event.stop()
             event.prevent_default()
 
     def on_mouse_scroll_up(self, event):
         if self.main_log.styles.display != "none":
-            self.main_log.scroll_relative(y=-1, animate=False)
+            # 节流检查
+            if not self._should_process_scroll():
+                event.stop()
+                event.prevent_default()
+                return
+
+            # 获取累积后的滚动行数
+            lines = self._get_scroll_lines(-5)  # 每次滚动-5行，更快速
+            if lines != 0:
+                self.main_log.scroll_relative(y=lines, animate=False)
             event.stop()
             event.prevent_default()
 
