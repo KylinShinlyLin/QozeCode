@@ -165,7 +165,6 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
 如需重新安装，请先使用 deactivate_skill 停用后手动删除，然后重新获取安装指引。"""
 
         install_dir = f"~/.qoze/skills/{skill_name}"
-        absolute_path = (Path.home() / ".qoze" / "skills" / skill_name).resolve()
 
         # 构建安装指引
         guide_lines = [
@@ -177,7 +176,6 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             "",
             f"步骤 1: 创建技能目录",
             f"  目标路径: {install_dir}",
-            f"  绝对路径: {absolute_path}",
             f"  命令: mkdir -p {install_dir}",
             "",
             f"步骤 2: 创建 SKILL.md 主文件",
@@ -226,9 +224,7 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             "  - ./scripts/xxx.py",
             "",
             "✅ 推荐使用以下方式之一：",
-            f"  1. 绝对路径: {absolute_path}/scripts/xxx.py",
-            f"  2. 用户目录: ~/.qoze/skills/{skill_name}/scripts/xxx.py",
-            "  3. 让 agent 根据当前环境动态计算路径",
+            f"  1. 用户目录: ~/.qoze/skills/{skill_name}/scripts/xxx.py",
             "",
             "如果技能内容中包含对其他技能的引用，例如：",
             f"  python .qoze/skills/other-skill/scripts/tool.py",
