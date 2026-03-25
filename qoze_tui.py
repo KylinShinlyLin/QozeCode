@@ -354,6 +354,8 @@ class Qoze(App):
             self.input_box.disabled = False
             self.input_box.placeholder = "Type message..."
             self.input_box.focus()
+            # 初始化状态栏 token 显示
+            self.status_bar.update_token_count(0)
         except Exception as e:
             logging.exception("Initialization Failed")
             self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))

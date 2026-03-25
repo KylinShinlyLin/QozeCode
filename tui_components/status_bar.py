@@ -28,7 +28,7 @@ class StatusBar(Static):
             count = int(self.token_count) if self.token_count is not None else 0
         except (ValueError, TypeError):
             count = 0
-        
+
         if count >= 1000:
             token_str = f"{count / 1000:.1f}k"
         else:
@@ -40,24 +40,14 @@ class StatusBar(Static):
             left = f" {shortcuts}"
         else:
             left = f" {self.state_desc} | {shortcuts}"
-        
+
         # 右侧 token 计数 - 使用固定的标签
         right = f"Context: {token_str} tokens"
-        
-        # 获取终端宽度
-        try:
-            width = self.size.width if self.size else 120
-        except:
-            width = 120
-        
-        # 计算填充空格
-        total_len = len(left) + len(right) + 1
-        padding = width - total_len
-        if padding < 1:
-            padding = 1
-        
+
+        padding = 5
+
         # 组合完整行
         full_line = f"{left}{' ' * padding}{right}"
-        
+
         # 返回 Text 对象，使用 dim 样式
         return Text(full_line, style="dim")
