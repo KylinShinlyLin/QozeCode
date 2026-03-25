@@ -41,7 +41,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, read_url
 from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, \
     browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs
-from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill
+from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
@@ -162,6 +162,7 @@ base_tools = [
     activate_skill,
     list_available_skills,
     deactivate_skill,
+    get_skill_install_guide,
     read_file,
     # list_files,
     # search_in_files,
