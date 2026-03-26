@@ -112,14 +112,22 @@ class TUIStreamOutput:
         if re.search(r'!?\[[^\]]*\]\([^)]*$', tail):
             return True
 
-        # 检查最后几行是否有未完成的表格
-        last_lines = [l for l in lines[-5:] if l.strip()]
-        if last_lines:
-            table_lines = [l for l in last_lines if '|' in l]
-            if table_lines:
-                last_line = lines[-1].strip()
-                if '|' in last_line and not last_line.rstrip().endswith('|'):
-                    return True
+        # 检查表格是否完整 - 表格需要以空行结束才算完整
+        # 扫描最后几行，如果在表格行(|开头或包含|)之后没有空行，则认为表格未完成
+        last_nonempty_lines = []
+        for line in reversed(lines):
+            if line.strip():
+                last_nonempty_lines.insert(0, line.strip())
+            else:
+                break  # 遇到空行停止
+        
+        # 检查是否有表格行
+        table_lines = [l for l in last_nonempty_lines if '|' in l]
+        if table_lines:
+            # 如果最后非空行包含 |，说明表格可能还未结束（需要空行才算结束）
+            last_nonempty = last_nonempty_lines[-1] if last_nonempty_lines else ""
+            if '|' in last_nonempty:
+                return True
 
         # 检查列表是否可能未完成（只检查最后一行）
         last_line = lines[-1].strip() if lines else ""
@@ -213,14 +221,14 @@ class TUIStreamOutput:
         if len(lines) >= 2 and lines[-1].strip() == '' and lines[-2].strip() != '':
             return True
 
-        # 3. 表格结束（当前行以 | 结尾，且前面有表格行）
+        # 3. 表格结束（表格行后面跟着空行）
+        # Markdown 表格需要空行来明确结束，否则 flush 时可能截断
         if len(lines) >= 2:
             last_line = lines[-1].strip()
             prev_line = lines[-2].strip()
-            if '|' in last_line and last_line.rstrip().endswith('|'):
-                # 检查是否是表格的结束行（前面有 | 行）
-                if '|' in prev_line:
-                    return True
+            # 当前行是空行，且前一行是表格行
+            if not last_line and '|' in prev_line:
+                return True
 
         # 4. 标题行（以 # 开头）后面有内容
         if len(lines) >= 2:
