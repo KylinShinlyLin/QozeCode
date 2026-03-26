@@ -402,7 +402,7 @@ class Qoze(App):
             self.main_log.write(message if success else Text(f"❌ {message}", style="red"))
             return
 
-        if user_input.lower() in ["qoze init", "init"]:
+        if user_input.lower() in ["init"]:
             user_input = init_prompt
 
         self.request_indicator.start_request()

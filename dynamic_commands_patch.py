@@ -22,7 +22,7 @@ class DynamicCommandsGenerator:
             ("/audio", "进入语音输入模式"),
             ("/clear", "清理会话上下文"),
             ("/line", "进入多行编辑模式"),
-            ("/qoze init", "初始化项目指引"),
+            ("/init", "初始化项目指引"),
             ("/skills", "显示技能系统帮助"),
             ("/skills list", "列出所有可用技能"),
             ("/skills status", "显示技能系统状态"),
