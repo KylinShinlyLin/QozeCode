@@ -132,6 +132,7 @@ class Qoze(App):
         self.audio_original_text = ""
         self.audio_check_timer = None
         self.total_tokens = 0  # 累计 token 数
+        self._processing_suggestion = False  # 标记是否正在处理 suggestion 选择
 
         # 滚动节流 - 防止触摸板惯性滚动导致乱飘
         self._last_scroll_time = 0
@@ -437,6 +438,11 @@ class Qoze(App):
     def handle_input(self, event: Input.Submitted):
         if not self.agent_ready: return
 
+        # 如果正在处理 suggestion 选择，跳过处理并重置标志
+        if self._processing_suggestion:
+            self._processing_suggestion = False
+            return
+
         if self.audio_mode:
             self.stop_audio()
             user_input = event.value
@@ -500,6 +506,7 @@ class Qoze(App):
                 event.stop()
             elif event.key == "enter":
                 if suggestions.highlighted is not None:
+                    self._processing_suggestion = True  # 设置标志
                     opt = suggestions.get_option_at_index(suggestions.highlighted)
                     cmd = str(opt.id)
                     suggestions.styles.display = "none"
