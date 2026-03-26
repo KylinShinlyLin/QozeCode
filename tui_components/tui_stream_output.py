@@ -113,7 +113,7 @@ class TUIStreamOutput:
             return True
 
         # 检查表格是否完整 - 表格需要以空行结束才算完整
-        # 扫描最后几行，如果在表格行(|开头或包含|)之后没有空行，则认为表格未完成
+        # Markdown 表格行的特征：至少包含两个 |（单元格分隔符）
         last_nonempty_lines = []
         for line in reversed(lines):
             if line.strip():
@@ -122,11 +122,11 @@ class TUIStreamOutput:
                 break  # 遇到空行停止
         
         # 检查是否有表格行
-        table_lines = [l for l in last_nonempty_lines if '|' in l]
+        table_lines = [l for l in last_nonempty_lines if l.count("|") >= 2]
         if table_lines:
             # 如果最后非空行包含 |，说明表格可能还未结束（需要空行才算结束）
             last_nonempty = last_nonempty_lines[-1] if last_nonempty_lines else ""
-            if '|' in last_nonempty:
+            if last_nonempty.count("|") >= 2:
                 return True
 
         # 检查列表是否可能未完成（只检查最后一行）
@@ -227,7 +227,7 @@ class TUIStreamOutput:
             last_line = lines[-1].strip()
             prev_line = lines[-2].strip()
             # 当前行是空行，且前一行是表格行
-            if not last_line and '|' in prev_line:
+            if not last_line and prev_line.count("|") >= 2:
                 return True
 
         # 4. 标题行（以 # 开头）后面有内容

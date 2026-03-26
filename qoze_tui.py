@@ -438,6 +438,11 @@ class Qoze(App):
     def handle_input(self, event: Input.Submitted):
         if not self.agent_ready: return
 
+        # 如果建议列表可见，说明用户正在通过键盘选择建议，跳过处理
+        suggestions = self.query_one("#command-suggestions", OptionList)
+        if suggestions.styles.display != "none":
+            return
+
         # 如果正在处理 suggestion 选择，跳过处理并重置标志
         if self._processing_suggestion:
             self._processing_suggestion = False
