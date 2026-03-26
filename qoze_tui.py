@@ -402,18 +402,25 @@ class Qoze(App):
             self.main_log.write(message if success else Text(f"❌ {message}", style="red"))
             return
 
-        if user_input.lower() in ["init"]:
-            user_input = init_prompt
+        # 检查是否是 init 命令
+        is_init_command = user_input.lower() in ["init"]
+        display_input = user_input  # 用于显示的用户输入
+        actual_input = init_prompt if is_init_command else user_input  # 实际发送给 LLM 的输入
 
         self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")
         self.main_log.focus()
 
         try:
-            self.main_log.write(Text(f"\n❯ {user_input}", style="bold #bb9af7"))
+            # 如果是 init 命令，只显示简短提示，不显示完整 prompt 内容
+            if is_init_command:
+                self.main_log.write(Text("\n❯ /init", style="bold #bb9af7"))
+                self.main_log.write(Text("🚀 正在初始化项目指引...", style="dim cyan"))
+            else:
+                self.main_log.write(Text(f"\n❯ {display_input}", style="bold #bb9af7"))
 
             image_folder = ".qoze/image"
-            human_msg = qoze_code_agent.create_message_with_images(user_input, image_folder)
+            human_msg = qoze_code_agent.create_message_with_images(actual_input, image_folder)
 
             current_state = {
                 "messages": [human_msg]

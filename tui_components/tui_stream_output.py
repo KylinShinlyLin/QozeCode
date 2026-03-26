@@ -19,10 +19,10 @@ class TUIStreamOutput:
     """流式输出适配器 - 优化版"""
 
     # 性能调优参数
-    UPDATE_INTERVAL = 0.15  # 最小更新间隔（秒）
-    CHAR_FLUSH_THRESHOLD = 300  # 字符数阈值，避免频繁 flush
-    MAX_STREAM_LENGTH = 2000  # stream_display 最大长度，超过则强制 flush
-    INCOMPLETE_CHECK_MIN_LEN = 100  # 只有文本超过此长度才检查 markdown 完整性
+    UPDATE_INTERVAL = 0.1  # 最小更新间隔（秒）
+    CHAR_FLUSH_THRESHOLD = 200  # 字符数阈值，避免频繁 flush
+    MAX_STREAM_LENGTH = 600  # stream_display 最大长度，超过则强制 flush
+    INCOMPLETE_CHECK_MIN_LEN = 50  # 只有文本超过此长度才检查 markdown 完整性
 
     def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static, token_callback=None):
         self.main_log = main_log
@@ -120,7 +120,7 @@ class TUIStreamOutput:
                 last_nonempty_lines.insert(0, line.strip())
             else:
                 break  # 遇到空行停止
-        
+
         # 检查是否有表格行
         table_lines = [l for l in last_nonempty_lines if l.count("|") >= 2]
         if table_lines:
@@ -369,7 +369,8 @@ class TUIStreamOutput:
                     icon_color = "red" if is_error else "green"
                     if tool_name == "read_file" and content_str:
                         max_len = 4000
-                        snippet = content_str if len(content_str) <= max_len else content_str[:max_len] + "\n... (truncated)"
+                        snippet = content_str if len(content_str) <= max_len else content_str[
+                                                                                      :max_len] + "\n... (truncated)"
                         self.main_log.write(Markdown(f"```\n{snippet}\n```"))
                     error_hint = ""
                     if is_error:
@@ -451,14 +452,14 @@ class TUIStreamOutput:
 
                 # 自然断点 + 内容足够长 -> 优雅 flush
                 should_flush_at_break = (
-                    text_len > self.CHAR_FLUSH_THRESHOLD and
-                    has_natural_break and
-                    not is_incomplete
+                        text_len > self.CHAR_FLUSH_THRESHOLD and
+                        has_natural_break and
+                        not is_incomplete
                 )
                 # 内容超长 -> 强制 flush
                 should_force_flush = (
-                    text_len > self.MAX_STREAM_LENGTH and
-                    not is_incomplete
+                        text_len > self.MAX_STREAM_LENGTH and
+                        not is_incomplete
                 )
 
                 if should_update and (current_reasoning_content or current_response_text):
