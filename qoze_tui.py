@@ -119,8 +119,18 @@ class Qoze(App):
     def __init__(self, provider, model_type):
         super().__init__()
         self.model_type = model_type
-        self.model_name = model_type.value
         self.provider = provider
+        
+        # 对于 Ollama，读取配置文件获取实际模型名称
+        if provider == ModelProvider.OLLAMA:
+            try:
+                from launcher import get_ollama_status
+                ollama_model = get_ollama_status()
+                self.model_name = ollama_model if ollama_model != "未配置" else model_type.value
+            except Exception:
+                self.model_name = model_type.value
+        else:
+            self.model_name = model_type.value
         self.agent_ready = False
         self.multiline_mode = False
         self.thread_id = "default_session"

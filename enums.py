@@ -12,6 +12,7 @@ class ModelProvider(Enum):
     DEEPSEEK = "DeepSeek"
     OPENAI = "OpenAI"
     ZHIPU = "ZHIPU"
+    OLLAMA = "Ollama"
 
 
 class ModelType(Enum):
@@ -35,6 +36,7 @@ class ModelType(Enum):
     DEEPSEEK_CHAT = "deepseek-chat"
     GLM_4_6 = "glm-4.6"
     GLM_5 = "glm-5"
+    OLLAMA = "ollama"
 
 
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）
@@ -56,4 +58,5 @@ MODEL_PROVIDER_MAP = {
     ModelType.DEEPSEEK_REASONER: ModelProvider.DEEPSEEK,
     ModelType.DEEPSEEK_CHAT: ModelProvider.DEEPSEEK,
     ModelType.GLM_4_6: ModelProvider.ZHIPU,
+    ModelType.OLLAMA: ModelProvider.OLLAMA,
 }

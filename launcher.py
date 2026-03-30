@@ -7,6 +7,7 @@ QozeCode Agent 启动器 - Inquirer版本
 import os
 import sys
 import time
+import configparser
 from typing import Optional, Tuple
 
 from constant import template_content
@@ -36,6 +37,39 @@ except ImportError as e:
     sys.exit(1)
 
 
+def get_ollama_status():
+    """获取 Ollama 配置状态（安静模式，不触发错误提示）"""
+    try:
+        # 直接读取配置文件，不调用会触发错误提示的函数
+        config_dir = "/etc/conf"
+        config_file = os.path.join(config_dir, "qoze.conf")
+        fallback_dir = os.path.expanduser("~/.qoze")
+        fallback_file = os.path.join(fallback_dir, "qoze.conf")
+
+        cfg = configparser.ConfigParser()
+        if os.path.exists(config_file):
+            cfg.read(config_file)
+        elif os.path.exists(fallback_file):
+            cfg.read(fallback_file)
+        else:
+            return "未配置"
+
+        if not cfg.has_section("Ollama"):
+            return "未配置"
+
+        host = cfg.get("Ollama", "host", fallback="http://localhost:11434")
+        model = cfg.get("Ollama", "model", fallback="llama3.1")
+
+        if not host or not model:
+            return "未配置"
+
+        model_clean = model.strip("'\"")
+        host_clean = host.strip("'\"")
+        return model_clean
+    except Exception:
+        return "未配置"
+
+
 def print_banner():
     """打印ASCII艺术风格的启动横幅"""
     ascii_art = """
@@ -48,6 +82,10 @@ def print_banner():
 """
     subtitle = Text("使用 ↑↓ 选择，回车确认", style="dim")
     colored_art = Text(ascii_art, style="bold bright_cyan")
+
+    # 获取 Ollama 状态
+    ollama_status = get_ollama_status()
+
     content = Align.center(colored_art + "\n" + subtitle)
     # 使用 Padding 代替 Panel 去掉边框
     console.print(Padding(content, (1, 2)))
@@ -61,6 +99,10 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
 
     # 显示横幅
     print_banner()
+
+    # 获取 Ollama 模型名称（如果已配置）
+    ollama_model = get_ollama_status()
+    ollama_display = f"{ollama_model:<30} Ollama" if ollama_model != "未配置" else "ollama                         Ollama"
 
     # 定义选项 - 简洁对齐
     # 保持原有显示格式，但逻辑中我们会根据字符串反推
@@ -77,6 +119,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "deepseek-reasoner  (think)     DeepSeek",
         "deepseek-chat                  DeepSeek",
         "gpt-5.2                        OpenAI",
+        ollama_display,
         "[退出程序]"
     ]
 
@@ -122,6 +165,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             provider = ModelProvider.ZHIPU
         elif "Alibaba Cloud" in selected:
             provider = ModelProvider.ALIBABA_CLOUD
+        elif "Ollama" in selected:
+            provider = ModelProvider.OLLAMA
 
         # 2. 解析 ModelType
         # if "gemini-3-pro" in selected:
@@ -160,6 +205,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.QWEN_3_MAX
         elif "glm-5" in selected:
             model_type = ModelType.GLM_5
+        elif "Ollama" in selected:
+            model_type = ModelType.OLLAMA
 
         if provider and model_type:
             return provider, model_type

@@ -107,6 +107,33 @@ def fail(missing_desc: str):
     raise RuntimeError(f"缺少模型配置：{missing_desc}")
 
 
+
+def get_ollama_config() -> Dict[str, str]:
+    """
+    获取 Ollama 配置
+    Returns:
+        dict: 包含 host 和 model 的配置字典
+    """
+    cfg, _ = _load_config()
+
+    section = "Ollama"
+    if not cfg.has_section(section):
+        fail("Ollama 配置 (section [Ollama])")
+
+    host = cfg.get(section, "host", fallback=None)
+    model = cfg.get(section, "model", fallback=None)
+
+    if not host:
+        fail("Ollama 配置 (section [Ollama] -> host)")
+    if not model:
+        fail("Ollama 配置 (section [Ollama] -> model)")
+
+
+    return {
+        "host": host.strip("\"'"),
+        "model": model.strip("\"'")
+    }
+
 def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dict[str, str]:
     """
     确保对应模型的密钥存在：
@@ -141,28 +168,9 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         section = "DeepSeek"
         required_keys = ["api_key"]
 
-    # # 5. Bedrock (AWS)
-    # elif model_identifier in ("Claude-4", "Bedrock"):
-    #     section = "Bedrock"
-    #     # 注意：这里我们检查 session_token, 但代码逻辑也支持环境变量，这里主要检查配置
-    #     # 为了兼容旧逻辑，我们只检查 session_token，region 默认
-    #     # 如果配置文件没有 session_token，会抛出错误
-    #     # 实际 Bedrock 验证比较复杂，这里简化检查
-    #     if not cfg.has_section(section):
-    #         fail(f"AWS Bedrock 凭证 (section [{section}])")
-    #
-    #     session_token = cfg.get(section, "session_token", fallback=None)
-    #     region = cfg.get(section, "region_name", fallback="us-east-1")
-    #
-    #     if not session_token:
-    #         fail(f"AWS Bedrock 凭证 (section [{section}] -> session_token)")
-    #
-    #     # 特殊处理：设置环境变量供 boto3 使用
-    #     os.environ['AWS_BEARER_TOKEN_BEDROCK'] = session_token
-    #     return {
-    #         "aws_session_token": session_token,
-    #         "region_name": region,
-    #     }
+    # 5. Ollama (本地模型，不需要 API key)
+    elif model_identifier in ("ollama", "Ollama"):
+        return get_ollama_config()
 
     # 6. Vertex AI (Gemini)
     elif model_identifier in ("gemini-3.1-pro", "gemini-3-flash", "VertexAi"):

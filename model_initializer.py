@@ -313,5 +313,18 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             print("❌ 缺少 langchain_openai 依赖")
             raise
 
+    elif provider == ModelProvider.OLLAMA:
+        try:
+            from langchain_ollama import ChatOllama
+            creds = ensure_model_credentials("Ollama")
+            llm = ChatOllama(
+                model=creds["model"],
+                base_url=creds["host"],
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_ollama 依赖，请安装: pip install langchain-ollama")
+            raise
+
     else:
         raise ValueError(f"不支持的模型厂商: {provider}")

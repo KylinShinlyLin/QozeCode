@@ -11,6 +11,7 @@ requires-python = ">=3.9"
 authors = [{ name = "QozeCode" }]
 
 dependencies = [
+    "langchain-ollama",
     "rich>=14.1.0",
     "inquirer>=3.4.0",
     "langgraph",
