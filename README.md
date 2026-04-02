@@ -280,14 +280,6 @@ pip install pyaudio
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
-## 路线图
-
-- [ ] 支持更多 LLM 厂商
-- [ ] 增强 Agent 记忆能力
-- [ ] 支持多 Agent 协作
-- [ ] 提供 Web UI
-- [ ] 支持插件市场
-
 ## 许可证
 
 Licensed under the Apache License, Version 2.0 (the "License");
