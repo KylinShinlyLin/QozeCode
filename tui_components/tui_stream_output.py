@@ -112,22 +112,33 @@ class TUIStreamOutput:
         if re.search(r'!?\[[^\]]*\]\([^)]*$', tail):
             return True
 
-        # 检查表格是否完整 - 表格需要以空行结束才算完整
-        # Markdown 表格行的特征：至少包含两个 |（单元格分隔符）
-        last_nonempty_lines = []
-        for line in reversed(lines):
-            if line.strip():
-                last_nonempty_lines.insert(0, line.strip())
-            else:
-                break  # 遇到空行停止
-
-        # 检查是否有表格行
-        table_lines = [l for l in last_nonempty_lines if l.count("|") >= 2]
-        if table_lines:
-            # 如果最后非空行包含 |，说明表格可能还未结束（需要空行才算结束）
-            last_nonempty = last_nonempty_lines[-1] if last_nonempty_lines else ""
-            if last_nonempty.count("|") >= 2:
-                return True
+        # 检查表格是否完整
+        # 表格结构：表头行 + 分隔行 + 数据行（可选），必须以空行结束
+        # 分析最后几行
+        last_lines = lines[-10:] if len(lines) > 10 else lines
+        table_line_indices = []
+        for i, line in enumerate(last_lines):
+            if line.strip().count("|") >= 2:
+                table_line_indices.append(i)
+        
+        if table_line_indices:
+            # 检查最后非空行是否是表格行
+            for line in reversed(lines):
+                if line.strip():
+                    # 最后非空行包含 |，表格未结束
+                    if line.strip().count("|") >= 2:
+                        return True
+                    break
+            
+            # 检查表格结构是否完整（至少要有表头和分隔行）
+            if len(table_line_indices) >= 2:
+                # 检查是否有分隔行（包含 - 和 |）
+                has_separator = any(
+                    re.search(r'\|[\s\-:]+\|', last_lines[i]) 
+                    for i in table_line_indices[:2]
+                )
+                if not has_separator:
+                    return True  # 表格结构不完整
 
         # 检查列表是否可能未完成（只检查最后一行）
         last_line = lines[-1].strip() if lines else ""
@@ -221,14 +232,27 @@ class TUIStreamOutput:
         if len(lines) >= 2 and lines[-1].strip() == '' and lines[-2].strip() != '':
             return True
 
-        # 3. 表格结束（表格行后面跟着空行）
-        # Markdown 表格需要空行来明确结束，否则 flush 时可能截断
+        # 3. 表格结束检测 - 改进版
+        # 表格特征：至少两行包含 |，第一行是表头，第二行是分隔线（包含 - 和 |）
+        # 表格应该在完整结构后 flush，避免截断
         if len(lines) >= 2:
             last_line = lines[-1].strip()
             prev_line = lines[-2].strip()
-            # 当前行是空行，且前一行是表格行
+            
+            # 情况 A：当前行是空行，且前一行是表格行（表格已完整结束）
             if not last_line and prev_line.count("|") >= 2:
                 return True
+            
+            # 情况 B：当前行是表格分隔线（|---|---|），说明表格刚开始，不要 flush
+            if last_line.count("|") >= 2 and re.match(r'^[\s|\-:]+$', last_line.replace('|', '')):
+                return False
+            
+            # 情况 C：检测到表格结构（至少两行 | 行），确保表格完整再 flush
+            table_line_count = sum(1 for l in lines if l.strip().count("|") >= 2)
+            if table_line_count >= 2 and last_line.count("|") >= 2:
+                # 检查是否以空行结束，如果没有空行，表格可能还未完成
+                if not last_line == '' and not prev_line == '':
+                    return False
 
         # 4. 标题行（以 # 开头）后面有内容
         if len(lines) >= 2:
@@ -250,6 +274,12 @@ class TUIStreamOutput:
         if text:
             normalized_text = self._normalize_markdown_for_terminal(text)
             self.main_log.write(Markdown(normalized_text))
+            
+            # 如果 flush 的内容包含表格，添加空行保护，防止后续内容破坏表格格式
+            lines = text.split('\n')
+            has_table = any(l.strip().count("|") >= 2 for l in lines)
+            if has_table:
+                self.main_log.write(Text(""))  # 添加空行
 
         self.main_log.scroll_end(animate=False)
 
@@ -362,6 +392,9 @@ class TUIStreamOutput:
                     is_error = False
                     if first_line.startswith("[RUN_FAILED]") or first_line.startswith("Error:"):
                         is_error = True
+                    elif '"error"' in first_line or "'error'" in first_line:
+                        # JSON 格式的错误 {"error": "..."}
+                        is_error = True
                     elif "❌" in first_line and not first_line.startswith(success_prefixes):
                         is_error = True
                     status_icon = "✗" if is_error else "✓"
@@ -378,6 +411,16 @@ class TUIStreamOutput:
                         for line in content_str.splitlines():
                             if line.startswith("[RUN_FAILED]") or line.startswith("Error:") or "❌" in line:
                                 error_line = line
+                                break
+                            if '"error"' in line or "'error'" in line:
+                                # 提取 JSON 错误信息
+                                import json
+                                try:
+                                    data = json.loads(line if line.startswith("{") else "{" + line.split("{", 1)[1])
+                                    if "error" in data:
+                                        error_line = data["error"]
+                                except:
+                                    error_line = line.strip()
                                 break
                         if not error_line:
                             error_line = first_line

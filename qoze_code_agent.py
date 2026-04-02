@@ -19,6 +19,8 @@ limitations under the License.
 """
 
 import base64
+import json
+from pathlib import Path
 import operator
 import platform
 import traceback
@@ -43,6 +45,7 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
     browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
+from tools.common_tools import load_image_file
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context
@@ -182,6 +185,7 @@ base_tools = [
     browser_switch_tab,
     browser_list_tabs,
     read_lark_document,
+    load_image_file,
 ]
 
 # 初始时不加载浏览器工具
@@ -284,7 +288,40 @@ async def tool_node(state: dict):
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
-            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
+            
+            # 特殊处理 load_image_file 工具，需要把图片加载到上下文中
+            if tool_call["name"] == "load_image_file" and isinstance(observation, str):
+                data = json.loads(observation)
+                if isinstance(data, dict) and data.get("_type") == "image_single":
+                    # 读取图片并转为 base64
+                    image_path = data.get("path", "")
+                    mime_type = data.get("mime_type", "image/png")
+                    # 解析路径
+                    target = Path(image_path)
+                    if not target.is_absolute():
+                        target = (Path.cwd() / target).resolve()
+
+                    if target.exists() and target.is_file():
+                        with open(target, "rb") as f_img:
+                            base64_data = base64.b64encode(f_img.read()).decode("utf-8")
+                        # 构建多模态 ToolMessage 内容 (OpenAI/LangChain 标准格式)
+                        multimodal_content = [
+                            {"type": "text", "text": f"图片已加载: {image_path}"},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{base64_data}"
+                                }
+                            }
+                        ]
+                        result.append(ToolMessage(content=multimodal_content, tool_call_id=tool_call["id"], name=tool_call["name"]))
+                    else:
+                        result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
+                else:
+                    result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
+            else:
+                result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
+
         except Exception as e:
             traceback.print_exc()
             error_msg = f"  ❌ '{tool_call['name']}' 调用失败，错误信息:{e}"
