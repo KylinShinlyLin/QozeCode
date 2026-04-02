@@ -287,7 +287,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             )
             return llm
         except ImportError:
-            print("❌ 缺少 GLM 依赖")
+            print("❌ 缺少 qwen 依赖")
             raise
 
     elif provider == ModelProvider.MOONSHOT:

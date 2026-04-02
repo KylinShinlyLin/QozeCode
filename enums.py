@@ -35,6 +35,7 @@ class ModelType(Enum):
     DEEPSEEK_CHAT = "deepseek-chat"
     GLM_4_6 = "glm-4.6"
     GLM_5 = "glm-5"
+    GLM_5V_TURBO = "glm-5v-turbo"
 
 
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）

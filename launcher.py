@@ -69,11 +69,12 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gemini-3-flash     (think)     vertex-ai",
         "kimi-k2.5                      MoonShot",
         "kimi-for-coding                MoonShot",
+        "glm-5                          智普",
+        "glm-5v-turbo                   智普",
         "gpt-5.4                        LiteLLM",
         "gpt-5.2                        LiteLLM",
         "gpt-5.2-chat-latest            LiteLLM",
         "Grok 4.1 Fast      (think)     XAI",
-        "glm-5                          智普",
         "deepseek-reasoner  (think)     DeepSeek",
         "deepseek-chat                  DeepSeek",
         "gpt-5.2                        OpenAI",
@@ -158,6 +159,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GLM_4_6
         elif "qwen3-max" in selected:
             model_type = ModelType.QWEN_3_MAX
+        elif "glm-5v-turbo" in selected:
+            model_type = ModelType.GLM_5V_TURBO
         elif "glm-5" in selected:
             model_type = ModelType.GLM_5
 
