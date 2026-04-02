@@ -43,6 +43,7 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
     browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
+from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context
@@ -182,6 +183,7 @@ base_tools = [
     browser_switch_tab,
     browser_list_tabs,
     read_lark_document,
+    ask_for_user,
 ]
 
 # 初始时不加载浏览器工具
@@ -197,6 +199,7 @@ tools_by_name = {tool.name: tool for tool in tools}
 class MessagesState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
     llm_calls: int
+    ask_user_question: str  # 如果需要询问用户，存储问题内容
 
 
 # Step 2: Define model node
@@ -264,7 +267,8 @@ async def llm_call(state: dict):
 
     return {
         "messages": [response],
-        "llm_calls": state.get('llm_calls', 0) + 1
+        "llm_calls": state.get('llm_calls', 0) + 1,
+        "ask_user_question": None  # 重置 ask_user_question
     }
 
 
@@ -273,6 +277,8 @@ async def tool_node(state: dict):
     """Performs the tool call"""
 
     result = []
+    ask_question = None
+
     for tool_call in state["messages"][-1].tool_calls:
         tool = tools_by_name[tool_call["name"]]
         try:
@@ -285,13 +291,18 @@ async def tool_node(state: dict):
             else:
                 observation = tool.invoke(tool_call["args"])
             result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
+
+            # 如果调用了 ask_for_user，提取问题
+            if tool_call["name"] == "ask_for_user":
+                ask_question = tool_call["args"].get("question", "")
+
         except Exception as e:
             traceback.print_exc()
             error_msg = f"  ❌ '{tool_call['name']}' 调用失败，错误信息:{e}"
             console.print(error_msg, style="red")
             result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_call["name"]))
-    return {"messages": result}
 
+    return {"messages": result, "ask_user_question": ask_question}
 
 # Step 4: Define logic to determine whether to end
 def should_continue(state: MessagesState) -> Literal["tool_node", END]:
@@ -304,6 +315,13 @@ def should_continue(state: MessagesState) -> Literal["tool_node", END]:
         return "tool_node"
     return END
 
+
+def should_continue_from_tool(state: MessagesState) -> Literal["llm_call", END]:
+    """从 tool_node 决定是回到 llm_call 还是结束（用于 ask_for_user）"""
+    # 如果调用了 ask_for_user，直接结束等待用户输入
+    if state.get("ask_user_question"):
+        return END
+    return "llm_call"
 
 # Step 5: Build agent
 # Build workflow
@@ -320,7 +338,11 @@ agent_builder.add_conditional_edges(
     should_continue,
     ["tool_node", END]
 )
-agent_builder.add_edge("tool_node", "llm_call")
+agent_builder.add_conditional_edges(
+    "tool_node",
+    should_continue_from_tool,
+    ["llm_call", END]
+)
 
 # Compile the agent
 memory = MemorySaver()
