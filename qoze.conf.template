@@ -46,3 +46,7 @@ soniox_key=
 # 访问 https://open.larksuite.com/app 创建应用获取以下凭证
 app_id=cli_xxxxxxxxxxxx
 app_secret=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+[Qwen3]
+api_key=
+base_url=https://dashscope.aliyuncs.com/compatible-mode/v1

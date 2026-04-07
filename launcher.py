@@ -69,6 +69,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gemini-3-flash     (think)     vertex-ai",
         "kimi-k2.5                      MoonShot",
         "kimi-for-coding                MoonShot",
+        "qwen3.6-plus       (think)     Alibaba Cloud",
         "glm-5                          智普",
         "glm-5v-turbo                   智普",
         "gpt-5.4                        LiteLLM",
@@ -123,6 +124,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             provider = ModelProvider.ZHIPU
         elif "Alibaba Cloud" in selected:
             provider = ModelProvider.ALIBABA_CLOUD
+        elif "qwen3.6-plus" in selected:
+            provider = ModelProvider.ALIBABA_CLOUD
 
         # 2. 解析 ModelType
         # if "gemini-3-pro" in selected:
@@ -159,6 +162,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GLM_4_6
         elif "qwen3-max" in selected:
             model_type = ModelType.QWEN_3_MAX
+        elif "qwen3.6-plus" in selected:
+            model_type = ModelType.QWEN_3_6_PLUS
         elif "glm-5v-turbo" in selected:
             model_type = ModelType.GLM_5V_TURBO
         elif "glm-5" in selected:

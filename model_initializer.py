@@ -277,13 +277,24 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
     elif provider == ModelProvider.ALIBABA_CLOUD:
         try:
             from langchain_qwq import ChatQwen
-            creds = ensure_model_credentials("qwen3-max")
+            creds = ensure_model_credentials(model_type.value)
+            
+            # 根据模型类型选择具体模型
+            if model_type == ModelType.QWEN_3_6_PLUS:
+                model_name = "qwen3.6-plus"
+                enable_thinking = True
+                thinking_budget = 2048
+            else:  # 默认 qwen3-max
+                model_name = "qwen3-max-2026-01-23"
+                enable_thinking = True
+                thinking_budget = 2048
+            
             llm = ChatQwen(
-                model="qwen3-max-2026-01-23",
+                model=model_name,
                 api_key=creds["api_key"],
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                enable_thinking=True,
-                thinking_budget=2048,
+                enable_thinking=enable_thinking,
+                thinking_budget=thinking_budget,
             )
             return llm
         except ImportError:
