@@ -47,6 +47,10 @@ soniox_key=
 app_id=cli_xxxxxxxxxxxx
 app_secret=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
+[Qwen3]
+api_key=
+base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
+
 [Ollama]
 #host=http://localhost:11434
 # model=llama3.1

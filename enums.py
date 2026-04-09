@@ -32,11 +32,13 @@ class ModelType(Enum):
     # CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
     KIMI_2_5 = "Kimi 2.5"
     QWEN_3_MAX = "qwen3-max"
+    QWEN_3_6_PLUS = "qwen3.6-plus"
     DEEPSEEK_REASONER = "deepseek-reasoner"
     DEEPSEEK_CHAT = "deepseek-chat"
     GLM_4_6 = "glm-4.6"
     GLM_5 = "glm-5"
     OLLAMA = "ollama"
+    GLM_5V_TURBO = "glm-5v-turbo"
 
 
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）
@@ -55,6 +57,7 @@ MODEL_PROVIDER_MAP = {
     # ModelType.CLAUDE_4: ModelProvider.BEDROCK,
     ModelType.KIMI_2_5: ModelProvider.MOONSHOT,
     ModelType.QWEN_3_MAX: ModelProvider.ALIBABA_CLOUD,
+    ModelType.QWEN_3_6_PLUS: ModelProvider.ALIBABA_CLOUD,
     ModelType.DEEPSEEK_REASONER: ModelProvider.DEEPSEEK,
     ModelType.DEEPSEEK_CHAT: ModelProvider.DEEPSEEK,
     ModelType.GLM_4_6: ModelProvider.ZHIPU,

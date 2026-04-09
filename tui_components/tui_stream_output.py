@@ -372,6 +372,14 @@ class TUIStreamOutput:
                         snippet = content_str if len(content_str) <= max_len else content_str[
                                                                                       :max_len] + "\n... (truncated)"
                         self.main_log.write(Markdown(f"```\n{snippet}\n```"))
+                    # 处理 ask_for_user 工具的 question 输出到 main_log
+                    if tool_name == "ask_for_user" and content_str:
+                        # 提取 [ASK_FOR_USER] 后面的 question 内容
+                        if content_str.startswith("[ASK_FOR_USER] "):
+                            question = content_str[len("[ASK_FOR_USER] "):].strip()
+                            self.main_log.write(Text(""))
+                            self.main_log.write(Text.from_markup(f"  [bold yellow]Ask:[/] {question}"))
+                            self.main_log.write(Text(""))
                     error_hint = ""
                     if is_error:
                         error_line = ""

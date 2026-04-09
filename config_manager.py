@@ -145,9 +145,6 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
     # model_initializer 可能会传递字符串（如 "Claude-4", "gpt-5.2"）或 ModelType.value
     # 我们将其映射到对应的 Config Section
 
-    section = None
-    required_keys = []
-
     # 1. OpenAI
     if model_identifier in ("gpt-5.2", "gpt-5.1", "gpt-5-codex", "OpenAI"):
         section = "OpenAI"
@@ -200,7 +197,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         return {"api_key": api_key, "base_url": base_url}
 
     # 8. Qwen (Alibaba)
-    elif model_identifier in ("qwen3-max", "Qwen3"):
+    elif model_identifier in ("qwen3-max", "qwen3.6-plus", "Qwen3", "Qwen3.6-Plus"):
         section = "Qwen3"
         required_keys = ["api_key"]
 
