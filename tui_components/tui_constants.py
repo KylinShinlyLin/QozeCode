@@ -7,7 +7,7 @@ CSS = """
     TopBar { dock: top; height: 1; background: #13131c; color: #c0caf5; }
 
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
-    #chat-area { width: 78%; height: 100%; }
+    #chat-area { width: 80%; height: 100%; }
 
     #main-output {
         width: 100%;
@@ -51,7 +51,7 @@ CSS = """
         padding: 0 1;
     }
 
-    #sidebar { width: 18%; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
+    #sidebar { width: 1fr; height: 100%; background: #16161e; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
     #bottom-container { height: auto; dock: bottom; background: #13131c; }
     #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; background: #13131c; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
