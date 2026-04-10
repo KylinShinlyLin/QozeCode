@@ -44,7 +44,7 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
     browser_press_key, browser_send_keys, browser_hotkey, browser_focus
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
-from tools.common_tools import ask_for_user
+# from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context
@@ -187,7 +187,6 @@ base_tools = [
     browser_hotkey,
     browser_focus,
     read_lark_document,
-    ask_for_user,
 ]
 
 # 初始时不加载浏览器工具
@@ -297,9 +296,9 @@ async def tool_node(state: dict):
                 observation = tool.invoke(tool_call["args"])
             result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
 
-            # 如果调用了 ask_for_user，提取问题
-            if tool_call["name"] == "ask_for_user":
-                ask_question = tool_call["args"].get("question", "")
+            # # 如果调用了 ask_for_user，提取问题
+            # if tool_call["name"] == "ask_for_user":
+            #     ask_question = tool_call["args"].get("question", "")
 
         except Exception as e:
             traceback.print_exc()
@@ -325,8 +324,8 @@ def should_continue(state: MessagesState) -> Literal["tool_node", END]:
 def should_continue_from_tool(state: MessagesState) -> Literal["llm_call", END]:
     """从 tool_node 决定是回到 llm_call 还是结束（用于 ask_for_user）"""
     # 如果调用了 ask_for_user，直接结束等待用户输入
-    if state.get("ask_user_question"):
-        return END
+    # if state.get("ask_user_question"):
+    #     return END
     return "llm_call"
 
 
