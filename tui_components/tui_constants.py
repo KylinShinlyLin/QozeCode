@@ -30,10 +30,11 @@ CSS = """
 
     #tool-status { width: 100%; height: auto; min-height: 1; background: #13131c; padding: 0 2; display: none; }
 
-    #stream-output { color: #565f89;
+    #stream-output { 
+        color: #565f89;
         width: 100%;
         height: auto;
-        max-height: 60%;
+        max-height: 30%;
         background: #13131c;
         padding: 0 2;
         border-top: solid #414868;

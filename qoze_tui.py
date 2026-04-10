@@ -99,6 +99,7 @@ try:
     from tui_components.sidebar import Sidebar
     from tui_components.request_indicator import RequestIndicator
     from tui_components.status_bar import StatusBar
+    # from tui_components.tui_stream_output import TUIStreamOutput
     from tui_components.tui_stream_output import TUIStreamOutput
 except ImportError as e:
     print(f"Critical Error: Could not import TUI components: {e}")

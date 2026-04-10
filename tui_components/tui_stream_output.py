@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
+"""
+TUIStreamOutput - 优化版本 v2
+修复了代码块和表格被截断导致的渲染问题
+
+主要优化点：
+1. 使用列表存储 chunks，避免 O(n²) 字符串拷贝
+2. 增量 markdown 检测，只检查尾部新增内容
+3. 批量 UI 更新，减少 clear/write 频率
+4. 结构化内容保护（代码块、表格不被截断）
+"""
 import re
 import time
 import asyncio
 import traceback
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 from rich.console import Group
 from rich.markdown import Markdown
 from rich.markup import escape
@@ -15,15 +27,72 @@ import qoze_code_agent
 from .tui_constants import SPINNER_FRAMES
 
 
-class TUIStreamOutput:
-    """流式输出适配器 - 优化版"""
+@dataclass
+class StreamBuffer:
+    """流式内容缓冲区 - 优化存储结构"""
+    chunks: List[str] = field(default_factory=list)
+    reasoning_chunks: List[str] = field(default_factory=list)
 
-    # 性能调优参数
-    UPDATE_INTERVAL = 0.1  # 最小更新间隔（秒）
-    CHAR_FLUSH_THRESHOLD = 150  # 字符数阈值，避免频繁 flush
-    MAX_STREAM_LENGTH = 300  # stream_display 最大长度，超过则寻找断点 flush
-    HARD_MAX_STREAM_LENGTH = 2000  # 绝对最大长度，超过强制 flush（保护内存）
-    INCOMPLETE_CHECK_MIN_LEN = 50  # 只有文本超过此长度才检查 markdown 完整性
+    _text_length: int = 0
+    _reasoning_length: int = 0
+
+    def add_text(self, text: str):
+        if text:
+            self.chunks.append(text)
+            self._text_length += len(text)
+
+    def add_reasoning(self, text: str):
+        if text:
+            self.reasoning_chunks.append(text)
+            self._reasoning_length += len(text)
+
+    def get_text(self) -> str:
+        return "".join(self.chunks)
+
+    def get_reasoning(self) -> str:
+        return "".join(self.reasoning_chunks)
+
+    def clear(self):
+        self.chunks.clear()
+        self.reasoning_chunks.clear()
+        self._text_length = 0
+        self._reasoning_length = 0
+
+    @property
+    def text_length(self) -> int:
+        return self._text_length
+
+    @property
+    def reasoning_length(self) -> int:
+        return self._reasoning_length
+
+
+@dataclass
+class MarkdownState:
+    """跟踪 Markdown 结构状态"""
+    in_code_block: bool = False
+    code_fence_char: str = ""  # ``` 或 ~~~
+    in_table: bool = False
+    table_start_line: int = 0
+
+    def copy(self) -> 'MarkdownState':
+        return MarkdownState(
+            in_code_block=self.in_code_block,
+            code_fence_char=self.code_fence_char,
+            in_table=self.in_table,
+            table_start_line=self.table_start_line
+        )
+
+
+class TUIStreamOutput:
+    """流式输出适配器 - 性能优化版 v2"""
+
+    UPDATE_INTERVAL = 0.15
+    CHAR_FLUSH_THRESHOLD = 300  # 增加阈值，给更多时间完成结构
+    MAX_STREAM_LENGTH = 500  # 增加阈值
+    HARD_MAX_STREAM_LENGTH = 3000
+    INCOMPLETE_CHECK_MIN_LEN = 100
+    UI_BATCH_SIZE = 3
 
     def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static, token_callback=None):
         self.main_log = main_log
@@ -34,18 +103,20 @@ class TUIStreamOutput:
         self.active_tools = {}
         self.current_display_tool = None
         self.last_update_time = 0
-        self._pending_scroll = False  # 防抖标记
-        self._accumulated_content = ""  # 累积的内容用于 token 估算
-        self.token_callback = token_callback  # 保存 token 回调函数
+        self._pending_scroll = False
+        self._accumulated_content = ""
+        self.token_callback = token_callback
+
+        self._buffer = StreamBuffer()
+        self._update_counter = 0
+
+        # 跟踪 markdown 状态
+        self._markdown_state = MarkdownState()
+        self._pending_code_block_closure = False  # 标记是否需要补全代码块
 
     @staticmethod
     def _normalize_markdown_for_terminal(text: str) -> str:
-        """
-        规范化 Markdown，减少 Rich 在终端中对深层标题的块状渲染带来的“漂浮/居中感”。
-        - 保留 h1/h2/h3
-        - 将 h4/h5/h6 转成加粗正文，保持更稳定的左对齐视觉
-        - 代码块内部内容不做处理
-        """
+        """规范化 Markdown"""
         if not text:
             return text
 
@@ -71,112 +142,154 @@ class TUIStreamOutput:
 
         return "\n".join(normalized_lines)
 
-    def _is_incomplete_markdown(self, text: str) -> bool:
+    def _analyze_markdown_state(self, text: str) -> MarkdownState:
         """
-        检测当前文本是否处于未完成的 Markdown 结构中。
-        优化：只有文本超过一定长度才执行完整检查，减少正则开销。
-        重点保护：代码块、表格、列表等结构化元素不被截断。
+        分析文本的 Markdown 结构状态
+        返回代码块、表格等结构是否处于打开状态
         """
-        if not text:
-            return False
-
-        text_len = len(text)
+        state = MarkdownState()
         lines = text.split('\n')
-
-        # ========== 1. 代码块检测（最严格，必须完整扫描）==========
-        in_code_block = False
-        code_fence_char = None
 
         for i, line in enumerate(lines):
             stripped = line.strip()
+
+            # 代码块检测
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 fence = stripped[:3]
-                if not in_code_block:
-                    in_code_block = True
-                    code_fence_char = fence
-                    code_block_start_line = i
-                elif fence == code_fence_char:
-                    in_code_block = False
-                    code_fence_char = None
+                if not state.in_code_block:
+                    state.in_code_block = True
+                    state.code_fence_char = fence
+                elif fence == state.code_fence_char:
+                    state.in_code_block = False
+                    state.code_fence_char = ""
+                continue
 
-        if in_code_block:
-            return True
+            # 表格检测（只在不在代码块中时）
+            if not state.in_code_block and '|' in stripped:
+                pipe_count = stripped.count('|')
+                if pipe_count >= 2:
+                    # 判断是否是表格分隔行 |---|---|
+                    is_separator = re.match(r'^\|?[\s\-:|]+\|?', stripped)
+                    if not is_separator and not state.in_table:
+                        # 可能是表格开始
+                        state.in_table = True
+                        state.table_start_line = i
+                elif state.in_table and not stripped:
+                    # 空行结束表格
+                    state.in_table = False
 
-        # ========== 2. 短文本保护 ==========
-        if text_len < self.INCOMPLETE_CHECK_MIN_LEN:
-            return True
+        return state
 
-        # ========== 3. 表格检测（增强版）==========
-        # 向前查找，确定是否处于表格结构中
-        # Markdown 表格格式：
-        # | Header 1 | Header 2 |
-        # |----------|----------|
-        # | Cell 1   | Cell 2   |
+    def _find_safe_flush_point(self, text: str, max_len: int) -> Tuple[int, bool, str]:
+        """
+        寻找安全的 flush 断点
 
-        in_table = False
-        table_start_idx = -1
+        返回: (flush_point, needs_closure, closure_text)
+        - flush_point: 安全的截断位置
+        - needs_closure: 是否需要补全结构
+        - closure_text: 需要追加的闭合文本
+        """
+        if len(text) <= max_len:
+            return len(text), False, ""
 
-        # 从后往前找，看是否在表格中
-        for i in range(len(lines) - 1, -1, -1):
-            line = lines[i].strip()
-            if not line:
-                # 空行 - 如果之前找到了表格行，说明表格已结束
-                if in_table:
-                    in_table = False
-                break
+        state = self._analyze_markdown_state(text[:max_len])
 
-            # 检测表格行（包含至少两个 |）
-            if line.count("|") >= 2:
-                in_table = True
-                table_start_idx = i
-            elif in_table:
-                # 在表格区域内但不符合表格格式，可能是表格结束
-                break
+        # 如果在代码块中，尝试找到代码块结束
+        if state.in_code_block:
+            # 向前查找代码块结束
+            lines = text[max_len:].split('\n')
+            for i, line in enumerate(lines):
+                if line.strip().startswith(state.code_fence_char):
+                    # 找到了代码块结束，可以在此之后 flush
+                    end_pos = max_len + sum(len(lines[j]) + 1 for j in range(i + 1))
+                    return end_pos, False, ""
 
-        if in_table:
-            # 额外检查：如果最后几行都在表格内，说明表格未完成
-            return True
+            # 代码块未结束，尝试在 max_len 之前找代码块开始
+            lines = text[:max_len].split('\n')
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].strip().startswith(state.code_fence_char):
+                    # 找到了代码块开始，在此之前 flush
+                    flush_point = sum(len(lines[j]) + 1 for j in range(i))
+                    return flush_point, False, ""
 
-        # ========== 4. 行内代码检测 ==========
-        last_chunk = text[-500:] if text_len > 500 else text
-        if last_chunk.count('`') % 2 != 0:
-            return True
+            # 找不到好的断点，强制 flush 并补全代码块
+            return max_len, True, f"\n{state.code_fence_char}"
 
-        # ========== 5. HTML 块检测 ==========
-        # 检测未闭合的 HTML 标签块（如 <details>, <table> 等）
-        html_block_pattern = re.search(r'<([a-zA-Z][a-zA-Z0-9]*)[^>]*>', text)
-        if html_block_pattern:
-            tag = html_block_pattern.group(1).lower()
-            if tag not in ['br', 'hr', 'img', 'input', 'meta', 'link']:
-                # 检查是否有闭合标签
-                close_tag = f'</{tag}>'
-                if text.rfind(close_tag) < html_block_pattern.start():
-                    # 可能未闭合，检查是否在末尾附近
-                    last_200 = text[-200:].lower()
-                    if f'<{tag}' in last_200 or last_200.rfind(f'</{tag}>') == -1:
-                        return True
+        # 如果在表格中，尝试找到表格结束
+        if state.in_table:
+            # 向前查找空行（表格结束标记）
+            remaining = text[max_len:]
+            empty_line_match = re.search(r'\n\s*\n', remaining)
+            if empty_line_match:
+                end_pos = max_len + empty_line_match.start() + 1
+                return end_pos, False, ""
 
-        # ========== 6. 链接/图片语法完整性 ==========
-        tail = text[-200:] if text_len > 200 else text
-        if re.search(r'!?\[[^\]]*\]\([^)]*$', tail):
-            return True
+            # 表格未结束，在 max_len 之前找表格开始
+            lines = text[:max_len].split('\n')
+            for i in range(len(lines) - 1, -1, -1):
+                if not lines[i].strip().count('|') >= 2:
+                    # 找到了表格前的非表格行
+                    flush_point = sum(len(lines[j]) + 1 for j in range(i + 1))
+                    return flush_point, False, ""
 
-        # ========== 7. 列表完整性检测 ==========
-        last_line = lines[-1].strip() if lines else ""
-        # 无序列表
-        if re.match(r'^[\s]*[-*+][\s]', last_line):
-            # 如果列表项很短，可能还没写完
-            if len(last_line) < 100:
-                return True
-        # 有序列表
-        if re.match(r'^[\s]*\d+\.[\s]', last_line):
-            if len(last_line) < 100:
-                return True
+        # 查找自然断点（空行）
+        lines = text[:max_len].split('\n')
+        for i in range(len(lines) - 1, max(0, len(lines) - 20), -1):
+            if not lines[i].strip():
+                flush_point = sum(len(lines[j]) + 1 for j in range(i))
+                return flush_point, False, ""
 
-        return False
+        # 找不到好的断点，直接在 max_len 处截断
+        return max_len, False, ""
+
+    def _is_safe_to_flush(self, text: str) -> Tuple[bool, bool, str]:
+        """
+        检查当前状态是否可以安全 flush
+
+        返回: (is_safe, needs_closure, closure_text)
+        """
+        if not text or len(text) < self.INCOMPLETE_CHECK_MIN_LEN:
+            return False, False, ""
+
+        state = self._analyze_markdown_state(text)
+
+        # 如果在代码块中，不安全
+        if state.in_code_block:
+            # 检查是否接近代码块结束
+            tail = text[-500:]
+            if state.code_fence_char in tail:
+                # 可能快要结束了，等一等
+                return False, False, ""
+            return False, False, ""
+
+        # 如果在表格中，检查表格是否完整
+        if state.in_table:
+            lines = text.split('\n')
+            table_lines = []
+            for line in reversed(lines):
+                if not line.strip():
+                    break
+                if '|' in line:
+                    table_lines.insert(0, line)
+
+            # 表格至少需要有表头和分隔行
+            if len(table_lines) < 2:
+                return False, False, ""
+
+            # 检查分隔行格式
+            separator = table_lines[1] if len(table_lines) > 1 else ""
+            if not re.match(r'^\|?[\s\-:|]+\|?$', separator.strip()):
+                return False, False, ""
+
+        # 检查行内代码
+        if text.count('`') % 2 != 0:
+            return False, False, ""
+
+        return True, False, ""
 
     @staticmethod
     def _get_tool_display_name(tool_name: str, tool_args: dict) -> str:
+        """获取工具显示名称"""
         display_name = tool_name
         if tool_name == "execute_command":
             cmd = tool_args.get("command", "")
@@ -212,6 +325,7 @@ class TUIStreamOutput:
         return display_name
 
     def _update_tool_spinner(self):
+        """更新工具 spinner"""
         if not self.tool_start_time or not self.current_display_tool:
             return
         elapsed = time.time() - self.tool_start_time
@@ -220,93 +334,79 @@ class TUIStreamOutput:
         content = f"[dim bold cyan] {frame} {escape(self.current_display_tool)} {m:02d}:{s:02d}[/]"
         self.tool_status.update(Text.from_markup(content))
 
-    @staticmethod
-    def _has_natural_break_point(text: str) -> bool:
+    def flush_to_log(self, text: str, reasoning: str, closure_text: str = ""):
         """
-        检查文本是否包含自然的断点，适合在此处 flush。
-        自然断点包括：代码块结束、段落结束（空行）、表格结束、标题行等。
+        将累积的内容刷新到主日志
+
+        Args:
+            text: 要 flush 的文本
+            reasoning: reasoning 内容
+            closure_text: 需要追加的闭合文本（如 ```）
         """
-        if not text:
-            return False
-
-        lines = text.split('\n')
-        if len(lines) < 2:
-            return False
-
-        # 检查最后几行是否有自然断点
-        last_lines = lines[-5:] if len(lines) > 5 else lines
-
-        # 1. 代码块结束 - 需要跟踪状态确保是真正的结束
-        in_code_block = False
-        code_fence_char = None
-        for line in lines:  # 完整扫描跟踪状态
-            stripped = line.strip()
-            if stripped.startswith('```') or stripped.startswith('~~~'):
-                fence = stripped[:3]
-                if not in_code_block:
-                    in_code_block = True
-                    code_fence_char = fence
-                elif fence == code_fence_char:
-                    in_code_block = False
-                    code_fence_char = None
-        # 如果不在代码块中且最后几行有 ```，说明代码块刚结束
-        if not in_code_block:
-            for line in reversed(last_lines):
-                stripped = line.strip()
-                if stripped.startswith('```') or stripped.startswith('~~~'):
-                    return True
-
-        # 2. 空行（段落结束）
-        if len(lines) >= 2 and lines[-1].strip() == '' and lines[-2].strip() != '':
-            return True
-
-        # 3. 表格结束（表格行后面跟着空行）
-        # Markdown 表格需要空行来明确结束，否则 flush 时可能截断
-        if len(lines) >= 2:
-            last_line = lines[-1].strip()
-            prev_line = lines[-2].strip()
-            # 当前行是空行，且前一行是表格行
-            if not last_line and prev_line.count("|") >= 2:
-                return True
-
-        # 4. 标题行（以 # 开头）后面有内容
-        if len(lines) >= 2:
-            last_line = lines[-1].strip()
-            prev_line = lines[-2].strip()
-            if re.match(r'^#{1,6}\s+', prev_line) and last_line:
-                return True
-
-        return False
-
-    def flush_to_log(self, text: str, reasoning: str):
-        """将累积的内容刷新到主日志，清空流式显示区"""
         if reasoning:
             reasoning_clean = reasoning.strip()
-            # 使用灰色斜体，左缩进2个字符
             content = Text(reasoning_clean, style="italic #909090")
             self.main_log.write(Padding(content, (0, 0, 1, 2)))
 
         if text:
+            # 如果需要补全结构，先加上
+            if closure_text:
+                text = text + closure_text
+
             normalized_text = self._normalize_markdown_for_terminal(text)
             self.main_log.write(Markdown(normalized_text))
 
         self.main_log.scroll_end(animate=False)
-
-        # 清空流式显示区
         self.stream_display.clear()
         self.stream_display.styles.display = "none"
 
+    def _should_update_ui(self, now: float, force: bool = False) -> bool:
+        """判断是否应该更新 UI"""
+        if force:
+            return True
+
+        time_since_update = now - self.last_update_time
+        if time_since_update < self.UPDATE_INTERVAL:
+            return False
+
+        self._update_counter += 1
+        if self._update_counter < self.UI_BATCH_SIZE:
+            return False
+
+        self._update_counter = 0
+        return True
+
+    def _render_stream_display(self):
+        """渲染流式显示区"""
+        display_lines = []
+
+        reasoning = self._buffer.get_reasoning()
+        text = self._buffer.get_text()
+
+        if reasoning:
+            display_lines.append(Text("Thinking Process.....", style="italic #565f89"))
+            for line in reasoning.split('\n'):
+                display_lines.append(Text(f"  {line}", style="italic #565f89"))
+            display_lines.append(Text(""))
+
+        if text:
+            display_lines.append(Text(text))
+
+        self.stream_display.clear()
+        for line in display_lines:
+            self.stream_display.write(line)
+
     async def stream_response(self, current_state, conversation_state, thread_id="default_session"):
-        current_response_text = ""
-        current_reasoning_content = ""
+        # 重置状态
+        self._buffer.clear()
+        self._update_counter = 0
+        self._markdown_state = MarkdownState()
+
         total_response_text = ""
         total_reasoning_content = ""
         accumulated_ai_message = None
 
-        # 使用字符数而非行数作为阈值，更准确
-        accumulated_chars = 0
-
-        # 重置累积内容，并添加当前状态中的用户消息
+        # 初始化累积内容
         self._accumulated_content = ""
         if current_state and "messages" in current_state:
             for msg in current_state["messages"]:
@@ -336,6 +436,7 @@ class TUIStreamOutput:
                 except Exception:
                     pass
 
+                # 处理 AIMessage
                 if isinstance(message_chunk, AIMessage):
                     if message_chunk.content is None:
                         message_chunk.content = ""
@@ -350,14 +451,39 @@ class TUIStreamOutput:
                     else:
                         accumulated_ai_message += message_chunk
 
+                # 处理 ToolMessage
                 if isinstance(message_chunk, ToolMessage):
                     if hasattr(message_chunk, 'content') and message_chunk.content:
                         self._accumulated_content += str(message_chunk.content)
-                    if current_response_text or current_reasoning_content:
-                        self.flush_to_log(current_response_text, current_reasoning_content)
-                        current_response_text = ""
-                        current_reasoning_content = ""
-                        accumulated_lines = 0
+
+                    # Flush 当前缓冲区（ToolMessage 是强制 flush 点）
+                    if self._buffer.text_length > 0 or self._buffer.reasoning_length > 0:
+                        text = self._buffer.get_text()
+                        reasoning = self._buffer.get_reasoning()
+
+                        # 查找安全断点
+                        if len(text) > self.CHAR_FLUSH_THRESHOLD:
+                            flush_point, needs_closure, closure = self._find_safe_flush_point(
+                                text, self.CHAR_FLUSH_THRESHOLD
+                            )
+                            if flush_point < len(text):
+                                text_to_flush = text[:flush_point]
+                                remaining = text[flush_point:]
+                            else:
+                                text_to_flush = text
+                                remaining = ""
+                                needs_closure = False
+                                closure = ""
+
+                            self.flush_to_log(text_to_flush, reasoning, closure if needs_closure else "")
+
+                            # 如果有剩余内容，保留在缓冲区
+                            self._buffer.clear()
+                            if remaining:
+                                self._buffer.add_text(remaining)
+                        else:
+                            self.flush_to_log(text, reasoning)
+                            self._buffer.clear()
 
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
                     if not tool_name and self.active_tools:
@@ -389,49 +515,58 @@ class TUIStreamOutput:
                     if not self.active_tools:
                         self.tool_start_time = None
 
+                    # Tool 结果展示
                     content_str = str(message_chunk.content)
                     first_line = content_str.splitlines()[0] if content_str else ""
-                    success_prefixes = (
-                        "[READ_FILE]",
-                        "[CAT_FILE]",
-                        "[SEARCH_IN_FILES]",
-                        "[LIST_DIR]",
-                        "[LIST_FILES]",
-                    )
-                    is_error = False
-                    if first_line.startswith("[RUN_FAILED]") or first_line.startswith("Error:"):
-                        is_error = True
-                    elif "❌" in first_line and not first_line.startswith(success_prefixes):
-                        is_error = True
+                    is_error = first_line.startswith("[RUN_FAILED]") or first_line.startswith("Error:") or \
+                               ("❌" in first_line and not any(first_line.startswith(p) for p in
+                                                              ["[READ_FILE]", "[CAT_FILE]", "[SEARCH_IN_FILES]",
+                                                               "[LIST_DIR]", "[LIST_FILES]"]))
+
                     status_icon = "✗" if is_error else "✓"
                     color = "red" if is_error else "cyan"
                     icon_color = "red" if is_error else "green"
+
                     if tool_name == "read_file" and content_str:
                         max_len = 4000
                         snippet = content_str if len(content_str) <= max_len else content_str[
                                                                                       :max_len] + "\n... (truncated)"
                         self.main_log.write(Markdown(f"```\n{snippet}\n```"))
+
                     error_hint = ""
                     if is_error:
-                        error_line = ""
-                        for line in content_str.splitlines():
-                            if line.startswith("[RUN_FAILED]") or line.startswith("Error:") or "❌" in line:
-                                error_line = line
-                                break
-                        if not error_line:
-                            error_line = first_line
-                        if error_line:
-                            error_hint = f" - {escape(error_line[:140])}"
+                        error_line = next((line for line in content_str.splitlines()
+                                           if
+                                           line.startswith("[RUN_FAILED]") or line.startswith("Error:") or "❌" in line),
+                                          first_line)
+                        error_hint = f" - {escape(error_line[:140])}"
+
                     final_msg = f"  [dim bold {icon_color}]{status_icon}[/][dim bold {color}] {escape(tool_name)} in {elapsed:.2f}s{error_hint}[/]"
                     self.main_log.write(Text.from_markup(final_msg))
                     continue
 
+                # 处理 Tool Calls
                 if accumulated_ai_message and accumulated_ai_message.tool_calls:
-                    if current_response_text or current_reasoning_content:
-                        self.flush_to_log(current_response_text, current_reasoning_content)
-                        current_response_text = ""
-                        current_reasoning_content = ""
-                        accumulated_lines = 0
+                    # 强制 flush 当前内容
+                    if self._buffer.text_length > 0 or self._buffer.reasoning_length > 0:
+                        text = self._buffer.get_text()
+                        reasoning = self._buffer.get_reasoning()
+
+                        # 查找安全断点
+                        flush_point, needs_closure, closure = self._find_safe_flush_point(
+                            text, len(text)
+                        )
+                        if flush_point > 0:
+                            text_to_flush = text[:flush_point]
+                            remaining = text[flush_point:]
+                            self.flush_to_log(text_to_flush, reasoning, closure if needs_closure else "")
+
+                            self._buffer.clear()
+                            if remaining:
+                                self._buffer.add_text(remaining)
+                        else:
+                            self.flush_to_log(text, reasoning)
+                            self._buffer.clear()
 
                     for tool_call in accumulated_ai_message.tool_calls:
                         t_name = tool_call.get("name", "Unknown Tool")
@@ -445,8 +580,10 @@ class TUIStreamOutput:
                             self.tool_start_time = time.time()
                             self.tool_status.styles.display = "block"
                             self.tool_timer = self.tool_status.set_interval(0.1, self._update_tool_spinner)
+
                     self.stream_display.styles.display = "block"
 
+                # 提取 reasoning
                 reasoning = ""
                 if hasattr(message_chunk, "additional_kwargs") and message_chunk.additional_kwargs:
                     reasoning = message_chunk.additional_kwargs.get("reasoning_content", "")
@@ -459,10 +596,10 @@ class TUIStreamOutput:
                             reasoning += content_item.get("thinking", "")
 
                 if reasoning:
-                    current_reasoning_content += reasoning
+                    self._buffer.add_reasoning(reasoning)
                     total_reasoning_content += reasoning
-                    accumulated_chars += len(reasoning)
 
+                # 提取 content
                 content = message_chunk.content
                 chunk_text = ""
                 if isinstance(content, str):
@@ -473,94 +610,63 @@ class TUIStreamOutput:
                             chunk_text += item.get("text", "")
 
                 if chunk_text:
-                    current_response_text += chunk_text
+                    self._buffer.add_text(chunk_text)
                     total_response_text += chunk_text
-                    accumulated_chars += len(chunk_text)
                     self._accumulated_content += chunk_text
 
+                # 判断是否需要更新 UI
                 now = time.time()
-                time_since_update = now - self.last_update_time
-                should_update = time_since_update > self.UPDATE_INTERVAL or accumulated_chars > 500
+                should_update = self._should_update_ui(now)
 
-                # Flush 策略：
-                # 1. 内容超过 CHAR_FLUSH_THRESHOLD 且有自然断点 -> 优雅 flush
-                # 2. 内容超过 MAX_STREAM_LENGTH 且无结构化元素 -> 寻找机会 flush
-                # 3. 内容超过 HARD_MAX_STREAM_LENGTH -> 强制 flush（内存保护）
-                text_len = len(current_response_text)
-                has_natural_break = self._has_natural_break_point(current_response_text)
-                is_incomplete = self._is_incomplete_markdown(current_response_text)
-
-                # 自然断点 + 内容足够长 + markdown 完整 -> 优雅 flush
-                should_flush_at_break = (
-                        text_len > self.CHAR_FLUSH_THRESHOLD and
-                        has_natural_break and
-                        not is_incomplete
-                )
-
-                # 内容超长但 markdown 完整 -> 可以 flush
-                should_flush_if_complete = (
-                        text_len > self.MAX_STREAM_LENGTH and
-                        not is_incomplete
-                )
-
-                # 绝对长度限制 -> 强制 flush（保护内存，即使会破坏格式）
-                should_force_flush = text_len > self.HARD_MAX_STREAM_LENGTH
-
-                if should_update and (current_reasoning_content or current_response_text):
-                    display_lines = []
-
-                    if current_reasoning_content:
-                        display_lines.append(Text("Thinking Process.....", style="italic #565f89"))
-                        for line in current_reasoning_content.split('\n'):
-                            display_lines.append(Text(f"  {line}", style="italic #565f89"))
-                        display_lines.append(Text(""))
-
-                    if current_response_text:
-                        display_lines.append(Text(current_response_text))
-
-                    self.stream_display.clear()
-                    for line in display_lines:
-                        self.stream_display.write(line)
-
+                if should_update and (self._buffer.text_length > 0 or self._buffer.reasoning_length > 0):
+                    self._render_stream_display()
                     self.last_update_time = now
                     self._pending_scroll = True
 
-                    # 1. 优先处理自然断点 flush（最优雅）
-                    if should_flush_at_break:
-                        self.flush_to_log(current_response_text, current_reasoning_content)
-                        current_response_text = ""
-                        current_reasoning_content = ""
-                        accumulated_chars = 0
-                        self.stream_display.styles.display = "block"
-                    # 2. 内容超长但结构完整 -> flush
-                    elif should_flush_if_complete:
-                        self.flush_to_log(current_response_text, current_reasoning_content)
-                        current_response_text = ""
-                        current_reasoning_content = ""
-                        accumulated_chars = 0
-                        self.stream_display.styles.display = "block"
-                    # 3. 绝对上限强制 flush（内存保护，尽量避免触发）
-                    elif should_force_flush:
-                        # 在强制 flush 前尝试找到一个相对好的断点（如段落结束）
-                        lines = current_response_text.split('\n')
-                        # 找到最后一个完整段落的结束位置
-                        flush_point = len(current_response_text)
-                        for i in range(len(lines) - 1, max(0, len(lines) - 10), -1):
-                            if not lines[i].strip():
-                                # 找到空行，可以在此断开
-                                flush_point = sum(len(lines[j]) + 1 for j in range(i))
-                                break
+                # Flush 策略（使用结构感知检测）
+                text_len = self._buffer.text_length
 
-                        text_to_flush = current_response_text[:flush_point]
-                        remaining_text = current_response_text[flush_point:]
+                if text_len > self.CHAR_FLUSH_THRESHOLD:
+                    text = self._buffer.get_text()
 
-                        self.flush_to_log(text_to_flush, current_reasoning_content)
-                        current_response_text = remaining_text
-                        current_reasoning_content = ""
-                        accumulated_chars = len(remaining_text)
+                    # 检查是否可以安全 flush
+                    is_safe, needs_closure, closure = self._is_safe_to_flush(text)
+
+                    # 检查是否超过硬上限
+                    force_flush = text_len > self.HARD_MAX_STREAM_LENGTH
+
+                    if is_safe or force_flush:
+                        if force_flush and not is_safe:
+                            # 强制 flush，需要找安全断点
+                            flush_point, needs_closure, closure = self._find_safe_flush_point(
+                                text, self.HARD_MAX_STREAM_LENGTH
+                            )
+                            text_to_flush = text[:flush_point]
+                            remaining = text[flush_point:]
+                        else:
+                            text_to_flush = text
+                            remaining = ""
+
+                        reasoning = self._buffer.get_reasoning()
+                        self.flush_to_log(text_to_flush, reasoning, closure if needs_closure else "")
+
+                        self._buffer.clear()
+                        if remaining:
+                            self._buffer.add_text(remaining)
+
                         self.stream_display.styles.display = "block"
 
-            self.flush_to_log(current_response_text, current_reasoning_content)
+            # 最终 flush
+            final_text = self._buffer.get_text()
+            final_reasoning = self._buffer.get_reasoning()
+
+            # 如果最后还有未闭合的代码块，补全它
+            state = self._analyze_markdown_state(final_text)
+            closure = ""
+            if state.in_code_block:
+                closure = f"\n{state.code_fence_char}"
+
+            self.flush_to_log(final_text, final_reasoning, closure)
 
         except asyncio.CancelledError:
             self.stream_display.styles.display = "none"
