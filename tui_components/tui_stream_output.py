@@ -150,7 +150,7 @@ class TUIStreamOutput:
         if tool_name == "execute_command":
             cmd = tool_args.get("command", "")
             if cmd:
-                short_cmd = cmd[:80] + ("..." if len(cmd) > 80 else "")
+                short_cmd = cmd[:60] + ("..." if len(cmd) > 60 else "")
                 display_name = f"command: {short_cmd}"
         elif tool_name == "read_file":
             path = tool_args.get("path", "")

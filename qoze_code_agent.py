@@ -40,7 +40,8 @@ from tools.file_tools import read_file, list_files, search_in_files, cat_file, l
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, read_url
 from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, \
-    browser_get_html, browser_close, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs
+    browser_get_html, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs, \
+    browser_press_key, browser_send_keys, browser_hotkey, browser_focus
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
 from tools.common_tools import ask_for_user
@@ -177,11 +178,14 @@ base_tools = [
     browser_type,
     browser_read_page,
     browser_get_html,
-    browser_close,
     browser_scroll,
     browser_open_tab,
     browser_switch_tab,
     browser_list_tabs,
+    browser_press_key,
+    browser_send_keys,
+    browser_hotkey,
+    browser_focus,
     read_lark_document,
     ask_for_user,
 ]
@@ -286,7 +290,8 @@ async def tool_node(state: dict):
             if tool_call["name"] in ["tavily_search", "read_url", "execute_command", "browser_navigate",
                                      "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
                                      "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
-                                     "browser_switch_tab", "browser_list_tabs"]:
+                                     "browser_switch_tab", "browser_list_tabs", "browser_press_key",
+                                     "browser_send_keys", "browser_hotkey", "browser_focus"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
@@ -303,6 +308,7 @@ async def tool_node(state: dict):
             result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_call["name"]))
 
     return {"messages": result, "ask_user_question": ask_question}
+
 
 # Step 4: Define logic to determine whether to end
 def should_continue(state: MessagesState) -> Literal["tool_node", END]:
@@ -322,6 +328,7 @@ def should_continue_from_tool(state: MessagesState) -> Literal["llm_call", END]:
     if state.get("ask_user_question"):
         return END
     return "llm_call"
+
 
 # Step 5: Build agent
 # Build workflow

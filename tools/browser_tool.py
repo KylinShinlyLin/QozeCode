@@ -376,15 +376,188 @@ async def browser_list_tabs() -> str:
         return f"Error listing tabs: {str(e)}"
 
 
+# @tool
+# async def browser_close() -> str:
+#     """Close the browser session and release resources.
+#
+#     Returns:
+#         Status message.
+#     """
+#     try:
+#         await _session.close()
+#         return "Browser session closed."
+#     except Exception as e:
+#         return f"Error closing browser: {str(e)}"
+
+
 @tool
-async def browser_close() -> str:
-    """Close the browser session and release resources.
+async def browser_press_key(key: str) -> str:
+    """Press a keyboard key or key combination on the current page.
+
+    Use this to simulate keyboard actions like pressing Enter to submit a form,
+    Escape to close a modal, F5 to refresh, or keyboard shortcuts like Ctrl+S.
+
+    Args:
+        key: The key to press. Common keys:
+             - Single keys: "Enter", "Escape", "Tab", "Backspace", "Delete",
+               "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+               "Home", "End", "PageUp", "PageDown", "F1"-"F12", "Insert"
+             - Combinations: "Control+a", "Shift+Enter", "Alt+Tab", "Meta+s" (Cmd on Mac)
+             - Multiple keys in sequence: "Control+a Control+c" (select all then copy)
 
     Returns:
-        Status message.
+        Status message indicating success or failure.
+
+    Examples:
+        - browser_press_key("Enter") - Press Enter key
+        - browser_press_key("Escape") - Close modal/dialog
+        - browser_press_key("F5") - Refresh page
+        - browser_press_key("Control+a") - Select all content
+        - browser_press_key("Shift+Enter") - New line in textarea
+        - browser_press_key("Control+f") - Open find dialog
     """
     try:
-        await _session.close()
-        return "Browser session closed."
+        if not _session.page:
+            return "Error: No active page. Use browser_navigate first."
+
+        # Human-like delay before key press
+        import random
+        await asyncio.sleep(random.uniform(0.1, 0.3))
+
+        # Check if it's a combination (contains +)
+        if "+" in key:
+            # Handle key combination like "Control+a" or "Shift+Enter"
+            await _session.page.keyboard.press(key)
+        else:
+            # Single key press
+            await _session.page.keyboard.press(key)
+
+        # Small delay after key press
+        await asyncio.sleep(random.uniform(0.1, 0.2))
+
+        return f"Successfully pressed key: {key}"
     except Exception as e:
-        return f"Error closing browser: {str(e)}"
+        return f"Error pressing key '{key}': {str(e)}"
+
+
+@tool
+async def browser_send_keys(selector: str, keys: str) -> str:
+    """Send keyboard input to a specific element identified by CSS selector.
+
+    This is useful for typing in input fields or sending keyboard shortcuts
+    to specific elements. Unlike browser_type, this doesn't clear the field first
+    and can send special keys.
+
+    Args:
+        selector: The CSS selector for the target element.
+        keys: The keys to send. Can include text and special keys like "Enter", "Tab", "Escape".
+              Use curly braces for special keys: "Hello{Enter}World" or "{Control}a".
+
+    Returns:
+        Status message indicating success or failure.
+
+    Examples:
+        - browser_send_keys("#search", "query{Enter}") - Type "query" and press Enter
+        - browser_send_keys("#editor", "{Control}a{Delete}") - Select all and delete
+        - browser_send_keys("#input", "{Tab}") - Move focus to next field
+    """
+    try:
+        if not _session.page:
+            return "Error: No active page. Use browser_navigate first."
+
+        # Wait for element to be visible
+        element = await _session.page.wait_for_selector(selector, state="visible", timeout=5000)
+        if not element:
+            return f"Error: Element not found: {selector}"
+
+        # Focus the element
+        await element.focus()
+
+        # Human-like delay
+        import random
+        await asyncio.sleep(random.uniform(0.2, 0.4))
+
+        # Send the keys
+        await element.press(keys)
+
+        # Small delay after
+        await asyncio.sleep(random.uniform(0.1, 0.2))
+
+        return f"Successfully sent keys '{keys}' to element: {selector}"
+    except Exception as e:
+        return f"Error sending keys to '{selector}': {str(e)}"
+
+
+@tool
+async def browser_hotkey(keys: list[str]) -> str:
+    """Press multiple keys simultaneously (hotkey combination).
+
+    Use this for keyboard shortcuts that require multiple keys pressed at once.
+
+    Args:
+        keys: List of keys to press simultaneously. Order matters for some shortcuts.
+              Example: ["Control", "Shift", "T"] for reopening closed tab.
+
+    Returns:
+        Status message indicating success or failure.
+
+    Examples:
+        - browser_hotkey(["Control", "t"]) - Open new tab
+        - browser_hotkey(["Control", "Shift", "t"]) - Reopen closed tab
+        - browser_hotkey(["Control", "v"]) - Paste
+        - browser_hotkey(["Alt", "Left"]) - Browser back
+        - browser_hotkey(["Meta", "s"]) - Save (Cmd+S on Mac, Ctrl+S elsewhere)
+    """
+    try:
+        if not _session.page:
+            return "Error: No active page. Use browser_navigate first."
+
+        if not keys or len(keys) < 2:
+            return "Error: Hotkey requires at least 2 keys. Use browser_press_key for single keys."
+
+        # Human-like delay
+        import random
+        await asyncio.sleep(random.uniform(0.1, 0.3))
+
+        # Press down all keys in order
+        for key in keys:
+            await _session.page.keyboard.down(key)
+
+        # Release all keys in reverse order
+        for key in reversed(keys):
+            await _session.page.keyboard.up(key)
+
+        # Small delay after
+        await asyncio.sleep(random.uniform(0.1, 0.2))
+
+        key_combo = "+".join(keys)
+        return f"Successfully pressed hotkey: {key_combo}"
+    except Exception as e:
+        return f"Error pressing hotkey: {str(e)}"
+
+
+@tool
+async def browser_focus(selector: str) -> str:
+    """Focus on a specific element without clicking it.
+
+    Useful for preparing to type in a field or triggering focus-related events.
+
+    Args:
+        selector: The CSS selector for the element to focus.
+
+    Returns:
+        Status message indicating success or failure.
+    """
+    try:
+        if not _session.page:
+            return "Error: No active page. Use browser_navigate first."
+
+        element = await _session.page.wait_for_selector(selector, state="visible", timeout=5000)
+        if not element:
+            return f"Error: Element not found: {selector}"
+
+        await element.focus()
+
+        return f"Successfully focused element: {selector}"
+    except Exception as e:
+        return f"Error focusing element '{selector}': {str(e)}"

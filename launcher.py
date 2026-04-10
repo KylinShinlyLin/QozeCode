@@ -73,12 +73,12 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "glm-5                          智普",
         "glm-5v-turbo                   智普",
         "gpt-5.4                        LiteLLM",
-        "gpt-5.2                        LiteLLM",
-        "gpt-5.2-chat-latest            LiteLLM",
-        "Grok 4.1 Fast      (think)     XAI",
+        # "gpt-5.2                        LiteLLM",
+        # "gpt-5.2-chat-latest            LiteLLM",
+        # "Grok 4.1 Fast      (think)     XAI",
         "deepseek-reasoner  (think)     DeepSeek",
         "deepseek-chat                  DeepSeek",
-        "gpt-5.2                        OpenAI",
+        # "gpt-5.2                        OpenAI",
         "[退出程序]"
     ]
 

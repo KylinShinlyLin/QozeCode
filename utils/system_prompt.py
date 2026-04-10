@@ -49,6 +49,11 @@ def get_static_system_prompt():
 - **内容获取优先**：当任务目标是提取信息或阅读页面时，**必须优先**使用 `browser_read_page`。它将页面转换为 Markdown，既节省 Token 又方便理解。
 - **DOM 交互策略**：仅在必须进行交互（如点击按钮、填写表单）且不确定元素定位符（Selector）时，才使用 `browser_get_html`。
 - **Token 节约警告**：`browser_get_html` 返回的原始 HTML 通常非常庞大。使用它时要极其谨慎，获取到必要的 Selector 后立即执行下一步，避免在上下文中长期保留大量 HTML 代码。
+- **键盘操作支持**：除了 browser_click，还支持键盘操作：
+  - `browser_press_key(key)` - 按键，如："Enter"（提交）、"Escape"（关闭弹窗）、"F5"（刷新）、"Control+a"（全选）
+  - `browser_send_keys(selector, keys)` - 在特定元素发送按键，如："#search{Enter}"（输入后回车）
+  - `browser_hotkey(keys)` - 组合键，如：["Control", "t"]（新标签页）
+  - `browser_focus(selector)` - 聚焦元素但不点击，准备输入
 - **人机验证阻断**：如果遇到验证码（Captcha）、Cloudflare 等待页面或强制登录墙，请**立即停止**当前操作流，并明确告知用户需要人工介入完成验证。不要尝试通过脚本绕过复杂的安全验证。
 '''
 
