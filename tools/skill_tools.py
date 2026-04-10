@@ -130,8 +130,7 @@ def deactivate_skill(skill_name: str) -> str:
 @tool
 def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
     """
-    获取技能安装指引。当需要安装新技能时，调用此工具获取详细的安装步骤和指引。
-    
+    只要当要求安装skill的时候，才调用这个工具，调用此工具获取详细的安装步骤和指引。
     此工具只返回安装指引，不执行实际安装。Agent 应该根据返回的指引自行执行安装操作。
     
     Args:

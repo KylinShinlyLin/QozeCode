@@ -21,7 +21,8 @@ class TUIStreamOutput:
     # 性能调优参数
     UPDATE_INTERVAL = 0.1  # 最小更新间隔（秒）
     CHAR_FLUSH_THRESHOLD = 150  # 字符数阈值，避免频繁 flush
-    MAX_STREAM_LENGTH = 300  # stream_display 最大长度，超过则强制 flush
+    MAX_STREAM_LENGTH = 300  # stream_display 最大长度，超过则寻找断点 flush
+    HARD_MAX_STREAM_LENGTH = 2000  # 绝对最大长度，超过强制 flush（保护内存）
     INCOMPLETE_CHECK_MIN_LEN = 50  # 只有文本超过此长度才检查 markdown 完整性
 
     def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static, token_callback=None):
@@ -74,6 +75,7 @@ class TUIStreamOutput:
         """
         检测当前文本是否处于未完成的 Markdown 结构中。
         优化：只有文本超过一定长度才执行完整检查，减少正则开销。
+        重点保护：代码块、表格、列表等结构化元素不被截断。
         """
         if not text:
             return False
@@ -81,17 +83,18 @@ class TUIStreamOutput:
         text_len = len(text)
         lines = text.split('\n')
 
-        # 检查代码块状态 - 必须完整扫描所有行
-        # 如果只检查最后20行，长代码块（>20行）会被误判为已结束
+        # ========== 1. 代码块检测（最严格，必须完整扫描）==========
         in_code_block = False
         code_fence_char = None
-        for line in lines:
+
+        for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 fence = stripped[:3]
                 if not in_code_block:
                     in_code_block = True
                     code_fence_char = fence
+                    code_block_start_line = i
                 elif fence == code_fence_char:
                     in_code_block = False
                     code_fence_char = None
@@ -99,41 +102,75 @@ class TUIStreamOutput:
         if in_code_block:
             return True
 
-        # 短文本直接认为不完整（避免过早 flush 导致格式错乱）
+        # ========== 2. 短文本保护 ==========
         if text_len < self.INCOMPLETE_CHECK_MIN_LEN:
             return True
 
-        # 检查行内代码是否成对（只检查最后 500 字符）
+        # ========== 3. 表格检测（增强版）==========
+        # 向前查找，确定是否处于表格结构中
+        # Markdown 表格格式：
+        # | Header 1 | Header 2 |
+        # |----------|----------|
+        # | Cell 1   | Cell 2   |
+
+        in_table = False
+        table_start_idx = -1
+
+        # 从后往前找，看是否在表格中
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if not line:
+                # 空行 - 如果之前找到了表格行，说明表格已结束
+                if in_table:
+                    in_table = False
+                break
+
+            # 检测表格行（包含至少两个 |）
+            if line.count("|") >= 2:
+                in_table = True
+                table_start_idx = i
+            elif in_table:
+                # 在表格区域内但不符合表格格式，可能是表格结束
+                break
+
+        if in_table:
+            # 额外检查：如果最后几行都在表格内，说明表格未完成
+            return True
+
+        # ========== 4. 行内代码检测 ==========
         last_chunk = text[-500:] if text_len > 500 else text
         if last_chunk.count('`') % 2 != 0:
             return True
 
-        # 检查链接或图片语法是否完整（只检查最后 200 字符）
+        # ========== 5. HTML 块检测 ==========
+        # 检测未闭合的 HTML 标签块（如 <details>, <table> 等）
+        html_block_pattern = re.search(r'<([a-zA-Z][a-zA-Z0-9]*)[^>]*>', text)
+        if html_block_pattern:
+            tag = html_block_pattern.group(1).lower()
+            if tag not in ['br', 'hr', 'img', 'input', 'meta', 'link']:
+                # 检查是否有闭合标签
+                close_tag = f'</{tag}>'
+                if text.rfind(close_tag) < html_block_pattern.start():
+                    # 可能未闭合，检查是否在末尾附近
+                    last_200 = text[-200:].lower()
+                    if f'<{tag}' in last_200 or last_200.rfind(f'</{tag}>') == -1:
+                        return True
+
+        # ========== 6. 链接/图片语法完整性 ==========
         tail = text[-200:] if text_len > 200 else text
         if re.search(r'!?\[[^\]]*\]\([^)]*$', tail):
             return True
 
-        # 检查表格是否完整 - 表格需要以空行结束才算完整
-        # Markdown 表格行的特征：至少包含两个 |（单元格分隔符）
-        last_nonempty_lines = []
-        for line in reversed(lines):
-            if line.strip():
-                last_nonempty_lines.insert(0, line.strip())
-            else:
-                break  # 遇到空行停止
-
-        # 检查是否有表格行
-        table_lines = [l for l in last_nonempty_lines if l.count("|") >= 2]
-        if table_lines:
-            # 如果最后非空行包含 |，说明表格可能还未结束（需要空行才算结束）
-            last_nonempty = last_nonempty_lines[-1] if last_nonempty_lines else ""
-            if last_nonempty.count("|") >= 2:
-                return True
-
-        # 检查列表是否可能未完成（只检查最后一行）
+        # ========== 7. 列表完整性检测 ==========
         last_line = lines[-1].strip() if lines else ""
-        if re.match(r'^[\s]*[-*+][\s]', last_line) or re.match(r'^[\s]*\d+\.[\s]', last_line):
-            if len(last_line) < 50:
+        # 无序列表
+        if re.match(r'^[\s]*[-*+][\s]', last_line):
+            # 如果列表项很短，可能还没写完
+            if len(last_line) < 100:
+                return True
+        # 有序列表
+        if re.match(r'^[\s]*\d+\.[\s]', last_line):
+            if len(last_line) < 100:
                 return True
 
         return False
@@ -446,23 +483,28 @@ class TUIStreamOutput:
                 should_update = time_since_update > self.UPDATE_INTERVAL or accumulated_chars > 500
 
                 # Flush 策略：
-                # 1. 内容过长时，寻找自然断点 flush
-                # 2. 内容超长时强制 flush（即使 markdown 不完整）
+                # 1. 内容超过 CHAR_FLUSH_THRESHOLD 且有自然断点 -> 优雅 flush
+                # 2. 内容超过 MAX_STREAM_LENGTH 且无结构化元素 -> 寻找机会 flush
+                # 3. 内容超过 HARD_MAX_STREAM_LENGTH -> 强制 flush（内存保护）
                 text_len = len(current_response_text)
                 has_natural_break = self._has_natural_break_point(current_response_text)
                 is_incomplete = self._is_incomplete_markdown(current_response_text)
 
-                # 自然断点 + 内容足够长 -> 优雅 flush
+                # 自然断点 + 内容足够长 + markdown 完整 -> 优雅 flush
                 should_flush_at_break = (
                         text_len > self.CHAR_FLUSH_THRESHOLD and
                         has_natural_break and
                         not is_incomplete
                 )
-                # 内容超长 -> 强制 flush
-                should_force_flush = (
+
+                # 内容超长但 markdown 完整 -> 可以 flush
+                should_flush_if_complete = (
                         text_len > self.MAX_STREAM_LENGTH and
                         not is_incomplete
                 )
+
+                # 绝对长度限制 -> 强制 flush（保护内存，即使会破坏格式）
+                should_force_flush = text_len > self.HARD_MAX_STREAM_LENGTH
 
                 if should_update and (current_reasoning_content or current_response_text):
                     display_lines = []
@@ -483,19 +525,39 @@ class TUIStreamOutput:
                     self.last_update_time = now
                     self._pending_scroll = True
 
-                    # 优先处理自然断点 flush（更频繁但优雅）
+                    # 1. 优先处理自然断点 flush（最优雅）
                     if should_flush_at_break:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
                         accumulated_chars = 0
                         self.stream_display.styles.display = "block"
-                    # 强制 flush（超长内容）
-                    elif should_force_flush:
+                    # 2. 内容超长但结构完整 -> flush
+                    elif should_flush_if_complete:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
                         accumulated_chars = 0
+                        self.stream_display.styles.display = "block"
+                    # 3. 绝对上限强制 flush（内存保护，尽量避免触发）
+                    elif should_force_flush:
+                        # 在强制 flush 前尝试找到一个相对好的断点（如段落结束）
+                        lines = current_response_text.split('\n')
+                        # 找到最后一个完整段落的结束位置
+                        flush_point = len(current_response_text)
+                        for i in range(len(lines) - 1, max(0, len(lines) - 10), -1):
+                            if not lines[i].strip():
+                                # 找到空行，可以在此断开
+                                flush_point = sum(len(lines[j]) + 1 for j in range(i))
+                                break
+
+                        text_to_flush = current_response_text[:flush_point]
+                        remaining_text = current_response_text[flush_point:]
+
+                        self.flush_to_log(text_to_flush, current_reasoning_content)
+                        current_response_text = remaining_text
+                        current_reasoning_content = ""
+                        accumulated_chars = len(remaining_text)
                         self.stream_display.styles.display = "block"
 
             self.flush_to_log(current_response_text, current_reasoning_content)
