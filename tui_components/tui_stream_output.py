@@ -19,9 +19,10 @@ class TUIStreamOutput:
     """流式输出适配器 - 优化版"""
 
     # 性能调优参数
-    UPDATE_INTERVAL = 0.1  # 最小更新间隔（秒）
+    UPDATE_INTERVAL = 0.12  # 最小更新间隔（秒）
     CHAR_FLUSH_THRESHOLD = 200  # 字符数阈值，避免频繁 flush
-    MAX_STREAM_LENGTH = 600  # stream_display 最大长度，超过则强制 flush
+    MAX_STREAM_LENGTH = 400  # stream_display 最大长度，超过则强制 flush
+    ABSOLUTE_MAX_STREAM_LENGTH = 800  # 硬上限：超过此长度即使 markdown 不完整也尝试分割 flush
     INCOMPLETE_CHECK_MIN_LEN = 50  # 只有文本超过此长度才检查 markdown 完整性
 
     def __init__(self, main_log: RichLog, stream_display: RichLog, tool_status: Static, token_callback=None):
@@ -36,8 +37,12 @@ class TUIStreamOutput:
         self._pending_scroll = False  # 防抖标记
         self._accumulated_content = ""  # 累积的内容用于 token 估算
         self.token_callback = token_callback  # 保存 token 回调函数
+        # 流式显示区增量更新追踪
+        self._stream_displayed_text_len = 0
+        self._stream_displayed_reasoning = ""
 
-    def _normalize_markdown_for_terminal(self, text: str) -> str:
+    @staticmethod
+    def _normalize_markdown_for_terminal(text: str) -> str:
         """
         规范化 Markdown，减少 Rich 在终端中对深层标题的块状渲染带来的“漂浮/居中感”。
         - 保留 h1/h2/h3
@@ -113,7 +118,11 @@ class TUIStreamOutput:
             return True
 
         # 检查表格是否完整 - 表格需要以空行结束才算完整
-        # Markdown 表格行的特征：至少包含两个 |（单元格分隔符）
+        # Markdown 表格行的特征：包含 | 分隔符，或以 | 开头/结尾
+        def _looks_like_table_row(line: str) -> bool:
+            stripped = line.strip()
+            return stripped.startswith("|") or stripped.endswith("|") or line.count("|") >= 2
+
         last_nonempty_lines = []
         for line in reversed(lines):
             if line.strip():
@@ -121,12 +130,10 @@ class TUIStreamOutput:
             else:
                 break  # 遇到空行停止
 
-        # 检查是否有表格行
-        table_lines = [l for l in last_nonempty_lines if l.count("|") >= 2]
+        table_lines = [l for l in last_nonempty_lines if _looks_like_table_row(l)]
         if table_lines:
-            # 如果最后非空行包含 |，说明表格可能还未结束（需要空行才算结束）
             last_nonempty = last_nonempty_lines[-1] if last_nonempty_lines else ""
-            if last_nonempty.count("|") >= 2:
+            if _looks_like_table_row(last_nonempty):
                 return True
 
         # 检查列表是否可能未完成（只检查最后一行）
@@ -143,7 +150,7 @@ class TUIStreamOutput:
         if tool_name == "execute_command":
             cmd = tool_args.get("command", "")
             if cmd:
-                short_cmd = cmd[:120] + ("..." if len(cmd) > 120 else "")
+                short_cmd = cmd[:80] + ("..." if len(cmd) > 80 else "")
                 display_name = f"command: {short_cmd}"
         elif tool_name == "read_file":
             path = tool_args.get("path", "")
@@ -152,12 +159,12 @@ class TUIStreamOutput:
         elif tool_name == "search_in_files":
             keyword = tool_args.get("keyword", "")
             if keyword:
-                short_kw = keyword[:60] + ("..." if len(keyword) > 60 else "")
+                short_kw = keyword[:40] + ("..." if len(keyword) > 40 else "")
                 display_name = f"search_in_files: '{short_kw}'"
         elif tool_name == "grep_file":
             keyword = tool_args.get("keyword", "")
             if keyword:
-                short_kw = keyword[:60] + ("..." if len(keyword) > 60 else "")
+                short_kw = keyword[:40] + ("..." if len(keyword) > 40 else "")
                 display_name = f"grep_file: '{short_kw}'"
         elif tool_name == "cat_file":
             paths = tool_args.get("paths", [])
@@ -169,7 +176,7 @@ class TUIStreamOutput:
                 paths_str = str(paths)
 
             if paths_str:
-                short_paths = paths_str[:60] + ("..." if len(paths_str) > 60 else "")
+                short_paths = paths_str[:40] + ("..." if len(paths_str) > 40 else "")
                 display_name = f"cat_file: {short_paths}"
         return display_name
 
@@ -178,11 +185,12 @@ class TUIStreamOutput:
             return
         elapsed = time.time() - self.tool_start_time
         frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
-        m, s = divmod(int(elapsed), 60)
+        m, s = divmod(int(elapsed), 40)
         content = f"[dim bold cyan] {frame} {escape(self.current_display_tool)} {m:02d}:{s:02d}[/]"
         self.tool_status.update(Text.from_markup(content))
 
-    def _has_natural_break_point(self, text: str) -> bool:
+    @staticmethod
+    def _has_natural_break_point(text: str) -> bool:
         """
         检查文本是否包含自然的断点，适合在此处 flush。
         自然断点包括：代码块结束、段落结束（空行）、表格结束、标题行等。
@@ -226,16 +234,11 @@ class TUIStreamOutput:
         if len(lines) >= 2:
             last_line = lines[-1].strip()
             prev_line = lines[-2].strip()
-            # 当前行是空行，且前一行是表格行
-            if not last_line and prev_line.count("|") >= 2:
-                return True
-
-        # 4. 标题行（以 # 开头）后面有内容
-        if len(lines) >= 2:
-            last_line = lines[-1].strip()
-            prev_line = lines[-2].strip()
-            if re.match(r'^#{1,6}\s+', prev_line) and last_line:
-                return True
+            # 当前行是空行，且前一行看起来像表格行
+            if not last_line:
+                prev_stripped = prev_line.strip()
+                if prev_stripped.startswith("|") or prev_stripped.endswith("|") or prev_line.count("|") >= 2:
+                    return True
 
         return False
 
@@ -253,9 +256,39 @@ class TUIStreamOutput:
 
         self.main_log.scroll_end(animate=False)
 
-        # 清空流式显示区
+        # 清空流式显示区并重置追踪状态
         self.stream_display.clear()
         self.stream_display.styles.display = "none"
+        self._stream_displayed_text_len = 0
+        self._stream_displayed_reasoning = ""
+
+    def _emergency_flush(self, text: str, reasoning: str) -> tuple[str, str]:
+        """
+        当内容超长且 markdown 不完整时，寻找安全分割点并 flush 前缀。
+        保留 suffix 继续流式显示，避免 current_response_text 无限增长导致卡顿。
+        """
+        if not text:
+            return text, reasoning
+
+        max_keep = 300  # 至少保留最后 300 字符继续流式显示
+        search_end = max(0, len(text) - max_keep)
+
+        # 1. 优先在段落边界（双换行）分割
+        split_pos = text.rfind('\n\n', 0, search_end)
+        # 2. 次选在单行边界分割
+        if split_pos == -1:
+            split_pos = text.rfind('\n', 0, search_end)
+        # 3. 最后 resort：在 search_end 处硬切
+        if split_pos == -1:
+            split_pos = search_end
+
+        if split_pos > 0:
+            prefix = text[:split_pos]
+            suffix = text[split_pos:].lstrip('\n')
+            self.flush_to_log(prefix, reasoning)
+            return suffix, ""
+
+        return text, reasoning
 
     async def stream_response(self, current_state, conversation_state, thread_id="default_session"):
         current_response_text = ""
@@ -281,6 +314,8 @@ class TUIStreamOutput:
 
         self.stream_display.styles.display = "block"
         self.last_update_time = 0
+        self._stream_displayed_text_len = 0
+        self._stream_displayed_reasoning = ""
 
         try:
             async for message_chunk, metadata in qoze_code_agent.agent.astream(
@@ -318,7 +353,7 @@ class TUIStreamOutput:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
-                        accumulated_lines = 0
+                        accumulated_chars = 0
 
                     tool_name = self.active_tools.pop(message_chunk.tool_call_id, None)
                     if not tool_name and self.active_tools:
@@ -400,7 +435,7 @@ class TUIStreamOutput:
                         self.flush_to_log(current_response_text, current_reasoning_content)
                         current_response_text = ""
                         current_reasoning_content = ""
-                        accumulated_lines = 0
+                        accumulated_chars = 0
 
                     for tool_call in accumulated_ai_message.tool_calls:
                         t_name = tool_call.get("name", "Unknown Tool")
@@ -452,39 +487,56 @@ class TUIStreamOutput:
                 should_update = time_since_update > self.UPDATE_INTERVAL or accumulated_chars > 500
 
                 # Flush 策略：
-                # 1. 内容过长时，寻找自然断点 flush
-                # 2. 内容超长时强制 flush（即使 markdown 不完整）
                 text_len = len(current_response_text)
                 has_natural_break = self._has_natural_break_point(current_response_text)
                 is_incomplete = self._is_incomplete_markdown(current_response_text)
 
-                # 自然断点 + 内容足够长 -> 优雅 flush
+                # 0. 紧急 flush：硬上限，防止 markdown 一直不完整导致无限累积卡顿
+                if text_len > self.ABSOLUTE_MAX_STREAM_LENGTH and is_incomplete:
+                    current_response_text, current_reasoning_content = self._emergency_flush(
+                        current_response_text, current_reasoning_content
+                    )
+                    accumulated_chars = len(current_reasoning_content) + len(current_response_text)
+                    self._stream_displayed_text_len = 0
+                    self._stream_displayed_reasoning = ""
+                    self.stream_display.clear()
+                    self.stream_display.styles.display = "block"
+                    # 紧急 flush 后重新计算长度和状态
+                    text_len = len(current_response_text)
+                    has_natural_break = self._has_natural_break_point(current_response_text)
+                    is_incomplete = self._is_incomplete_markdown(current_response_text)
+
+                # 1. 自然断点 + 内容足够长 -> 优雅 flush
                 should_flush_at_break = (
                         text_len > self.CHAR_FLUSH_THRESHOLD and
                         has_natural_break and
                         not is_incomplete
                 )
-                # 内容超长 -> 强制 flush
+                # 2. 内容超长 -> 强制 flush
                 should_force_flush = (
                         text_len > self.MAX_STREAM_LENGTH and
                         not is_incomplete
                 )
 
                 if should_update and (current_reasoning_content or current_response_text):
-                    display_lines = []
-
-                    if current_reasoning_content:
-                        display_lines.append(Text("Thinking Process.....", style="italic #565f89"))
-                        for line in current_reasoning_content.split('\n'):
-                            display_lines.append(Text(f"  {line}", style="italic #565f89"))
-                        display_lines.append(Text(""))
-
-                    if current_response_text:
-                        display_lines.append(Text(current_response_text))
-
-                    self.stream_display.clear()
-                    for line in display_lines:
-                        self.stream_display.write(line)
+                    # 增量更新 stream_display：推理内容变化时全量重写，否则仅追加新文本
+                    reasoning_changed = current_reasoning_content != self._stream_displayed_reasoning
+                    if reasoning_changed:
+                        self.stream_display.clear()
+                        self._stream_displayed_reasoning = current_reasoning_content
+                        self._stream_displayed_text_len = 0
+                        if current_reasoning_content:
+                            self.stream_display.write(Text("Thinking Process.....", style="italic #565f89"))
+                            for line in current_reasoning_content.split('\n'):
+                                self.stream_display.write(Text(f"  {line}", style="italic #565f89"))
+                            self.stream_display.write(Text(""))
+                        if current_response_text:
+                            self.stream_display.write(Text(current_response_text))
+                            self._stream_displayed_text_len = len(current_response_text)
+                    elif len(current_response_text) > self._stream_displayed_text_len:
+                        new_text = current_response_text[self._stream_displayed_text_len:]
+                        self.stream_display.write(Text(new_text))
+                        self._stream_displayed_text_len = len(current_response_text)
 
                     self.last_update_time = now
                     self._pending_scroll = True

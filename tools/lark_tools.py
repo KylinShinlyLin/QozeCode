@@ -13,22 +13,28 @@ from urllib.parse import urlparse, parse_qs
 from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 
-# 尝试导入 lark-oapi
-try:
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
-        import lark_oapi as lark
-        from lark_oapi.api.docx.v1 import *
-        from lark_oapi.api.drive.v1 import ListFileRequest
-
-    LARK_SDK_AVAILABLE = True
-except ImportError:
-    LARK_SDK_AVAILABLE = False
-
 from config_manager import _load_config
+
+# 延迟导入的模块占位符
+_lark = None
+_LARK_SDK_AVAILABLE = False
+
+
+def _ensure_lark_imported():
+    """确保 lark_oapi 已导入（懒加载）"""
+    global _lark, _LARK_SDK_AVAILABLE
+    if _lark is None:
+        try:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                import lark_oapi as lark
+                _lark = lark
+                _LARK_SDK_AVAILABLE = True
+        except ImportError:
+            _LARK_SDK_AVAILABLE = False
+    return _LARK_SDK_AVAILABLE
 
 
 def _get_lark_credentials() -> Dict[str, str]:
@@ -60,18 +66,18 @@ def _get_lark_credentials() -> Dict[str, str]:
     return {"app_id": app_id.strip("\"'"), "app_secret": app_secret.strip("\"'")}
 
 
-def _create_lark_client() -> lark.Client:
+def _create_lark_client() -> Any:
     """创建 Lark API 客户端"""
-    if not LARK_SDK_AVAILABLE:
+    if not _ensure_lark_imported():
         raise RuntimeError(
             "lark-oapi SDK 未安装。请运行: pip install lark-oapi"
         )
 
     creds = _get_lark_credentials()
-    return lark.Client.builder() \
+    return _lark.Client.builder() \
         .app_id(creds["app_id"]) \
         .app_secret(creds["app_secret"]) \
-        .log_level(lark.LogLevel.INFO) \
+        .log_level(_lark.LogLevel.INFO) \
         .build()
 
 
@@ -88,85 +94,6 @@ def _extract_doc_token_from_url(url: str) -> Optional[str]:
             return match.group(1)
 
     return None
-
-
-def _get_root_block_id(client: lark.Client, doc_token: str) -> Optional[str]:
-    """获取文档的根块 ID (Page 块)"""
-    try:
-        request = ListDocumentBlockRequest.builder() \
-            .document_id(doc_token) \
-            .page_size(1) \
-            .build()
-
-        response = client.docx.v1.document_block.list(request)
-
-        if response.success() and response.data and response.data.items:
-            # 第一个块通常是 Page 块
-            for block in response.data.items:
-                block_type = getattr(block, 'block_type', 0)
-                if block_type == 1:  # PAGE 块
-                    return getattr(block, 'block_id', None)
-            # 如果没有找到 Page 块，返回第一个块的 ID
-            return getattr(response.data.items[0], 'block_id', None)
-
-        # 如果列表为空，返回文档 ID 作为根块 ID
-        return doc_token
-    except Exception:
-        return doc_token
-
-
-def _create_text_element(content: str) -> Any:
-    """创建文本元素"""
-    # 限制单个文本元素长度，避免超长内容
-    max_length = 5000
-    if len(content) > max_length:
-        content = content[:max_length] + "..."
-    text_run = TextRunBuilder().content(content).build()
-    return TextElementBuilder().text_run(text_run).build()
-
-
-def _create_text_block(content: str) -> Block:
-    """创建文本块"""
-    text_element = _create_text_element(content)
-    text = TextBuilder().elements([text_element]).build()
-    return BlockBuilder().block_type(2).text(text).build()
-
-
-def _create_heading_block(content: str, level: int = 1) -> Block:
-    """创建标题块
-    
-    heading1-9 需要接收 Text 对象，而不是直接的元素列表
-    """
-    # 限制标题长度
-    max_length = 500
-    if len(content) > max_length:
-        content = content[:max_length] + "..."
-
-    text_element = _create_text_element(content)
-    # heading 需要 Text 对象，包含 elements 字段
-    heading_text = TextBuilder().elements([text_element]).build()
-
-    builder = BlockBuilder().block_type(3)
-    if level == 1:
-        builder.heading1(heading_text)
-    elif level == 2:
-        builder.heading2(heading_text)
-    elif level == 3:
-        builder.heading3(heading_text)
-    elif level == 4:
-        builder.heading4(heading_text)
-    elif level == 5:
-        builder.heading5(heading_text)
-    elif level == 6:
-        builder.heading6(heading_text)
-    elif level == 7:
-        builder.heading7(heading_text)
-    elif level == 8:
-        builder.heading8(heading_text)
-    else:
-        builder.heading9(heading_text)
-
-    return builder.build()
 
 
 def _get_block_type_name(block_type: int) -> str:
@@ -208,113 +135,20 @@ def _get_block_type_name(block_type: int) -> str:
     return type_names.get(block_type, f"unknown({block_type})")
 
 
-def _get_block_info(block: Block) -> str:
-    """获取块的详细信息用于调试"""
-    try:
-        block_type = getattr(block, 'block_type', 0)
-        info = f"type={_get_block_type_name(block_type)}"
+def _parse_text_elements(elements: List[Any]) -> str:
+    """解析文本元素"""
+    if not elements:
+        return ""
 
-        if block_type == 2:  # text
-            text = getattr(block, 'text', None)
-            if text and hasattr(text, 'elements'):
-                elements = text.elements
-                if elements:
-                    content = ""
-                    for elem in elements[:1]:  # 只显示第一个元素
-                        text_run = getattr(elem, 'text_run', None)
-                        if text_run:
-                            content = getattr(text_run, 'content', "")[:30]
-                    info += f", content='{content}...'" if len(content) >= 30 else f", content='{content}'"
-
-        elif block_type == 3:  # heading
-            for i in range(1, 10):
-                heading = getattr(block, f'heading{i}', None)
-                if heading:
-                    info += f", level={i}"
-                    if hasattr(heading, 'elements') and heading.elements:
-                        content = ""
-                        for elem in heading.elements[:1]:
-                            text_run = getattr(elem, 'text_run', None)
-                            if text_run:
-                                content = getattr(text_run, 'content', "")[:30]
-                        info += f", title='{content}...'" if len(content) >= 30 else f", title='{content}'"
-                    break
-
-        return info
-    except Exception as e:
-        return f"error getting info: {str(e)}"
-
-
-def _parse_markdown_to_blocks(content: str) -> List[Block]:
-    """将 Markdown 解析为 Lark Block 对象列表
-    
-    优化策略：
-    1. 合并连续的非标题行为一个文本块
-    2. 限制单个块的内容长度
-    """
-    blocks = []
-    lines = content.split('\n')
-
-    # 用于累积普通文本行
-    text_buffer = []
-
-    def flush_text_buffer():
-        """将缓冲的文本行刷新为一个文本块"""
-        nonlocal text_buffer
-        if text_buffer:
-            # 合并多行文本
-            combined_text = '\n'.join(text_buffer)
-            # 跳过纯空内容（避免飞书API验证失败: 99992402）
-            if not combined_text.strip():
-                text_buffer = []
-                return
-            # 限制长度
-            max_text_length = 10000
-            if len(combined_text) > max_text_length:
-                # 如果太长，分成多个块
-                for i in range(0, len(combined_text), max_text_length):
-                    chunk = combined_text[i:i + max_text_length]
-                    if chunk.strip():  # 确保块不是纯空白
-                        blocks.append(_create_text_block(chunk))
-            else:
-                blocks.append(_create_text_block(combined_text))
-            text_buffer = []
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            # 空行也刷新缓冲区
-            if text_buffer:
-                text_buffer.append('')  # 保留空行
+    text_parts = []
+    for elem in elements:
+        if not elem:
             continue
-
-        # 处理标题
-        if line.startswith('# '):
-            flush_text_buffer()
-            blocks.append(_create_heading_block(line[2:], level=1))
-        elif line.startswith('## '):
-            flush_text_buffer()
-            blocks.append(_create_heading_block(line[3:], level=2))
-        elif line.startswith('### '):
-            flush_text_buffer()
-            blocks.append(_create_heading_block(line[4:], level=3))
-        elif line.startswith('#### '):
-            flush_text_buffer()
-            blocks.append(_create_heading_block(line[5:], level=4))
-        elif line.startswith('##### '):
-            flush_text_buffer()
-            blocks.append(_create_heading_block(line[6:], level=5))
-        elif line.startswith('###### '):
-            flush_text_buffer()
-            blocks.append(_create_heading_block(line[7:], level=6))
-        else:
-            # 普通文本行，添加到缓冲区
-            text_buffer.append(line)
-
-    # 刷新剩余的文本
-    flush_text_buffer()
-
-    return blocks
+        text_run = getattr(elem, 'text_run', None)
+        if text_run:
+            content = getattr(text_run, 'content', "")
+            text_parts.append(content)
+    return "".join(text_parts)
 
 
 def _parse_blocks_to_markdown(blocks: List[Any]) -> str:
@@ -360,7 +194,6 @@ def _parse_blocks_to_markdown(blocks: List[Any]) -> str:
             for i in range(1, 10):
                 heading = getattr(block, f'heading{i}', None)
                 if heading:
-                    # heading 是 Text 对象，包含 elements 属性
                     heading_elements = getattr(heading, 'elements', [])
                     elements = _parse_text_elements(heading_elements)
                     markdown_lines.append(f"{'#' * i} {elements}")
@@ -407,22 +240,6 @@ def _parse_blocks_to_markdown(blocks: List[Any]) -> str:
     return "\n".join(markdown_lines)
 
 
-def _parse_text_elements(elements: List[Any]) -> str:
-    """解析文本元素"""
-    if not elements:
-        return ""
-
-    text_parts = []
-    for elem in elements:
-        if not elem:
-            continue
-        text_run = getattr(elem, 'text_run', None)
-        if text_run:
-            content = getattr(text_run, 'content', "")
-            text_parts.append(content)
-    return "".join(text_parts)
-
-
 class ReadLarkDocumentInput(BaseModel):
     url: str = Field(..., description="Lark 文档的 URL，例如: https://xxx.larksuite.com/docx/AbCdEfGh")
     max_blocks: int = Field(default=-1, description="最多读取的块数量，-1 表示不限制，默认 -1")
@@ -431,6 +248,15 @@ class ReadLarkDocumentInput(BaseModel):
 @tool(args_schema=ReadLarkDocumentInput)
 def read_lark_document(url: str, max_blocks: int = -1) -> str:
     """读取 Lark (飞书) 文档的内容。"""
+    # 懒加载导入
+    if not _ensure_lark_imported():
+        return "[RUN_FAILED] ❌ lark-oapi SDK 未安装。请运行: pip install lark-oapi"
+    
+    # 在这里导入 Lark API 类（仅在需要时）
+    from lark_oapi.api.docx.v1 import (
+        GetDocumentRequest, ListDocumentBlockRequest
+    )
+    
     try:
         doc_token = _extract_doc_token_from_url(url)
         if not doc_token:

@@ -4,7 +4,6 @@ from typing import Optional
 
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright, BrowserContext, Page
-import html2text
 
 
 # Global state to maintain browser session
@@ -38,9 +37,6 @@ class BrowserSession:
                     "--disable-dev-shm-usage",
                     "--no-first-run",
                     "--no-zygote",
-                    # Remove flags that might trigger detection or break rendering
-                    # "--hide-scrollbars", # Removed: can be a bot signal
-                    # "--mute-audio",      # Removed: can be a bot signal
                 ]
 
                 # Launch persistent context
@@ -48,90 +44,10 @@ class BrowserSession:
                     user_data_dir=user_data_dir,
                     headless=False,
                     args=args,
-                    # Remove hardcoded User-Agent to let Chromium use its default or a more dynamic one
-                    # Or update to a very recent one if necessary. Here we use None to let Playwright decide, 
-                    # but usually setting a common real desktop UA is safer.
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
                     viewport=None,
-                    # ignore_default_args=["--enable-automation"],
                     java_script_enabled=True,
                 )
-
-                # Inject advanced stealth scripts to all pages
-                # Based on techniques from puppeteer-stealth / playwright-stealth
-                # stealth_script = """
-                #     // 1. Pass the Webdriver Test
-                #     Object.defineProperty(navigator, 'webdriver', {
-                #         get: () => undefined,
-                #     });
-                #
-                #     // 2. Mock Chrome object
-                #     if (!window.chrome) {
-                #         window.chrome = {
-                #             runtime: {},
-                #             loadTimes: function() {},
-                #             csi: function() {},
-                #             app: {}
-                #         };
-                #     }
-                #
-                #     // 3. Mock Permissions API
-                #     if (navigator.permissions) {
-                #         const originalQuery = navigator.permissions.query;
-                #         navigator.permissions.query = (parameters) => (
-                #             parameters.name === 'notifications' ?
-                #             Promise.resolve({ state: Notification.permission }) :
-                #             originalQuery(parameters)
-                #         );
-                #     }
-                #
-                #     // 4. Mock Plugins
-                #     Object.defineProperty(navigator, 'plugins', {
-                #         get: () => {
-                #             const ChromePDFPlugin = {
-                #                 0: { type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format", enabledPlugin: Plugin },
-                #                 description: "Portable Document Format",
-                #                 filename: "internal-pdf-viewer",
-                #                 length: 1,
-                #                 name: "Chrome PDF Plugin"
-                #             };
-                #             const ChromePDFViewer = {
-                #                 0: { type: "application/pdf", suffixes: "pdf", description: "", enabledPlugin: Plugin },
-                #                 description: "",
-                #                 filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
-                #                 length: 1,
-                #                 name: "Chrome PDF Viewer"
-                #             };
-                #             const plugins = [ChromePDFPlugin, ChromePDFViewer];
-                #             return plugins;
-                #         },
-                #     });
-                #
-                #     // 5. WebGL vendor/renderer spoofing (More realistic values)
-                #     try {
-                #         const getParameter = WebGLRenderingContext.prototype.getParameter;
-                #         WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                #             // UNMASKED_VENDOR_WEBGL
-                #             if (parameter === 37445) {
-                #                 return 'Intel Inc.';
-                #             }
-                #             // UNMASKED_RENDERER_WEBGL
-                #             if (parameter === 37446) {
-                #                 return 'Intel(R) Iris(R) Plus Graphics 640';
-                #             }
-                #             return getParameter(parameter);
-                #         };
-                #     } catch (e) {}
-                #
-                #     // 6. Mock Languages
-                #     Object.defineProperty(navigator, 'languages', {
-                #         get: () => ['en-US', 'en'],
-                #     });
-                #
-                #     // 7. Remove webdriver property entirely if possible (extra safety)
-                #     delete navigator.__proto__.webdriver;
-                # """
-                # await self.context.add_init_script(stealth_script)
 
             if not self.page:
                 pages = self.context.pages
@@ -145,7 +61,6 @@ class BrowserSession:
         """Close all browser resources."""
         async with self._lock:
             if self.page:
-                # No need to close page individually if closing context
                 self.page = None
             if self.context:
                 await self.context.close()
@@ -157,6 +72,17 @@ class BrowserSession:
 
 # Global instance
 _session = BrowserSession()
+
+
+def _html_to_markdown(html_content: str) -> str:
+    """将 HTML 转换为 Markdown（懒加载 html2text）"""
+    # 延迟导入 html2text
+    import html2text
+    h = html2text.HTML2Text()
+    h.ignore_links = False
+    h.ignore_images = False
+    h.body_width = 0  # No wrapping
+    return h.handle(html_content)
 
 
 @tool
@@ -243,7 +169,6 @@ async def browser_type(selector: str, text: str) -> str:
         await _session.page.wait_for_selector(selector, state="visible", timeout=5000)
 
         # Type with random delay between keystrokes to simulate human
-        # Slower typing speed
         import random
         await asyncio.sleep(random.uniform(0.5, 1.0))
         await _session.page.click(selector)
@@ -266,14 +191,10 @@ async def browser_read_page() -> str:
 
         html_content = await _session.page.content()
 
-        # Convert HTML to Markdown
-        h = html2text.HTML2Text()
-        h.ignore_links = False
-        h.ignore_images = False # Keep images enabled as requested
-        h.body_width = 0  # No wrapping
-        markdown_content = h.handle(html_content)
+        # Convert HTML to Markdown (懒加载 html2text)
+        markdown_content = _html_to_markdown(html_content)
 
-        # Limit content size if too large (optional, but good for LLM context)
+        # Limit content size if too large
         if len(markdown_content) > 20000:
             markdown_content = markdown_content[:20000] + "\n\n[Content truncated...]"
 
@@ -366,7 +287,7 @@ async def browser_open_tab(urls: list[str]) -> str:
         if not _session.context:
             return "Error: Could not initialize browser context."
 
-        # Handle single string input for backward compatibility or LLM flexibility
+        # Handle single string input for backward compatibility
         if isinstance(urls, str):
             urls = [urls]
 
