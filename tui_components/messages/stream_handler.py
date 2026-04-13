@@ -176,7 +176,7 @@ class MessageStreamHandler:
                         old_display = existing.get("display_name", "")
                         if new_display != old_display:
                             existing["display_name"] = new_display
-                            _log(f"Updated display_name: {old_display} -> {new_display}")
+                            # _log(f"Updated display_name: {old_display} -> {new_display}")
             else:
                 # 新 tool_call，注册
                 self._active_tools[tool_call_id] = {
@@ -245,7 +245,7 @@ class MessageStreamHandler:
             # 如果显示名称有变化，更新存储
             if new_display_name != old_display_name:
                 tool_info["display_name"] = new_display_name
-                _log(f"Updated display_name for {tool_id}: {new_display_name}")
+                # _log(f"Updated display_name for {tool_id}: {new_display_name}")
 
     @staticmethod
     def _format_tool_display_name(tool_name: str, tool_args: dict) -> str:

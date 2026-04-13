@@ -86,7 +86,7 @@ class BotMessageWidget(Static):
     def on_mount(self) -> None:
         """组件挂载后调用"""
         self._mounted = True
-        _log(f"on_mount: thinking_buffer len={len(self._thinking_buffer)}")
+        # _log(f"on_mount: thinking_buffer len={len(self._thinking_buffer)}")
         # 如果挂载时已有内容，立即更新
         if self._thinking_buffer:
             self._update_thinking_display()
