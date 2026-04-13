@@ -26,7 +26,7 @@ class MessageStreamHandler:
         self.on_stream_complete = on_stream_complete
         
         # 这些状态会在每次 process_stream 时重置
-        self._current_bot: Optional[BotMessageWidget] = None
+        self._current_bot_message: Optional[BotMessageWidget] = None
         self._active_tools: Dict[str, ToolMessageWidget] = {}
         self._last_update_time = 0
         self._update_interval = 0.05
@@ -34,7 +34,7 @@ class MessageStreamHandler:
     
     def reset(self):
         """重置状态，准备处理新的请求"""
-        self._current_bot = None
+        self._current_bot_message = None
         self._active_tools = {}
         self._last_update_time = 0
         self._accumulated_content = ""
@@ -82,38 +82,38 @@ class MessageStreamHandler:
         content = self._extract_content(chunk)
         
         # 创建新的 BotMessage（如果是第一条）
-        if self._current_bot is None:
+        if self._current_bot_message is None:
             msg = BotMessage(
                 id=self._gen_id(),
                 thinking_content="",
                 content="",
                 is_streaming=True
             )
-            self._current_bot = BotMessageWidget(msg)
-            self.on_bot_created(self._current_bot)
+            self._current_bot_message = BotMessageWidget(msg)
+            self.on_bot_created(self._current_bot_message)
         
         # 节流更新
         current_time = time.time()
         should_update = (current_time - self._last_update_time > self._update_interval)
         
         if thinking:
-            self._current_bot.thinking_content += thinking
+            self._current_bot_message.thinking_content += thinking
         
         if content:
-            self._current_bot.content += content
+            self._current_bot_message.content += content
             self._accumulated_content += content
         
         if should_update or content or thinking:
-            self.on_bot_updated(self._current_bot)
+            self.on_bot_updated(self._current_bot_message)
             self._last_update_time = current_time
     
     async def _handle_tool_calls(self, tool_calls: list):
         """处理工具调用请求"""
         # 完成当前的 BotMessage
-        if self._current_bot:
-            self._current_bot.is_streaming = False
-            self.on_bot_updated(self._current_bot)
-            self._current_bot = None
+        if self._current_bot_message:
+            self._current_bot_message.is_streaming = False
+            self.on_bot_updated(self._current_bot_message)
+            self._current_bot_message = None
         
         # 创建 ToolMessage 组件
         for tc in tool_calls:
