@@ -15,7 +15,7 @@ class UserMessageWidget(Static):
         height: auto;
         color: #bb9af7;
         text-style: bold;
-        margin: 1 0;
+        margin: 0;
     }
     """
     

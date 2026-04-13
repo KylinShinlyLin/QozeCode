@@ -59,14 +59,13 @@ class ToolResultWidget(Static):
         # 替换 run: 为 command:
         display_text = display_text.replace("run:", "command:", 1)
 
-        status_icon = "✗" if is_error else "✓"
         elapsed_str = f" in {elapsed_time:.2f}s" if elapsed_time > 0 else ""
 
-        # 使用 Rich markup 实现图标和文本不同颜色
+        # 使用 Rich markup 实现图标和文本不同颜色，图标加粗
         if is_error:
-            text = f"[red]{status_icon}[/] [red]{display_text}{elapsed_str}[/]"
+            text = f"[red bold]✗[/] [red]{display_text}{elapsed_str}[/]"
         else:
-            text = f"[green]{status_icon}[/] [cyan]{display_text}{elapsed_str}[/]"
+            text = f"[green bold]✓[/] [#7aa2f7]{display_text}{elapsed_str}[/]"
 
         _log(f"[ToolResultWidget] final text: '{text}'")
         self.update(text)

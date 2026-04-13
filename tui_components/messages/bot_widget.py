@@ -52,6 +52,16 @@ class BotMessageWidget(Static):
         width: 100%;
         height: auto;
     }
+    
+    BotMessageWidget Markdown {
+        margin: 0;
+        padding: 0;
+    }
+    
+    BotMessageWidget Markdown:empty {
+        height: 0;
+        display: none;
+    }
     """
 
     content: reactive[str] = reactive("")
@@ -70,8 +80,8 @@ class BotMessageWidget(Static):
         _log(f"compose: thinking='{self._thinking_buffer[:50] if self._thinking_buffer else 'empty'}'")
         with Vertical():
             # 使用 Markdown 来显示 thinking，这样可以处理多行
-            yield Markdown(self._thinking_buffer or " ", classes="thinking", id="thinking-md")
-            yield Markdown(self._content_buffer if self._content_buffer else " ", id="content-md")
+            yield Markdown(self._thinking_buffer or "", classes="thinking", id="thinking-md")
+            yield Markdown(self._content_buffer or "", id="content-md")
 
     def on_mount(self) -> None:
         """组件挂载后调用"""
