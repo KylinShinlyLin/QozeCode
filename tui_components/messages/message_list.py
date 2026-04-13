@@ -27,8 +27,8 @@ def _log(msg):
 
 
 class ToolResultWidget(Static):
-    """工具执行结果组件"""
-    
+    """工具执行结果组件 - 参考配色：成功图标green/文本cyan，失败图标red/文本red"""
+
     DEFAULT_CSS = """
     ToolResultWidget {
         width: 100%;
@@ -38,32 +38,45 @@ class ToolResultWidget(Static):
         padding: 0 1;
         content-align: left middle;
     }
-    ToolResultWidget.success { 
-        color: #9ece6a; 
+    ToolResultWidget.success {
+        color: #7aa2f7;
     }
-    ToolResultWidget.error { 
-        color: #f7768e; 
+    ToolResultWidget.success .icon {
+        color: #9ece6a;
+    }
+    ToolResultWidget.error {
+        color: #f7768e;
+    }
+    ToolResultWidget.error .icon {
+        color: #f7768e;
     }
     """
 
     def __init__(self, display_text: str, is_error: bool = False, elapsed_time: float = 0.0, **kwargs):
         super().__init__(**kwargs)
         _log(f"[ToolResultWidget] init: display_text='{display_text}', is_error={is_error}, elapsed={elapsed_time}")
-        
+
         # 替换 run: 为 command:
         display_text = display_text.replace("run:", "command:", 1)
-        
+
         status_icon = "✗" if is_error else "✓"
         elapsed_str = f" in {elapsed_time:.2f}s" if elapsed_time > 0 else ""
-        text = f"{status_icon} {display_text}{elapsed_str}"
-        
+
+        # 使用 Rich markup 实现图标和文本不同颜色
+        if is_error:
+            text = f"[red]{status_icon}[/] [red]{display_text}{elapsed_str}[/]"
+        else:
+            text = f"[green]{status_icon}[/] [cyan]{display_text}{elapsed_str}[/]"
+
         _log(f"[ToolResultWidget] final text: '{text}'")
         self.update(text)
-        
+
         if is_error:
             self.add_class("error")
         else:
             self.add_class("success")
+
+
 
 
 class ToolPlaceholderWidget(Static):

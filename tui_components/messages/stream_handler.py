@@ -388,10 +388,21 @@ class MessageStreamHandler:
         return content
 
     def _is_error(self, result) -> bool:
-        """检查结果是否包含错误"""
+        """检查结果是否包含错误 - 参考配色方案：识别 [RUN_FAILED]、[COMPLETED] 非零退出码等标记"""
         result_content = getattr(result, "content", "")
         if isinstance(result_content, str):
-            return "error" in result_content.lower() or result_content.startswith("Error:")
+            first_line = result_content.splitlines()[0] if result_content else ""
+            # 错误标记：[RUN_FAILED]、Error:、非零退出码、包含 ❌ 但不属于特定成功标记的情况
+            is_err = (
+                first_line.startswith("[RUN_FAILED]") or 
+                first_line.startswith("Error:") or
+                # 非零退出码视为错误 (Exit Code: X, X != 0)
+                ("Exit Code:" in first_line and "Exit Code: 0" not in first_line) or
+                ("❌" in first_line and not any(first_line.startswith(p) for p in
+                    ["[READ_FILE]", "[CAT_FILE]", "[SEARCH_IN_FILES]",
+                     "[LIST_DIR]", "[LIST_FILES]", "[SUCCESS]"]))
+            )
+            return is_err
         return False
 
     def _gen_id(self) -> str:
