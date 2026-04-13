@@ -1,4 +1,4 @@
-# !/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import logging
 import asyncio
@@ -13,7 +13,6 @@ from tui_components import tui_constants
 
 try:
     from utils.audio_transcriber import AudioTranscriber
-
     AUDIO_TRANSCRIBER_IMPORT_ERROR = None
 except ImportError as e:
     AudioTranscriber = None
@@ -26,18 +25,14 @@ from rich.align import Align
 from textual.app import App, ComposeResult, on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, RichLog, Label, TextArea, OptionList
+from textual.widgets import Input, Label, TextArea, OptionList, Markdown, Static
 from textual.widgets.option_list import Option
 
 # Import Enums
 from enums import ModelProvider, ModelType
 
-# import tui_components  # 加载 Rich Markdown 样式覆盖
-# from tui_components import tui_constants
-
 # Configure logging for debugging
 log_file = os.path.join(os.path.dirname(__file__), '.qoze', 'debug.log')
-# Ensure log directory exists
 try:
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 except Exception:
@@ -50,16 +45,14 @@ logging.basicConfig(
 )
 
 sys.path.append(".")
-# Skills TUI Handler Import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
+
 try:
     from skills.skills_tui_integration import SkillsTUIHandler
-
     skills_tui_handler = SkillsTUIHandler()
 except ImportError:
     skills_tui_handler = None
 
-# Dynamic Commands Import
 try:
     from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
 except ImportError:
@@ -68,23 +61,18 @@ except ImportError:
 
 from utils.constants import init_prompt
 
-# Add current directory to path
 sys.path.append(os.getcwd())
 
-# --- Theme Patch ---
 try:
     sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
     import qoze_theme
-
     qoze_theme.apply_theme()
 except ImportError:
     pass
-# -------------------
 
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GLOG_minloglevel'] = '2'
 
-# Import agent components
 try:
     import launcher
     import model_initializer
@@ -93,14 +81,12 @@ except ImportError as e:
     print(f"Critical Error: Could not import agent components: {e}")
     sys.exit(1)
 
-# Import TUI Components
 try:
     from tui_components.top_bar import TopBar
     from tui_components.sidebar import Sidebar
     from tui_components.request_indicator import RequestIndicator
     from tui_components.status_bar import StatusBar
-    # from tui_components.tui_stream_output import TUIStreamOutput
-    from tui_components.tui_stream_output import TUIStreamOutput
+    from tui_components.messages import MessageList
 except ImportError as e:
     print(f"Critical Error: Could not import TUI components: {e}")
     sys.exit(1)
@@ -132,22 +118,18 @@ class Qoze(App):
         self.audio_mode = False
         self.audio_original_text = ""
         self.audio_check_timer = None
-        self.total_tokens = 0  # 累计 token 数
-        self._processing_suggestion = False  # 标记是否正在处理 suggestion 选择
+        self.total_tokens = 0
+        self._processing_suggestion = False
 
-        # 滚动节流 - 防止触摸板惯性滚动导致乱飘
         self._last_scroll_time = 0
-        self._scroll_throttle_ms = 50  # 最小滚动间隔（毫秒），改为50ms滚动更流畅
-        self._scroll_accumulator = 0  # 滚动累积器
+        self._scroll_throttle_ms = 50
+        self._scroll_accumulator = 0
 
     def compose(self) -> ComposeResult:
         yield TopBar()
         with Horizontal(id="main-container"):
             with Vertical(id="chat-area"):
-                yield RichLog(id="main-output", markup=True, highlight=False, auto_scroll=True, wrap=True)
-                from textual.widgets import Static
-                yield Static(id="tool-status")
-                yield RichLog(id="stream-output", markup=True, highlight=False, auto_scroll=True, wrap=True)
+                yield MessageList(id="message-list", token_callback=self.add_tokens)
             yield Sidebar(id="sidebar", model_name=self.model_name, provider=self.provider)
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
@@ -160,29 +142,13 @@ class Qoze(App):
             yield StatusBar(model_name=self.model_name)
 
     def on_mount(self):
-        self.main_log = self.query_one("#main-output", RichLog)
-        from textual.widgets import Static
-        self.tool_status = self.query_one("#tool-status", Static)
-        self.stream_output = self.query_one("#stream-output", RichLog)
+        self.message_list = self.query_one("#message-list", MessageList)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
 
-        self.main_log.can_focus = False
-        self.main_log.auto_scroll = True
-        # 传入 token 回调函数（累加本次对话的 token 数）
-        self.tui_stream = TUIStreamOutput(
-            self.main_log,
-            self.stream_output,
-            self.tool_status,
-            token_callback=self.add_tokens
-        )
-
         self.print_welcome()
-        if AUDIO_TRANSCRIBER_IMPORT_ERROR:
-            self.main_log.write(
-                Text(f"AudioTranscriber import failed: {AUDIO_TRANSCRIBER_IMPORT_ERROR}", style="bold red"))
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
     def add_tokens(self, new_tokens: int):
@@ -191,15 +157,13 @@ class Qoze(App):
         self.status_bar.update_token_count(self.total_tokens)
 
     def update_token_count(self):
-        """更新状态栏中的 token 数量（从 agent state 重新计算）"""
+        """更新状态栏中的 token 数量"""
         try:
-            # 尝试从 agent 的 checkpointer 获取当前状态
             config = {"configurable": {"thread_id": self.thread_id}}
             state = qoze_code_agent.agent.get_state(config)
 
             messages = None
             if state:
-                # StateSnapshot 对象可能有不同的属性
                 if hasattr(state, 'values') and state.values:
                     messages = state.values.get('messages')
                 elif isinstance(state, dict):
@@ -209,40 +173,32 @@ class Qoze(App):
 
             if messages:
                 token_count = qoze_code_agent.estimate_token_count(messages)
-                self.total_tokens = token_count  # 同步累计值
+                self.total_tokens = token_count
                 self.status_bar.update_token_count(token_count)
             else:
-                # 如果没有消息，显示 0
                 self.total_tokens = 0
                 self.status_bar.update_token_count(0)
         except Exception as e:
-            # 调试时取消注释查看错误
             import logging
             logging.error(f"Token count update failed: {e}")
             pass
 
     def print_welcome(self):
+        """打印欢迎信息"""
+        welcome_md = f"""# 🤖 QozeCode Agent
 
-        tips_content = Group(
-            Text(""),
-            Text("模型: ", style="bold white").append(Text(f"{self.model_name or 'Unknown'}", style="bold cyan")),
-            Text("当前目录: ", style="bold white").append(Text(f"{os.getcwd() or 'Unknown'}", style="bold cyan")),
-            Text("使用提示: ", style="bold white"),
-            Text("  • 输入 'clean' 清空当前会话", style="dim bold white"),
-            Text("  • 输入 'q'、'quit' 或 'exit' 退出", style="dim bold white"),
-            Text("  • 输入 'line' 进入多行编辑模式 (Ctrl+D 提交)", style="dim bold white"),
-            Text("  • 按 'Ctrl+Q' 开始语音输入, 'Esc' 或 'Ctrl+E' 停止", style="dim bold white"),
-            Text(""),
-        )
-        # self.main_log.write(Align.center(Text(tui_constants.QOZE_CODE_ART, style="bold cyan")))
-        self.main_log.write(Align.center(Text(tui_constants.QOZE_CODE_ART, style="bold cyan")))
-        self.main_log.write(Text(""))
-        self.main_log.write(Align.center(Panel(
-            tips_content,
-            title="[dim white]Tips[/]",
-            border_style="bold #414868",
-            padding=(0, 1)
-        )))
+**Model:** {self.model_name or 'Unknown'}  
+**Directory:** {os.getcwd()}
+
+---
+
+**Tips:**
+- Type `clear` to clear session
+- Type `quit` or `exit` to exit
+- Type `line` for multi-line mode
+- Press `Ctrl+Q` for voice input
+"""
+        self.message_list.mount(Markdown(welcome_md))
 
     def check_audio_queue(self):
         if not self.audio_mode:
@@ -259,7 +215,7 @@ class Qoze(App):
                 wave_content = msg["data"]
                 updates = True
             elif msg["type"] == "error":
-                self.main_log.write(Text(f"Audio Error: {msg['data']}", style="red"))
+                self.message_list.mount(Static(f"Audio Error: {msg['data']}"))
 
         if text_content is not None:
             combined_text = self.audio_original_text
@@ -281,14 +237,13 @@ class Qoze(App):
 
     def start_audio(self, original_text=""):
         if AudioTranscriber is None:
-            self.main_log.write(Text("Audio Transcriber not available. Dependencies may be missing.", style="red"))
+            self.message_list.mount(Static("Audio Transcriber not available. Dependencies may be missing."))
             return
 
         import config_manager
         soniox_key = config_manager.get_soniox_key()
         if not soniox_key:
-            self.main_log.write(
-                Text("🔴 未检测到 Soniox API Key。请在 qoze.conf 的 [soniox] 节点下添加 api_key", style="bold yellow"))
+            self.message_list.mount(Static("🔴 未检测到 Soniox API Key。请在 qoze.conf 的 [soniox] 节点下添加 api_key"))
             return
 
         self.audio_mode = True
@@ -363,15 +318,16 @@ class Qoze(App):
             self.input_box.disabled = False
             self.input_box.placeholder = "Type message..."
             self.input_box.focus()
-            # 初始化状态栏 token 显示
             self.status_bar.update_token_count(0)
         except Exception as e:
             logging.exception("Initialization Failed")
-            self.main_log.write(Text(f"Initialization Failed: {e}", style="red"))
+            self.message_list.mount(Static(f"Initialization Failed: {e}"))
 
     async def process_user_input(self, user_input):
-        if not user_input.strip(): return
-        if user_input.startswith("/"): user_input = user_input[1:]
+        if not user_input.strip(): 
+            return
+        if user_input.startswith("/"): 
+            user_input = user_input[1:]
 
         if user_input.lower() == "audio":
             self.start_audio()
@@ -391,67 +347,66 @@ class Qoze(App):
 
         if user_input.lower() == "clear":
             qoze_code_agent.reset_conversation_state()
-            self.main_log.clear()
+            self.message_list.clear_messages()
             self.thread_id = str(uuid.uuid4())
-            self.total_tokens = 0  # 重置累计 token 数
+            self.total_tokens = 0
             self.status_bar.update_token_count(0)
             self.print_welcome()
             return
 
         if skills_tui_handler and user_input.lower().startswith('skills'):
             success, message = skills_tui_handler.handle_skills_command(user_input.split())
-            self.main_log.write(message if success else Text(f"❌ {message}", style="red"))
+            self.message_list.mount(Markdown(f"**Skills:** {'✓' if success else '✗'} {message}"))
             return
 
-        # 检查是否是 init 命令
         is_init_command = user_input.lower() in ["init"]
-        display_input = user_input  # 用于显示的用户输入
-        actual_input = init_prompt if is_init_command else user_input  # 实际发送给 LLM 的输入
+        display_input = user_input
+        actual_input = init_prompt if is_init_command else user_input
 
         self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")
-        self.main_log.focus()
 
         try:
-            # 如果是 init 命令，只显示简短提示，不显示完整 prompt 内容
+            # 显示用户消息
+            is_cmd = user_input.startswith("/") or user_input.lower() in ["init", "clear"]
             if is_init_command:
-                self.main_log.write(Text("\n❯ /init", style="bold #bb9af7"))
-                self.main_log.write(Text("🚀 正在初始化项目指引...", style="dim cyan"))
+                self.message_list.add_user_message("/init", is_command=True)
             else:
-                self.main_log.write(Text(f"\n❯ {display_input}", style="bold #bb9af7"))
+                self.message_list.add_user_message(display_input, is_command=is_cmd)
 
             image_folder = ".qoze/image"
             human_msg = qoze_code_agent.create_message_with_images(actual_input, image_folder)
 
-            current_state = {
-                "messages": [human_msg]
-            }
+            current_state = {"messages": [human_msg]}
 
-            await self.tui_stream.stream_response(current_state, qoze_code_agent.conversation_state,
-                                                  thread_id=self.thread_id)
+            # 新消息系统流式处理
+            stream = qoze_code_agent.agent.astream(
+                current_state,
+                stream_mode="messages",
+                config={"recursion_limit": 300, "configurable": {"thread_id": self.thread_id}}
+            )
+            await self.message_list.stream_agent_response(stream)
 
         except (KeyboardInterrupt, asyncio.CancelledError):
-            self.main_log.write(Text("⛔ Interrupted", style="bold red"))
+            pass
         except Exception as e:
-            self.main_log.write(Text(f"Error: {e}", style="red"))
+            self.message_list.mount(Static(f"Error: {e}"))
         finally:
             self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
-            # token 数量已由 stream_response 的回调更新
 
     @on(Input.Submitted)
     def handle_input(self, event: Input.Submitted):
-        if not self.agent_ready: return
+        if not self.agent_ready: 
+            return
 
-        # 如果建议列表可见，说明用户正在通过键盘选择建议，跳过处理
         suggestions = self.query_one("#command-suggestions", OptionList)
         if suggestions.styles.display != "none":
             return
 
-        # 如果正在处理 suggestion 选择，跳过处理并重置标志
         if self._processing_suggestion:
             self._processing_suggestion = False
             return
@@ -506,7 +461,7 @@ class Qoze(App):
             if cmd == "audio":
                 self.start_audio()
             else:
-                self.processing_worker = self.run_worker(self.process_user_input(str(cmd)), exclusive=True)
+                self.processing_worker = self.run_worker(self.process_user_input(cmd), exclusive=True)
 
     def on_key(self, event):
         suggestions = self.query_one("#command-suggestions", OptionList)
@@ -519,7 +474,7 @@ class Qoze(App):
                 event.stop()
             elif event.key == "enter":
                 if suggestions.highlighted is not None:
-                    self._processing_suggestion = True  # 设置标志
+                    self._processing_suggestion = True
                     opt = suggestions.get_option_at_index(suggestions.highlighted)
                     cmd = str(opt.id)
                     suggestions.styles.display = "none"
@@ -544,14 +499,8 @@ class Qoze(App):
         return False
 
     def _get_scroll_lines(self, direction: int) -> int:
-        """
-        获取应该滚动的行数。
-        使用累积器来平滑处理触摸板的高频滚动事件。
-        """
-        # 累积滚动值
+        """获取应该滚动的行数"""
         self._scroll_accumulator += direction
-
-        # 当累积值达到阈值时才执行滚动
         if abs(self._scroll_accumulator) >= 1:
             lines = self._scroll_accumulator
             self._scroll_accumulator = 0
@@ -559,48 +508,40 @@ class Qoze(App):
         return 0
 
     def on_mouse_scroll_down(self, event):
-        if self.main_log.styles.display != "none":
-            # 节流检查
+        if self.message_list.styles.display != "none":
             if not self._should_process_scroll():
                 event.stop()
                 event.prevent_default()
                 return
-
-            # 获取累积后的滚动行数
-            lines = self._get_scroll_lines(5)  # 每次滚动5行，更快速
+            lines = self._get_scroll_lines(5)
             if lines != 0:
-                self.main_log.scroll_relative(y=lines, animate=False)
+                self.message_list.scroll_relative(y=lines, animate=False)
             event.stop()
             event.prevent_default()
 
     def on_mouse_scroll_up(self, event):
-        if self.main_log.styles.display != "none":
-            # 节流检查
+        if self.message_list.styles.display != "none":
             if not self._should_process_scroll():
                 event.stop()
                 event.prevent_default()
                 return
-
-            # 获取累积后的滚动行数
-            lines = self._get_scroll_lines(-5)  # 每次滚动-5行，更快速
+            lines = self._get_scroll_lines(-5)
             if lines != 0:
-                self.main_log.scroll_relative(y=lines, animate=False)
+                self.message_list.scroll_relative(y=lines, animate=False)
             event.stop()
             event.prevent_default()
 
     async def action_submit_multiline(self):
-        if not self.multiline_mode: return
+        if not self.multiline_mode: 
+            return
 
         if self.audio_mode:
             self.stop_audio()
-            # Stop audio and just leave the text in the multiline editor. Do not submit yet!
             return
 
         user_input = self.multi_line_input.text
-        # Check if the user wants to trigger audio mode
         lines = user_input.split('\n')
         if lines and lines[-1].strip().endswith("/audio") or lines and lines[-1].strip().endswith("audio"):
-            # If the last word is /audio or audio, remove it and start audio
             original_text = user_input
             if original_text.endswith("/audio"):
                 original_text = original_text[:-6]
@@ -620,7 +561,8 @@ class Qoze(App):
             self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
 
     def action_cancel_multiline(self):
-        if not self.multiline_mode: return
+        if not self.multiline_mode: 
+            return
         self.multiline_mode = False
         self.multi_line_input.add_class("hidden")
         self.multi_line_input.text = ""
@@ -637,8 +579,6 @@ def main():
     if not selection:
         return
     provider, model_type = selection
-    # model 变量为了兼容旧逻辑，赋值为 model_type.value
-    # model = model_type.value
 
     # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
     null_file = open(os.devnull, "w")
