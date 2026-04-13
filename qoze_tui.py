@@ -130,6 +130,11 @@ class Qoze(App):
         yield TopBar()
         with Horizontal(id="main-container"):
             with Vertical(id="chat-area"):
+                # 欢迎区域 - 包含 ASCII Art 和 Tips
+                with Vertical(id="welcome-panel"):
+                    yield Static(tui_constants.QOZE_CODE_ART, id="welcome-art")
+                    yield Static(self._get_tips_text(), id="welcome-tips")
+                
                 yield MessageList(
                     id="message-list",
                     token_callback=self.add_tokens,
@@ -147,9 +152,16 @@ class Qoze(App):
             yield RequestIndicator(id="request-indicator", classes="hidden")
             yield StatusBar(model_name=self.model_name)
 
+    def _get_tips_text(self) -> str:
+        """获取 Tips 文本"""
+        return f"""模型: {self.model_name or '未知'}  •  目录: {os.getcwd()}
+💡 clear → 清空会话  •  quit/exit → 退出  •  line → 多行模式  •  Ctrl+Q → 语音输入"""
+
     def on_mount(self):
         self.message_list = self.query_one("#message-list", MessageList)
         self.tool_status_panel = self.query_one("#tool-status-panel", ToolStatusPanel)
+        self.welcome_panel = self.query_one("#welcome-panel", Vertical)
+        self.welcome_tips = self.query_one("#welcome-tips", Static)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
@@ -158,7 +170,6 @@ class Qoze(App):
         # 连接 tool_status_panel 到 message_list
         self.message_list._tool_status_panel = self.tool_status_panel
 
-        self.print_welcome()
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
     def add_tokens(self, new_tokens: int):
@@ -194,21 +205,19 @@ class Qoze(App):
             pass
 
     def print_welcome(self):
-        """打印欢迎信息"""
-        welcome_md = f"""# 🤖 QozeCode Agent
+        """更新欢迎区域的 tips（在 clear 后调用）"""
+        if self.welcome_tips:
+            self.welcome_tips.update(self._get_tips_text())
 
-**Model:** {self.model_name or 'Unknown'}  
-**Directory:** {os.getcwd()}
+    def hide_welcome(self):
+        """隐藏欢迎区域（当有新消息时）"""
+        if self.welcome_panel:
+            self.welcome_panel.add_class("hidden")
 
----
-
-**Tips:**
-- Type `clear` to clear session
-- Type `quit` or `exit` to exit
-- Type `line` for multi-line mode
-- Press `Ctrl+Q` for voice input
-"""
-        self.message_list.mount(Markdown(welcome_md))
+    def show_welcome(self):
+        """显示欢迎区域"""
+        if self.welcome_panel:
+            self.welcome_panel.remove_class("hidden")
 
     def check_audio_queue(self):
         if not self.audio_mode:
@@ -361,6 +370,7 @@ class Qoze(App):
             self.thread_id = str(uuid.uuid4())
             self.total_tokens = 0
             self.status_bar.update_token_count(0)
+            self.show_welcome()
             self.print_welcome()
             return
 
@@ -372,6 +382,9 @@ class Qoze(App):
         is_init_command = user_input.lower() in ["init"]
         display_input = user_input
         actual_input = init_prompt if is_init_command else user_input
+
+        # 隐藏欢迎区域，当有用户输入时
+        self.hide_welcome()
 
         self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")

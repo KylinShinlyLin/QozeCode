@@ -9,6 +9,31 @@ CSS = """
     #main-container { height: 1fr; width: 100%; layout: horizontal; }
     #chat-area { width: 80%; height: 100%; }
 
+    /* 欢迎区域样式 */
+    #welcome-panel {
+        width: 100%;
+        height: auto;
+        background: #13131c;
+        padding: 1 2;
+        align: center bottom;
+    }
+
+    #welcome-art {
+        width: 100%;
+        height: auto;
+        content-align: center middle;
+        color: #7aa2f7;
+        text-style: bold;
+    }
+
+    #welcome-tips {
+        width: 100%;
+        height: auto;
+        content-align: center middle;
+        color: #565f89;
+        margin-top: 1;
+    }
+
     /* 新消息系统样式 */
     #message-list {
         width: 100%;
@@ -110,4 +135,4 @@ QOZE_CODE_ART = """
 ██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝
 ╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗
  ╚══▀▀═╝  ╚═════╝ ╚══════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
-     """
+"""
