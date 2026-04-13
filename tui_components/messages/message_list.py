@@ -27,23 +27,39 @@ def _log(msg):
 
 
 class ToolResultWidget(Static):
+    """工具执行结果组件"""
+    
     DEFAULT_CSS = """
     ToolResultWidget {
         width: 100%;
         height: auto;
+        min-height: 1;
         margin: 0;
+        padding: 0 1;
+        content-align: left middle;
     }
-    ToolResultWidget.success { color: #9ece6a; }
-    ToolResultWidget.error { color: #f7768e; }
+    ToolResultWidget.success { 
+        color: #9ece6a; 
+    }
+    ToolResultWidget.error { 
+        color: #f7768e; 
+    }
     """
 
     def __init__(self, display_text: str, is_error: bool = False, elapsed_time: float = 0.0, **kwargs):
         super().__init__(**kwargs)
+        _log(f"[ToolResultWidget] init: display_text='{display_text}', is_error={is_error}, elapsed={elapsed_time}")
+        
+        # 替换 run: 为 command:
         display_text = display_text.replace("run:", "command:", 1)
+        
         status_icon = "✗" if is_error else "✓"
         elapsed_str = f" in {elapsed_time:.2f}s" if elapsed_time > 0 else ""
         text = f"{status_icon} {display_text}{elapsed_str}"
+        
+        _log(f"[ToolResultWidget] final text: '{text}'")
         self.update(text)
+        
         if is_error:
             self.add_class("error")
         else:
@@ -51,18 +67,20 @@ class ToolResultWidget(Static):
 
 
 class ToolPlaceholderWidget(Static):
+    """工具占位组件 - 最小化尺寸避免空白区域"""
     DEFAULT_CSS = """
     ToolPlaceholderWidget {
         width: 100%;
-        height: auto;
+        height: 0;
         margin: 0;
+        padding: 0;
         display: none;
     }
     """
 
     def __init__(self, tool_id: str, **kwargs):
         self.tool_id = tool_id
-        super().__init__(**kwargs)
+        super().__init__("", **kwargs)
 
 
 class MessageList(ScrollableContainer):
@@ -120,7 +138,6 @@ class MessageList(ScrollableContainer):
         thinking_len = len(widget._thinking_buffer) if hasattr(widget, '_thinking_buffer') and widget._thinking_buffer else 0
         content_len = len(widget._content_buffer) if hasattr(widget, '_content_buffer') and widget._content_buffer else 0
         _log(f"_update_widget: thinking_len={thinking_len}, content_len={content_len}")
-        # 刷新 widget 以确保显示更新
         widget.refresh()
         self._scroll_to_end()
 
@@ -131,19 +148,22 @@ class MessageList(ScrollableContainer):
             self._last_scroll_time = current_time
 
     def _on_tool_started(self, tool_id: str, display_text: str):
-        _log(f"tool_started: {tool_id[:20]}...")
+        _log(f"[_on_tool_started] tool_id={tool_id[:30]}..., display_text='{display_text}'")
         self._pending_tools[tool_id] = display_text
         if self._tool_status_panel:
             self._tool_status_panel.add_tool(tool_id, display_text)
-        placeholder = ToolPlaceholderWidget(tool_id)
-        self._tool_placeholders[tool_id] = placeholder
-        self.mount(placeholder)
+        # 不再创建 placeholder，避免空白区域
+        # placeholder 仅用于标识工具是否已在进行中
+        self._tool_placeholders[tool_id] = None
 
     def _on_tool_completed(self, tool_id: str, display_text: str, is_error: bool):
-        _log(f"tool_completed: {tool_id[:20]}...")
+        _log(f"[_on_tool_completed] tool_id={tool_id[:30]}...")
+        _log(f"[_on_tool_completed] display_text='{display_text}', is_error={is_error}")
+        
         elapsed_time = 0.0
         if self._tool_status_panel:
             elapsed_time = self._tool_status_panel.remove_tool(tool_id)
+            _log(f"[_on_tool_completed] elapsed_time={elapsed_time}")
         self._pending_tools.pop(tool_id, None)
 
         widget = ToolResultWidget(
@@ -152,12 +172,10 @@ class MessageList(ScrollableContainer):
             elapsed_time=elapsed_time
         )
 
-        if tool_id in self._tool_placeholders:
-            placeholder = self._tool_placeholders.pop(tool_id)
-            self.mount(widget, before=placeholder)
-            placeholder.remove()
-        else:
-            self.mount(widget)
+        # 直接挂载 ToolResultWidget，不处理 placeholder
+        self._tool_placeholders.pop(tool_id, None)
+        self.mount(widget)
+        _log(f"[_on_tool_completed] mounted ToolResultWidget")
 
         self._scroll_to_end()
 
