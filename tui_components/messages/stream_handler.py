@@ -149,7 +149,7 @@ class MessageStreamHandler:
                         updated = True
                 
                 if updated:
-                    _log(f"Updated tool_call {tool_call_id}: name={tool_name}, args={tool_args}")
+                    # _log(f"Updated tool_call {tool_call_id}: name={tool_name}, args={tool_args}")
                     
                     # 检查是否需要显示（如果之前未显示过）
                     if tool_call_id not in self._processed_tool_ids:
@@ -164,7 +164,7 @@ class MessageStreamHandler:
                             
                             if self.on_tool_started:
                                 self.on_tool_started(tool_call_id, display_name)
-                                _log(f"Displayed tool_call after update: {display_name}")
+                                # _log(f"Displayed tool_call after update: {display_name}")
                             
                             self._processed_tool_ids.add(tool_call_id)
                     else:

@@ -112,7 +112,7 @@ class BotMessageWidget(Static):
             # 如果有内容则显示，否则显示空格保持占位
             display_content = self._thinking_buffer if self._thinking_buffer else " "
             thinking_md.update(display_content)
-            _log(f"_update_thinking_display: updated Markdown with {len(self._thinking_buffer)} chars")
+            # _log(f"_update_thinking_display: updated Markdown with {len(self._thinking_buffer)} chars")
         except Exception as e:
             _log(f"_update_thinking_display: ERROR - {e}")
 

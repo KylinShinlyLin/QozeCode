@@ -126,11 +126,22 @@ class MessageList(ScrollableContainer):
         )
 
     def add_user_message(self, content: str, is_command: bool = False):
-        msg = UserMessage(id=str(uuid.uuid4()), content=content, is_command=is_command)
-        widget = UserMessageWidget(msg)
-        self.mount(widget)
-        self._scroll_to_end()
-        return widget
+        _log(f"add_user_message: content='{content[:50]}...'")
+        try:
+            msg = UserMessage(id=str(uuid.uuid4()), content=content, is_command=is_command)
+            _log("add_user_message: UserMessage created")
+            widget = UserMessageWidget(msg)
+            _log("add_user_message: UserMessageWidget created")
+            self.mount(widget)
+            _log("add_user_message: widget mounted")
+            self._scroll_to_end()
+            _log("add_user_message: scroll to end")
+            return widget
+        except Exception as e:
+            _log(f"add_user_message ERROR: {type(e).__name__}: {e}")
+            import traceback
+            _log(traceback.format_exc())
+            raise
 
     async def stream_agent_response(self, agent_stream):
         _log("stream_agent_response called")
@@ -147,9 +158,9 @@ class MessageList(ScrollableContainer):
         self._scroll_to_end()
 
     def _update_widget(self, widget):
-        thinking_len = len(widget._thinking_buffer) if hasattr(widget, '_thinking_buffer') and widget._thinking_buffer else 0
-        content_len = len(widget._content_buffer) if hasattr(widget, '_content_buffer') and widget._content_buffer else 0
-        _log(f"_update_widget: thinking_len={thinking_len}, content_len={content_len}")
+        # thinking_len = len(widget._thinking_buffer) if hasattr(widget, '_thinking_buffer') and widget._thinking_buffer else 0
+        # content_len = len(widget._content_buffer) if hasattr(widget, '_content_buffer') and widget._content_buffer else 0
+        # _log(f"_update_widget: thinking_len={thinking_len}, content_len={content_len}")
         widget.refresh()
         self._scroll_to_end()
 
