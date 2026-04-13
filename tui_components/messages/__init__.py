@@ -5,6 +5,7 @@ from .bot_widget import BotMessageWidget
 from .tool_widget import ToolMessageWidget
 from .stream_handler import MessageStreamHandler
 from .message_list import MessageList
+from .tool_status_panel import ToolStatusPanel, RunningToolItem
 
 __all__ = [
     # Enums
@@ -12,12 +13,14 @@ __all__ = [
     "ToolStatus",
     # Data classes
     "UserMessage",
-    "BotMessage", 
+    "BotMessage",
     "ToolMessage",
     # Widgets
     "UserMessageWidget",
     "BotMessageWidget",
     "ToolMessageWidget",
+    "ToolStatusPanel",
+    "RunningToolItem",
     # Handlers
     "MessageStreamHandler",
     "MessageList",

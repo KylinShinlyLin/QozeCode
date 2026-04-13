@@ -40,7 +40,7 @@ except Exception:
 
 logging.basicConfig(
     filename=log_file,
-    level=logging.ERROR,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -87,6 +87,7 @@ try:
     from tui_components.request_indicator import RequestIndicator
     from tui_components.status_bar import StatusBar
     from tui_components.messages import MessageList
+    from tui_components.messages.tool_status_panel import ToolStatusPanel
 except ImportError as e:
     print(f"Critical Error: Could not import TUI components: {e}")
     sys.exit(1)
@@ -129,7 +130,12 @@ class Qoze(App):
         yield TopBar()
         with Horizontal(id="main-container"):
             with Vertical(id="chat-area"):
-                yield MessageList(id="message-list", token_callback=self.add_tokens)
+                yield MessageList(
+                    id="message-list",
+                    token_callback=self.add_tokens,
+                    tool_status_panel=None  # 稍后设置
+                )
+                yield ToolStatusPanel(id="tool-status-panel")
             yield Sidebar(id="sidebar", model_name=self.model_name, provider=self.provider)
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
@@ -143,10 +149,14 @@ class Qoze(App):
 
     def on_mount(self):
         self.message_list = self.query_one("#message-list", MessageList)
+        self.tool_status_panel = self.query_one("#tool-status-panel", ToolStatusPanel)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
+        
+        # 连接 tool_status_panel 到 message_list
+        self.message_list._tool_status_panel = self.tool_status_panel
 
         self.print_welcome()
         self.run_worker(self.init_agent_worker(), exclusive=True)
