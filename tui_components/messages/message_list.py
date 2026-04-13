@@ -193,10 +193,16 @@ class MessageList(ScrollableContainer):
 
     def _on_stream_complete(self, total_tokens: int):
         _log(f"stream_complete: tokens={total_tokens}")
+        # 最终刷新确保所有内容都显示
+        if hasattr(self._stream_handler, '_current_bot_message') and self._stream_handler._current_bot_message:
+            self._stream_handler._current_bot_message.refresh()
         self.scroll_end(animate=False)
+        self.refresh()
         if self._token_callback:
             self._token_callback(total_tokens)
         for placeholder in self._tool_placeholders.values():
+            if placeholder is None:
+                continue
             placeholder.remove()
         self._tool_placeholders.clear()
 
