@@ -131,13 +131,13 @@ class MessageList(ScrollableContainer):
         _log(f"add_user_message: content='{content[:50]}...'")
         try:
             msg = UserMessage(id=str(uuid.uuid4()), content=content, is_command=is_command)
-            _log("add_user_message: UserMessage created")
+            # _log("add_user_message: UserMessage created")
             widget = UserMessageWidget(msg)
-            _log("add_user_message: UserMessageWidget created")
+            # _log("add_user_message: UserMessageWidget created")
             self.mount(widget)
-            _log("add_user_message: widget mounted")
+            # _log("add_user_message: widget mounted")
             self._scroll_to_end()
-            _log("add_user_message: scroll to end")
+            # _log("add_user_message: scroll to end")
             return widget
         except Exception as e:
             _log(f"add_user_message ERROR: {type(e).__name__}: {e}")

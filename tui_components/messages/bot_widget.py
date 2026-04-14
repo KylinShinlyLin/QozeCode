@@ -12,6 +12,7 @@ from .types import BotMessage
 # 日志文件路径
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
+
 def _log(msg):
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     log_line = f"[{timestamp}] [BOT_WIDGET] {msg}\n"
@@ -37,7 +38,7 @@ class BotMessageWidget(Static):
         color: #808080;
         text-style: italic;
         margin: 0;
-        padding: 0 0 1 0;
+        padding: 0 0 0 0;
         display: block;
     }
 
@@ -45,7 +46,7 @@ class BotMessageWidget(Static):
         color: #808080;
         text-style: italic;
         margin: 0;
-        padding: 0 0 1 0;
+        padding: 0 0 0 0;
     }
 
     BotMessageWidget > Vertical {
@@ -96,13 +97,13 @@ class BotMessageWidget(Static):
     def _set_thinking(self, thinking: str):
         """更新 thinking 显示"""
         self._thinking_buffer = thinking
-        
+
         _log(f"_set_thinking: len={len(thinking)}, mounted={self._mounted}")
-        
+
         if not self._mounted:
             _log(f"_set_thinking: not mounted yet, skipping DOM update")
             return
-            
+
         self._update_thinking_display()
 
     def _update_thinking_display(self):
