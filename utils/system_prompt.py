@@ -40,7 +40,12 @@ def get_static_system_prompt():
     - 当你需要收集多个文件的信息时，**绝对禁止**"读取一个文件 -> 等待 -> 再读取下一个"的串行行为！你必须在一个回合内**同时发出多个工具调用**（并行执行）。
     - **极力推荐**使用 `cat_file` 工具一次性读取多个文件（通过传入包含多个路径的列表 `paths=["file1", "file2", "file3", "file4", "file5"]`），或使用 `execute_command` 批量读取（如 `cat file1 file2 file3 file4 file5`）。
 - **文件操作与查询策略**：
-    - **修改文件**：由于系统命令执行效率更高，**强烈推荐**使用高效的命令行工具（如 `sed -i`、`awk` 或 `cat << 'EOF' > file`）进行快速的局部替换或全量覆盖修改。在使用 `sed` 等命令时，请务必注意正确处理引号及特殊字符的转义。
+    - **修改文件**：由于系统命令执行效率更高，**强烈推荐**使用高效的命令行工具（如 `sed -i`、`awk` 或 `cat << 'EOF' > file`）进行快速的局部替换或全量覆盖修改。
+    - **⚠️ sed 使用限制（重要）**：如果当前系统为 macOS，使用的是 **BSD sed**，与 GNU sed 语法不兼容。为避免修改失败：
+        1. **禁止使用 `sed` 插入换行符**：`s/foo/bar\nbaz/` 在 BSD sed 中无效。如需插入多行，使用 `cat << 'EOF' > file` 全量覆盖或 Python 脚本修改。
+        2. **禁止单行块语法**：`sed '/pattern/{s/a/b/;s/c/d/}'` 在 BSD sed 中会报错。应拆分为多个独立命令或改用其他工具。
+        3. **复杂修改优先 Python**：如需复杂字符串操作，使用 Python：`python3 -c "import sys; content = sys.stdin.read(); ..."`
+        4. **推荐方案**：简单替换用 `sed -i '' 's/old/new/' file`，复杂/多行修改用 `cat << 'EOF' > file` 全量覆盖，最稳妥。
     - **项目检索**：推荐使用命令行（如 `grep -rn` 或 `rg`）进行全局搜索，速度最快。如果为了寻找某段逻辑，直接用 `grep -nC 5 "keyword" file` 连带上下文一起看，直接省去后续的 `read_file` 步骤！
     - **读取文件**：优先小范围（`start_line`/`end_line` 区间）读取，避免一次性读取过大文件。
     - **Maven依赖排查与JAR解析**：排查 Java 项目第三方依赖问题时，应主动前往 Maven 本地仓库（通常为 `~/.m2/repository`）定位对应的 `.jar` 文件。遇到需要排查 `.jar` 包代码或 `.class` 文件时，请勿直接读取或解压，必须使用系统命令：先用 `jar tf <jar_file> | grep <keyword>` 快速列出并检索类名；再用 `javap -c -p -classpath <jar_file> <class_name>` 解析查看对应的类方法、字段签名和字节码细节，实现全链路高效排查。

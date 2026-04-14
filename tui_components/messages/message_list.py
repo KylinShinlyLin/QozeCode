@@ -65,7 +65,7 @@ class ToolResultWidget(Static):
 
         # 使用 Rich markup 实现图标和文本不同颜色，图标加粗
         if is_error:
-            text = f"[red bold]✗[/] [red]{display_text}{elapsed_str}[/]"
+            text = f"[red bold]✗[/] [#f8769e]{display_text}{elapsed_str}[/]"
         else:
             text = f"[green bold]✓[/] [#7aa2f7]{display_text}{elapsed_str}[/]"
 
@@ -131,13 +131,10 @@ class MessageList(ScrollableContainer):
         _log(f"add_user_message: content='{content[:50]}...'")
         try:
             msg = UserMessage(id=str(uuid.uuid4()), content=content, is_command=is_command)
-            # _log("add_user_message: UserMessage created")
             widget = UserMessageWidget(msg)
-            # _log("add_user_message: UserMessageWidget created")
             self.mount(widget)
-            # _log("add_user_message: widget mounted")
+            self.refresh(layout=True)
             self._scroll_to_end()
-            # _log("add_user_message: scroll to end")
             return widget
         except Exception as e:
             _log(f"add_user_message ERROR: {type(e).__name__}: {e}")
@@ -157,13 +154,13 @@ class MessageList(ScrollableContainer):
     def _add_widget(self, widget):
         _log(f"_add_widget: {type(widget).__name__}")
         self.mount(widget)
+        self.refresh(layout=True)
         self._scroll_to_end()
 
     def _update_widget(self, widget):
-        # thinking_len = len(widget._thinking_buffer) if hasattr(widget, '_thinking_buffer') and widget._thinking_buffer else 0
-        # content_len = len(widget._content_buffer) if hasattr(widget, '_content_buffer') and widget._content_buffer else 0
-        # _log(f"_update_widget: thinking_len={thinking_len}, content_len={content_len}")
-        widget.refresh()
+        # 关键修复：需要 layout=True 来重新计算 auto height
+        widget.refresh(layout=True)
+        self.refresh(layout=True)
         self._scroll_to_end()
 
     def _scroll_to_end(self):
@@ -200,6 +197,7 @@ class MessageList(ScrollableContainer):
         # 直接挂载 ToolResultWidget，不处理 placeholder
         self._tool_placeholders.pop(tool_id, None)
         self.mount(widget)
+        self.refresh(layout=True)
         _log(f"[_on_tool_completed] mounted ToolResultWidget")
 
         self._scroll_to_end()
@@ -207,10 +205,10 @@ class MessageList(ScrollableContainer):
     def _on_stream_complete(self, total_tokens: int):
         _log(f"stream_complete: tokens={total_tokens}")
         # 最终刷新确保所有内容都显示
-        if hasattr(self._stream_handler, '_current_bot_message') and self._stream_handler._current_bot_message:
-            self._stream_handler._current_bot_message.refresh()
+        if hasattr(self._stream_handler, '_current_bot_message') and self._stream_handler.current_bot_message:
+            self._stream_handler.current_bot_message.refresh(layout=True)
         self.scroll_end(animate=False)
-        self.refresh()
+        self.refresh(layout=True)
         if self._token_callback:
             self._token_callback(total_tokens)
         for placeholder in self._tool_placeholders.values():

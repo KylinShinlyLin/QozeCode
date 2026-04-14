@@ -32,7 +32,7 @@ def _log(msg):
 class MessageStreamHandler:
     """流式消息处理器"""
 
-    UPDATE_INTERVAL = 0.05
+    UPDATE_INTERVAL = 0.15
 
     def __init__(self,
                  on_bot_created: Callable,
@@ -47,7 +47,7 @@ class MessageStreamHandler:
         self.on_tool_completed = on_tool_completed
         self.on_stream_complete = on_stream_complete
 
-        self._current_bot_message = None
+        self.current_bot_message = None
         self._active_tools: Dict[str, dict] = {}
         self._processed_tool_ids: Set[str] = set()
         self._last_update_time = 0
@@ -58,7 +58,7 @@ class MessageStreamHandler:
 
     def reset(self):
         """重置状态"""
-        self._current_bot_message = None
+        self.current_bot_message = None
         self._active_tools.clear()
         self._processed_tool_ids.clear()
         self._last_update_time = 0
@@ -84,6 +84,9 @@ class MessageStreamHandler:
                         await self._process_ai_message_chunk(message_chunk, chunk_count)
                     elif isinstance(message_chunk, (LC_ToolMessage,)) or chunk_type in ["ToolMessageChunk", "ToolMessage"]:
                         await self._process_tool_result(message_chunk, chunk_count)
+                    
+                    # 关键：让出事件循环，给 UI 刷新机会
+                    await asyncio.sleep(0)
                 except Exception as e:
                     _log(f"ERROR chunk {chunk_count}: {e}")
                     import traceback
@@ -94,8 +97,13 @@ class MessageStreamHandler:
             _log(traceback.format_exc())
             raise
 
-        if self._pending_update and self._current_bot_message:
-            self._flush_update()
+        if self._pending_update and self.current_bot_message:
+            await self._flush_update()
+
+        # 流式结束，切换到 Markdown 渲染
+        if self.current_bot_message:
+            self.current_bot_message.finalize()
+            await asyncio.sleep(0)
 
         if self.on_stream_complete:
             estimated_tokens = int(len(self._accumulated_content) * 0.3)
@@ -311,39 +319,41 @@ class MessageStreamHandler:
 
     async def _handle_ai_content(self, chunk, thinking: str, content: str):
         """处理 AI 内容（thinking 和 content）"""
-        if self._current_bot_message is None or self._expecting_new_message:
+        if self.current_bot_message is None or self._expecting_new_message:
             msg = BotMessage(
                 id=self._gen_id(),
                 thinking_content="",
                 content="",
                 is_streaming=True
             )
-            self._current_bot_message = BotMessageWidget(msg)
-            self.on_bot_created(self._current_bot_message)
+            self.current_bot_message = BotMessageWidget(msg)
+            self.on_bot_created(self.current_bot_message)
             self._expecting_new_message = False
             self._last_update_time = time.time()
             _log("Created new BotMessageWidget")
 
         if thinking:
-            self._current_bot_message.append_thinking(thinking)
-            self._flush_update()
+            self.current_bot_message.append_thinking(thinking)
+            await self._flush_update()
 
         if content:
-            self._current_bot_message.append_content(content)
+            self.current_bot_message.append_content(content)
             self._accumulated_content += content
 
         current_time = time.time()
         if current_time - self._last_update_time > self.UPDATE_INTERVAL:
-            self._flush_update()
+            await self._flush_update()
         else:
             self._pending_update = True
 
-    def _flush_update(self):
+    async def _flush_update(self):
         """刷新 UI 更新"""
-        if self._current_bot_message:
-            self.on_bot_updated(self._current_bot_message)
+        if self.current_bot_message:
+            self.on_bot_updated(self.current_bot_message)
         self._pending_update = False
         self._last_update_time = time.time()
+        # 让出事件循环，确保 UI 能立即渲染
+        await asyncio.sleep(0)
 
     def _extract_thinking(self, msg) -> str:
         """从消息中提取 thinking/reasoning 内容"""

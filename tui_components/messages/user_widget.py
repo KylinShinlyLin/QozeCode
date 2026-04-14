@@ -32,7 +32,7 @@ UserMessageWidget {
     background: #252526;  /* RGB(45, 45, 48) */
     border-left: thick #007ACC;
     padding: 1 2;
-    margin: 0 0 1 0;
+    margin: 1 0 1 0;
 }
 
 UserMessageWidget > Static {
