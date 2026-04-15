@@ -202,3 +202,29 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
 
     return creds
+
+
+def get_proxy_config() -> Dict[str, Union[str, int, None]]:
+    """
+    获取代理配置
+    Returns:
+        dict: 包含 host 和 port 的字典，如果没有配置则返回 None
+    """
+    cfg, _ = _load_config()
+
+    section = "proxy"
+    if not cfg.has_section(section):
+        return None
+
+    host = cfg.get(section, "host", fallback=None)
+    port = cfg.get(section, "port", fallback=None)
+
+    if not host or not port:
+        return None
+
+    try:
+        port = int(port)
+    except ValueError:
+        return None
+
+    return {"host": host.strip(), "port": port}
