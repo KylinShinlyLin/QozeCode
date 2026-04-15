@@ -221,3 +221,5 @@ class MessageList(ScrollableContainer):
         self.remove_children()
         self._pending_tools.clear()
         self._tool_placeholders.clear()
+        if self._tool_status_panel:
+            self._tool_status_panel.clear_all()

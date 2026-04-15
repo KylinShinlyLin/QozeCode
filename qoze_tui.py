@@ -325,6 +325,8 @@ class Qoze(App):
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
+            if self.tool_status_panel:
+                self.tool_status_panel.clear_all()
             return
         self.exit()
 
@@ -420,6 +422,8 @@ class Qoze(App):
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
+            if self.tool_status_panel:
+                self.tool_status_panel.clear_all()
 
     @on(Input.Submitted)
     def handle_input(self, event: Input.Submitted):
