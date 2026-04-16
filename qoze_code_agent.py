@@ -44,6 +44,7 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
     browser_press_key, browser_send_keys, browser_hotkey, browser_focus
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
+from tools.plan_tools import update_plan_progress
 # from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
@@ -125,6 +126,13 @@ def get_context_info(system_info="", system_release="", system_version="", machi
     available_skills = skill_manager.get_available_skills()
     active_skills_content = skill_manager.get_active_skills_content()
 
+    # 新增：加载 plan 上下文
+    plan_prompt = ""
+    from plan.plan_manager import PlanManager
+    plan_mgr = PlanManager(current_dir)
+    if plan_mgr.has_valid_plan():
+        plan_prompt = plan_mgr.load_plan_context()
+
     # 构建动态上下文（放在 User Message 中，避免影响 System Prompt 缓存）
     dynamic_context = get_dynamic_context(
         system_info=system_info,
@@ -137,7 +145,8 @@ def get_context_info(system_info="", system_release="", system_version="", machi
         directory_tree=directory_tree,
         rules_prompt=rules_prompt,
         available_skills=available_skills,
-        active_skills_content=active_skills_content
+        active_skills_content=active_skills_content,
+        plan_prompt=plan_prompt
     )
 
     return static_prompt, dynamic_context
@@ -187,6 +196,7 @@ base_tools = [
     browser_hotkey,
     browser_focus,
     read_lark_document,
+    update_plan_progress,
 ]
 
 # 初始时不加载浏览器工具

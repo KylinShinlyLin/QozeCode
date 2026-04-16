@@ -41,7 +41,13 @@ class Sidebar(Static):
     def __init__(self, *args, model_name="Unknown", provider, **kwargs):
         self.model_name = model_name
         self.provider = provider
+        self.plan_mode = False
         super().__init__(*args, **kwargs)
+
+    def update_plan_mode(self, enabled: bool):
+        self.plan_mode = enabled
+        # 触发异步刷新
+        asyncio.create_task(self.update_info())
 
     async def on_mount(self):
         # Initial update
@@ -67,6 +73,11 @@ class Sidebar(Static):
         text.append(f"{self.model_name}\n", style="bold cyan")
         text.append(f"模型厂商: ", style="dim white")
         text.append(f"{self.provider.value}\n", style="bold cyan")
+        text.append(f"计划模式: ", style="dim white")
+        if self.plan_mode:
+            text.append(f"[PLAN] 开启\n", style="bold yellow")
+        else:
+            text.append(f"关闭\n", style="dim green")
         text.append(f"当前目录: ", style="dim white")
         text.append(f"\n{os.getcwd()}\n\n", style="bold cyan")
 

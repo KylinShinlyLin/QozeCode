@@ -122,6 +122,10 @@ class Qoze(App):
         self.total_tokens = 0
         self._processing_suggestion = False
 
+        from plan.plan_manager import PlanManager
+        self.plan_mode = False
+        self.plan_manager = PlanManager()
+
         self._last_scroll_time = 0
         self._scroll_throttle_ms = 50
         self._scroll_accumulator = 0
@@ -166,6 +170,7 @@ class Qoze(App):
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
+        self.sidebar = self.query_one("#sidebar", Sidebar)
         
         # 连接 tool_status_panel 到 message_list
         self.message_list._tool_status_panel = self.tool_status_panel
@@ -376,6 +381,27 @@ class Qoze(App):
             self.print_welcome()
             return
 
+        if user_input.lower() == "plan":
+            self.plan_mode = not self.plan_mode
+            self.status_bar.update_plan_mode(self.plan_mode)
+            if hasattr(self, 'sidebar') and self.sidebar:
+                self.sidebar.update_plan_mode(self.plan_mode)
+            return
+
+        if user_input.lower() == "plan status":
+            status = self.plan_manager.get_status_summary()
+            self.message_list.mount(Static(Text(status, style="bold cyan")))
+            return
+
+        if user_input.lower() == "plan clear":
+            self.plan_manager.clear_plan()
+            self.plan_mode = False
+            self.status_bar.update_plan_mode(self.plan_mode)
+            if hasattr(self, 'sidebar') and self.sidebar:
+                self.sidebar.update_plan_mode(False)
+            self.message_list.mount(Static(Text("已清空当前计划", style="bold yellow")))
+            return
+
         if skills_tui_handler and user_input.lower().startswith('skills'):
             success, message = skills_tui_handler.handle_skills_command(user_input.split())
             self.message_list.mount(Markdown(f"**Skills:** {'✓' if success else '✗'} {message}"))
@@ -383,6 +409,22 @@ class Qoze(App):
 
         is_init_command = user_input.lower() in ["init"]
         display_input = user_input
+
+        # Plan 模式：判断是生成、重新生成还是正常执行
+        if self.plan_mode and not is_init_command:
+            has_plan = self.plan_manager.has_valid_plan()
+            # 检测是否是调整/重新生成请求（自然语言或已有计划时的 /plan edit）
+            regen_keywords = ["重新生成计划", "调整计划", "修改计划", "regenerate plan", "edit plan", "revise plan"]
+            is_regen = any(kw in user_input.lower() for kw in regen_keywords)
+
+            if not has_plan or is_regen:
+                prompt = user_input
+                if is_regen and has_plan:
+                    self.processing_worker = self.run_worker(self._regenerate_plan(prompt), exclusive=True)
+                    return
+                self.processing_worker = self.run_worker(self._generate_plan(prompt), exclusive=True)
+                return
+
         actual_input = init_prompt if is_init_command else user_input
 
         # 隐藏欢迎区域，当有用户输入时
@@ -597,6 +639,75 @@ class Qoze(App):
         self.input_box.focus()
         self.status_bar.update_state("Idle")
 
+
+    async def _generate_plan(self, user_request: str):
+        """生成新计划"""
+        self.hide_welcome()
+        self.request_indicator.start_request()
+        self.query_one("#input-line").add_class("hidden")
+        self.status_bar.update_state("Generating plan...")
+        if self.tool_status_panel:
+            self.tool_status_panel.add_tool("plan_generation", "Generating plan...")
+        self.message_list.add_user_message(user_request, is_command=False)
+
+        try:
+            from langchain_core.messages import HumanMessage
+            from textual.widgets import Markdown
+            gen_prompt = self.plan_manager.build_generation_prompt(user_request)
+            response = await qoze_code_agent.llm.ainvoke([HumanMessage(content=gen_prompt)])
+            response_text = response.content if hasattr(response, "content") else str(response)
+
+            success = self.plan_manager.save_plan_from_response(response_text)
+            if success:
+                self.message_list.mount(Static(Text("✓ 计划已生成并保存到 .qoze/plan/", style="bold green")))
+            else:
+                self.message_list.mount(Static(Text("✗ 计划解析失败", style="bold red")))
+            self.message_list.mount(Markdown(response_text))
+        except Exception as e:
+            self.message_list.mount(Static(Text(f"生成计划时出错: {e}", style="bold red")))
+        finally:
+            if self.tool_status_panel:
+                self.tool_status_panel.remove_tool("plan_generation")
+            self.request_indicator.stop_request()
+            self.status_bar.update_state("Idle")
+            self.query_one("#input-line").remove_class("hidden")
+            self.input_box.focus()
+            self.processing_worker = None
+
+    async def _regenerate_plan(self, edit_desc: str):
+        """基于现有计划重新生成"""
+        self.hide_welcome()
+        self.request_indicator.start_request()
+        self.query_one("#input-line").add_class("hidden")
+        self.status_bar.update_state("Regenerating plan...")
+        if self.tool_status_panel:
+            self.tool_status_panel.add_tool("plan_generation", "Regenerating plan...")
+        self.message_list.add_user_message(edit_desc, is_command=False)
+
+        try:
+            from langchain_core.messages import HumanMessage
+            from textual.widgets import Markdown
+            current_plan = self.plan_manager.load_plan_context()
+            gen_prompt = self.plan_manager.build_regeneration_prompt(edit_desc, current_plan)
+            response = await qoze_code_agent.llm.ainvoke([HumanMessage(content=gen_prompt)])
+            response_text = response.content if hasattr(response, "content") else str(response)
+
+            success = self.plan_manager.save_plan_from_response(response_text)
+            if success:
+                self.message_list.mount(Static(Text("✓ 计划已更新并保存到 .qoze/plan/", style="bold green")))
+            else:
+                self.message_list.mount(Static(Text("✗ 计划解析失败，原始响应如下：", style="bold red")))
+            self.message_list.mount(Markdown(response_text))
+        except Exception as e:
+            self.message_list.mount(Static(Text(f"更新计划时出错: {e}", style="bold red")))
+        finally:
+            if self.tool_status_panel:
+                self.tool_status_panel.remove_tool("plan_generation")
+            self.request_indicator.stop_request()
+            self.status_bar.update_state("Idle")
+            self.query_one("#input-line").remove_class("hidden")
+            self.input_box.focus()
+            self.processing_worker = None
 
 def main():
     import shared_console

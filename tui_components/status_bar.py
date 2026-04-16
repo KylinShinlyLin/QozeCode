@@ -9,9 +9,14 @@ class StatusBar(Static):
         self.model_name = model_name
         self.state_desc = "Idle"
         self.token_count = 0
+        self.plan_mode = False
 
     def update_state(self, state):
         self.state_desc = state
+        self.refresh()
+
+    def update_plan_mode(self, enabled: bool):
+        self.plan_mode = enabled
         self.refresh()
 
     def update_token_count(self, count):
@@ -35,11 +40,12 @@ class StatusBar(Static):
             token_str = str(count)
 
         # 构建左侧文本
+        mode_tag = "[PLAN] " if self.plan_mode else ""
         shortcuts = "输入 line | Ctrl+Q:语音输入 | Ctrl+C:终止 | Ctrl+D:提交"
         if self.state_desc == "Idle":
-            left = f" {shortcuts}"
+            left = f" {mode_tag}{shortcuts}"
         else:
-            left = f" {self.state_desc} | {shortcuts}"
+            left = f" {mode_tag}{self.state_desc} | {shortcuts}"
 
         # 右侧 token 计数 - 使用固定的标签
         right = f"Context: {token_str} tokens"
