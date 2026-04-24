@@ -1,6 +1,7 @@
 # tui_components/messages/bot_widget.py
 from textual.app import ComposeResult
-from textual.widgets import Static, Markdown
+from textual.widgets import Static
+from .auto_copy_widgets import AutoCopyStatic, AutoCopyMarkdown
 from textual.reactive import reactive
 from textual.containers import Vertical
 import sys
@@ -79,11 +80,11 @@ class BotMessageWidget(Static):
     def compose(self) -> ComposeResult:
         _log(f"compose: thinking='{self._thinking_buffer[:50] if self._thinking_buffer else 'empty'}'")
         with Vertical():
-            yield Static(self._thinking_buffer or "", classes="thinking", id="thinking-static")
+            yield AutoCopyStatic(self._thinking_buffer or "", classes="thinking", id="thinking-static")
             # 流式期间显示 Static，结束后隐藏
-            yield Static(self._content_buffer or "", id="content-static")
+            yield AutoCopyStatic(self._content_buffer or "", id="content-static")
             # Markdown 初始隐藏，流式结束后显示
-            yield Markdown(self._content_buffer or "", id="content-md", classes="hidden")
+            yield AutoCopyMarkdown(self._content_buffer or "", id="content-md", classes="hidden")
 
     def on_mount(self) -> None:
         self._mounted = True
@@ -136,7 +137,7 @@ class BotMessageWidget(Static):
             return
         try:
             content_static = self.query_one("#content-static", Static)
-            content_md = self.query_one("#content-md", Markdown)
+            content_md = self.query_one("#content-md", AutoCopyMarkdown)
             
             # 隐藏 Static，显示 Markdown
             content_static.add_class("hidden")

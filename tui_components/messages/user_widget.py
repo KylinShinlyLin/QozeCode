@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from textual.app import ComposeResult
 from textual.widgets import Static
+from .auto_copy_widgets import AutoCopyStatic
 from textual.reactive import reactive
 
 from .types import UserMessage
@@ -51,7 +52,7 @@ UserMessageWidget > Static {
 
     def compose(self) -> ComposeResult:
         _log(f"compose: content='{self.content[:30] if self.content else 'empty'}...'")
-        yield Static(self.content)
+        yield AutoCopyStatic(self.content)
 
     def watch_content(self, new_content: str):
         try:

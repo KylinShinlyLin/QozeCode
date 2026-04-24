@@ -1,5 +1,6 @@
 # tui_components/messages/tool_widget.py
 from textual.widgets import Static
+from .auto_copy_widgets import AutoCopyStatic
 from textual.reactive import reactive
 from textual.app import ComposeResult
 from datetime import datetime
@@ -64,7 +65,7 @@ class ToolMessageWidget(Static):
     
     def compose(self) -> ComposeResult:
         """组件组成 - 只包含一个 Static"""
-        yield Static(self._render_text())
+        yield AutoCopyStatic(self._render_text())
     
     def _render_text(self) -> str:
         """渲染当前状态的文本"""

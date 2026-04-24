@@ -149,7 +149,19 @@ class MessageList(ScrollableContainer):
         except Exception as e:
             _log(f"Error: {e}")
             import traceback
-            _log(traceback.format_exc())
+            tb = traceback.format_exc()
+            _log(tb)
+            # 显示错误到 UI，帮助快速定位问题
+            error_msg = str(e)
+            # 截取关键错误信息，避免过长刷屏
+            if len(error_msg) > 600:
+                error_msg = error_msg[:600] + "..."
+            # 压缩空白字符，避免 Static 渲染异常
+            error_msg_short = " ".join(error_msg.split())[:600]
+            from textual.widgets import Static
+            self.mount(Static("❌ 请求失败: " + error_msg_short))
+            self.refresh(layout=True)
+            self._scroll_to_end()
 
     def _add_widget(self, widget):
         _log(f"_add_widget: {type(widget).__name__}")

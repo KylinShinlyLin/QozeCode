@@ -276,13 +276,56 @@ async def llm_call(state: dict):
     else:
         messages.append(HumanMessage(content=dynamic_context))
 
-    response = await llm_with_tools.ainvoke(messages)
+    try:
+        response = await llm_with_tools.ainvoke(messages)
+        return {
+            "messages": [response],
+            "llm_calls": state.get('llm_calls', 0) + 1,
+            "ask_user_question": None  # 重置 ask_user_question
+        }
+    except Exception as e:
+        import traceback as tb_module
+        err_detail = str(e)
+        # 对常见错误给出更友好的提示
+        if "unknown variant" in err_detail and "image_url" in err_detail:
+            friendly_msg = (
+                "❌ **API 请求失败**\n\n"
+                "当前模型不支持图片输入。DeepSeek 的 API 不接受 `image_url` 类型的多模态消息。\n\n"
+                "**解决方案**：\n"
+                "- 移除 `.qoze/image/` 目录中的图片文件后重试\n"
+                "- 或者使用支持多模态的模型（如 GPT-4o、GLM-5、Claude 等）\n\n"
+                f"原始错误: {err_detail}"
+            )
+        elif "BadRequestError" in type(e).__name__ or "400" in err_detail:
+            friendly_msg = (
+                f"❌ **API 请求失败 (400)**\n\n"
+                f"{err_detail}"
+            )
+        elif "timeout" in err_detail.lower() or "timed out" in err_detail.lower():
+            friendly_msg = (
+                f"❌ **API 请求超时**\n\n"
+                f"模型响应超时，请稍后重试。\n{err_detail}"
+            )
+        else:
+            friendly_msg = (
+                f"❌ **API 请求失败**\n\n"
+                f"{type(e).__name__}: {err_detail}"
+            )
 
-    return {
-        "messages": [response],
-        "llm_calls": state.get('llm_calls', 0) + 1,
-        "ask_user_question": None  # 重置 ask_user_question
-    }
+        # 打印到 stderr 方便排查
+        import sys as _sys
+        print(f"\n{'='*60}", file=_sys.stderr)
+        print(f"[LLM_CALL ERROR] {type(e).__name__}: {err_detail}", file=_sys.stderr)
+        tb_module.print_exc(file=_sys.stderr)
+        print(f"{'='*60}\n", file=_sys.stderr)
+
+        from langchain_core.messages import AIMessage
+        error_response = AIMessage(content=friendly_msg)
+        return {
+            "messages": [error_response],
+            "llm_calls": state.get('llm_calls', 0) + 1,
+            "ask_user_question": None
+        }
 
 
 # Step 3: Define tool node
