@@ -34,7 +34,7 @@ import sys
 import os
 
 from tools.execute_command_tool import execute_command
-from tools.file_tools import read_file, list_files, search_in_files, cat_file, list_dir, file_stats, grep_file, \
+from tools.file_tools import read_file, list_files, search_in_files, cat_file, list_dir, grep_file, \
     find_files
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
