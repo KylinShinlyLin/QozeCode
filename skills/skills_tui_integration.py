@@ -122,9 +122,9 @@ class SkillsTUIHandler:
         try:
             skill = self.skill_manager.activate_skill(skill_name)
             if skill:
-                return True, f"[dim bold green] ✓ 已激活技能: {skill_name}[/]"
+                return True, f"已激活技能: {skill_name}"
             else:
-                return False, f"[dim bold red] ✗ 激活技能失败: {skill_name}[/]"
+                return False, f"激活技能失败: {skill_name}"
         except Exception as e:
             return False, f"❌ 启用技能失败: {skill_name} - {str(e)}"
             return False, f"启用技能失败: {str(e)}"
@@ -137,7 +137,7 @@ class SkillsTUIHandler:
         skill_name = args[0]
         try:
             self.skill_manager.deactivate_skill(skill_name)
-            return True, f"[dim bold red] 已停用技能: {skill_name} [/]"
+            return True, f"已停用技能: {skill_name}"
         except Exception as e:
             return False, f"❌ 禁用技能失败: {skill_name} - {str(e)}"
             return False, f"禁用技能失败: {str(e)}"

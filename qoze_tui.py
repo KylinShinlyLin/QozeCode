@@ -13,6 +13,7 @@ from tui_components import tui_constants
 
 try:
     from utils.audio_transcriber import AudioTranscriber
+
     AUDIO_TRANSCRIBER_IMPORT_ERROR = None
 except ImportError as e:
     AudioTranscriber = None
@@ -49,6 +50,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".qoze"))
 
 try:
     from skills.skills_tui_integration import SkillsTUIHandler
+
     skills_tui_handler = SkillsTUIHandler()
 except ImportError:
     skills_tui_handler = None
@@ -66,6 +68,7 @@ sys.path.append(os.getcwd())
 try:
     sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
     import qoze_theme
+
     qoze_theme.apply_theme()
 except ImportError:
     pass
@@ -138,7 +141,7 @@ class Qoze(App):
                 with Vertical(id="welcome-panel"):
                     yield Static(tui_constants.QOZE_CODE_ART, id="welcome-art")
                     yield Static(self._get_tips_text(), id="welcome-tips")
-                
+
                 yield MessageList(
                     id="message-list",
                     token_callback=self.add_tokens,
@@ -171,7 +174,7 @@ class Qoze(App):
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
         self.sidebar = self.query_one("#sidebar", Sidebar)
-        
+
         # 连接 tool_status_panel 到 message_list
         self.message_list._tool_status_panel = self.tool_status_panel
 
@@ -350,9 +353,9 @@ class Qoze(App):
             self.message_list.mount(Static(f"Initialization Failed: {e}"))
 
     async def process_user_input(self, user_input):
-        if not user_input.strip(): 
+        if not user_input.strip():
             return
-        if user_input.startswith("/"): 
+        if user_input.startswith("/"):
             user_input = user_input[1:]
 
         if user_input.lower() == "audio":
@@ -404,7 +407,14 @@ class Qoze(App):
 
         if skills_tui_handler and user_input.lower().startswith('skills'):
             success, message = skills_tui_handler.handle_skills_command(user_input.split())
-            self.message_list.mount(Markdown(f"**Skills:** {'✓' if success else '✗'} {message}"))
+            if not success:
+                style = "bold red"
+            elif "disable" in user_input.lower():
+                style = "bold red"
+            else:
+                style = "bold green"
+            icon = "✗" if "disable" in user_input.lower() else ("✓" if success else "✗")
+            self.message_list.mount(Static(Text(f"Skills: {icon} {message}", style=style)))
             return
 
         is_init_command = user_input.lower() in ["init"]
@@ -469,7 +479,7 @@ class Qoze(App):
 
     @on(Input.Submitted)
     def handle_input(self, event: Input.Submitted):
-        if not self.agent_ready: 
+        if not self.agent_ready:
             return
 
         suggestions = self.query_one("#command-suggestions", OptionList)
@@ -601,7 +611,7 @@ class Qoze(App):
             event.prevent_default()
 
     async def action_submit_multiline(self):
-        if not self.multiline_mode: 
+        if not self.multiline_mode:
             return
 
         if self.audio_mode:
@@ -630,7 +640,7 @@ class Qoze(App):
             self.processing_worker = self.run_worker(self.process_user_input(user_input), exclusive=True)
 
     def action_cancel_multiline(self):
-        if not self.multiline_mode: 
+        if not self.multiline_mode:
             return
         self.multiline_mode = False
         self.multi_line_input.add_class("hidden")
@@ -638,7 +648,6 @@ class Qoze(App):
         self.query_one("#input-line").remove_class("hidden")
         self.input_box.focus()
         self.status_bar.update_state("Idle")
-
 
     async def _generate_plan(self, user_request: str):
         """生成新计划"""
@@ -708,6 +717,7 @@ class Qoze(App):
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
+
 
 def main():
     import shared_console
