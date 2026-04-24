@@ -312,44 +312,44 @@ def find_files(
         return f"Error finding files: {str(e)}"
 
 
-@tool
-def file_stats(path: str) -> str:
-    """Return wc-like stats for a text file.
-
-    Args:
-        path: File path (relative to cwd or absolute).
-
-    Returns:
-        Line, word, and byte counts or an error message.
-    """
-    try:
-        target = _resolve_under_cwd(path)
-        if not target.exists():
-            return f"Error: File not found: {path}"
-        if not target.is_file():
-            return f"Error: Path is not a file: {path}"
-
-        # Basic text/binary detection: treat files with NUL bytes as binary
-        with target.open("rb") as f:
-            sample = f.read(4096)
-            if b"\x00" in sample:
-                return "Error: Binary file detected. file_stats only supports text files."
-
-        lines = 0
-        words = 0
-        bytes_count = 0
-
-        with target.open("rb") as f:
-            for chunk in iter(lambda: f.read(64 * 1024), b""):
-                bytes_count += len(chunk)
-                # Decode per chunk for word/line counts
-                text = chunk.decode("utf-8", errors="replace")
-                lines += text.count("\n")
-                words += len(text.split())
-
-        return f"[FILE_STATS] {target}\nlines: {lines}\nwords: {words}\nbytes: {bytes_count}"
-    except Exception as e:
-        return f"Error getting file stats: {str(e)}"
+# @tool
+# def file_stats(path: str) -> str:
+#     """Return wc-like stats for a text file.
+#
+#     Args:
+#         path: File path (relative to cwd or absolute).
+#
+#     Returns:
+#         Line, word, and byte counts or an error message.
+#     """
+#     try:
+#         target = _resolve_under_cwd(path)
+#         if not target.exists():
+#             return f"Error: File not found: {path}"
+#         if not target.is_file():
+#             return f"Error: Path is not a file: {path}"
+#
+#         # Basic text/binary detection: treat files with NUL bytes as binary
+#         with target.open("rb") as f:
+#             sample = f.read(4096)
+#             if b"\x00" in sample:
+#                 return "Error: Binary file detected. file_stats only supports text files."
+#
+#         lines = 0
+#         words = 0
+#         bytes_count = 0
+#
+#         with target.open("rb") as f:
+#             for chunk in iter(lambda: f.read(64 * 1024), b""):
+#                 bytes_count += len(chunk)
+#                 # Decode per chunk for word/line counts
+#                 text = chunk.decode("utf-8", errors="replace")
+#                 lines += text.count("\n")
+#                 words += len(text.split())
+#
+#         return f"[FILE_STATS] {target}\nlines: {lines}\nwords: {words}\nbytes: {bytes_count}"
+#     except Exception as e:
+#         return f"Error getting file stats: {str(e)}"
 
 
 @tool
