@@ -50,3 +50,6 @@ app_secret=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 [Qwen3]
 api_key=
 base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+[jina]
+api_key=

@@ -113,7 +113,11 @@ async def read_url(url: str) -> str:
 
     async def _fetch_with_jina(client: httpx.AsyncClient) -> str:
         api_url = f"https://r.jina.ai/{url}"
-        response = await client.get(api_url, headers=headers, follow_redirects=True)
+        jina_headers = dict(headers)
+        jina_key = config_manager.get_jina_key()
+        if jina_key:
+            jina_headers["Authorization"] = f"Bearer {jina_key}"
+        response = await client.get(api_url, headers=jina_headers, follow_redirects=True)
         if response.status_code == 200:
             return response.text
         raise RuntimeError(f"Jina Reader API 返回错误: {response.status_code}")
@@ -169,4 +173,3 @@ async def read_url(url: str) -> str:
         error_msg = f"❌ 网页解析失败: {str(e)}"
         print(error_msg)
         return error_msg
-

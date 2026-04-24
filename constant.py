@@ -40,4 +40,7 @@ api_key=
 
 [Soniox]
 api_key=
+
+[jina]
+api_key=
 """

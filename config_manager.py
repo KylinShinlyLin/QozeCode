@@ -52,6 +52,23 @@ def get_soniox_key() -> str:
     return soniox_key.strip("\"'")
 
 
+def get_jina_key() -> str:
+    """
+    获取 Jina AI API Key
+    """
+    cfg, _ = _load_config()
+
+    section = "jina"
+    if not cfg.has_section(section):
+        return None
+
+    jina_key = cfg.get(section, "api_key", fallback=None)
+    if not jina_key:
+        return None
+
+    return jina_key.strip("\"'")
+
+
 def _ensure_dir(path: str):
     try:
         os.makedirs(path, exist_ok=True)
