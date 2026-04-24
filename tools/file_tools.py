@@ -502,25 +502,25 @@ def search_in_files(
         return f"Error searching files: {str(e)}"
 
 
-@tool
-def write_file(path: str, content: str) -> str:
-    """Create a new file or completely overwrite an existing file with new content.
-
-    Args:
-        path: File path (relative to cwd or absolute).
-        content: The complete content to write to the file.
-
-    Returns:
-        Success message or error.
-    """
-    try:
-        target = _resolve_under_cwd(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("w", encoding="utf-8") as f:
-            f.write(content)
-        return f"[WRITE_FILE] Successfully wrote {len(content)} characters to {target}"
-    except Exception as e:
-        return f"Error writing file: {str(e)}"
+# @tool
+# def write_file(path: str, content: str) -> str:
+#     """Create a new file or completely overwrite an existing file with new content.
+#
+#     Args:
+#         path: File path (relative to cwd or absolute).
+#         content: The complete content to write to the file.
+#
+#     Returns:
+#         Success message or error.
+#     """
+#     try:
+#         target = _resolve_under_cwd(path)
+#         target.parent.mkdir(parents=True, exist_ok=True)
+#         with target.open("w", encoding="utf-8") as f:
+#             f.write(content)
+#         return f"[WRITE_FILE] Successfully wrote {len(content)} characters to {target}"
+#     except Exception as e:
+#         return f"Error writing file: {str(e)}"
 
 
 @tool
