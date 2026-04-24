@@ -11,7 +11,7 @@ class TopBar(Static):
     def update_clock(self):
         time_str = datetime.now().strftime("%H:%M:%S")
         left = Text(" QozeCode ", style="bold white on #d75f00")
-        left.append(" v0.3.5 ", style="bold white on #005faf")
+        left.append(" v0.3.8 ", style="bold white on #005faf")
         right = Text(f" {time_str} ", style="bold white on #333333")
         total_width = self.content_size.width or 80
         spacer_width = max(0, total_width - len(left) - len(right))

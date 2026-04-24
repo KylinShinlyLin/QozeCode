@@ -184,6 +184,8 @@ class MessageStreamHandler:
                         old_display = existing.get("display_name", "")
                         if new_display != old_display:
                             existing["display_name"] = new_display
+                            if self.on_tool_started:
+                                self.on_tool_started(tool_call_id, new_display)
                             # _log(f"Updated display_name: {old_display} -> {new_display}")
             else:
                 # 新 tool_call，注册
