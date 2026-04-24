@@ -69,6 +69,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gemini-3-flash     (think)     vertex-ai",
         "kimi-k2.5                      MoonShot",
         "kimi-for-coding                MoonShot",
+        "deepseek-v4-pro    (think)     DeepSeek",
+        "deepseek-v4-flash              DeepSeek",
         "qwen3.6-plus       (think)     Alibaba Cloud",
         "glm-5                          智普",
         "glm-5v-turbo                   智普",
@@ -76,8 +78,6 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         # "gpt-5.2                        LiteLLM",
         # "gpt-5.2-chat-latest            LiteLLM",
         # "Grok 4.1 Fast      (think)     XAI",
-        "deepseek-reasoner  (think)     DeepSeek",
-        "deepseek-chat                  DeepSeek",
         # "gpt-5.2                        OpenAI",
         "[退出程序]"
     ]
@@ -152,9 +152,9 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.KIMI_FOR_CODING
         elif "kimi-k2.5" in selected:
             model_type = ModelType.KIMI_K2_5
-        elif "deepseek-reasoner" in selected:
+        elif "deepseek-v4-pro" in selected:
             model_type = ModelType.DEEPSEEK_REASONER
-        elif "deepseek-chat" in selected:
+        elif "deepseek-v4-flash" in selected:
             model_type = ModelType.DEEPSEEK_CHAT
         elif "kimi-2.5" in selected:
             model_type = ModelType.KIMI_2_5

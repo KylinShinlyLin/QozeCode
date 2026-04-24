@@ -157,9 +157,6 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
     patch_langchain_openai_request_payload()
 
     # 1. DeepSeek Patch
-    if provider == ModelProvider.DEEPSEEK:
-        patch_langchain_deepseek()
-
     if provider == ModelProvider.XAI:
         from langchain_xai import ChatXAI
         creds = ensure_model_credentials("Grok-4.1-Fast")
@@ -242,15 +239,16 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
 
     elif provider == ModelProvider.DEEPSEEK:
         try:
-            from langchain_deepseek import ChatDeepSeek
+            from langchain_openai import ChatOpenAI
             creds = ensure_model_credentials(model_type.value)
-            llm = ChatDeepSeek(
-                model=model_type.value,  # deepseek-chat or deepseek-reasoner
-                api_key=creds["api_key"]
+            llm = ChatOpenAI(
+                model=model_type.value,
+                api_key=creds["api_key"],
+                base_url="https://api.deepseek.com"
             )
             return llm
         except ImportError:
-            print("❌ 缺少 langchain_deepseek 依赖，请安装: pip install langchain-deepseek")
+            print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
             raise
 
     elif provider == ModelProvider.ZHIPU:
