@@ -23,6 +23,7 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 from rich.align import Align
+from tui_components.pixel_logo import render_pixel_text
 from textual.app import App, ComposeResult, on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -139,7 +140,7 @@ class Qoze(App):
             with Vertical(id="chat-area"):
                 # 欢迎区域 - 包含 ASCII Art 和 Tips
                 with Vertical(id="welcome-panel"):
-                    yield Static(tui_constants.QOZE_CODE_ART, id="welcome-art")
+                    yield Static(render_pixel_text("QOZE CODE", start_color="#7aa2f7", end_color="#f093c6", gap=1), id="welcome-art")
                     yield Static(self._get_tips_text(), id="welcome-tips")
 
                 yield MessageList(

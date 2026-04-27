@@ -22,8 +22,6 @@ CSS = """
         width: 100%;
         height: auto;
         content-align: center middle;
-        color: #7aa2f7;
-        text-style: bold;
     }
 
     #welcome-tips {

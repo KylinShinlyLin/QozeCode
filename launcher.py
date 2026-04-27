@@ -37,18 +37,17 @@ except ImportError as e:
 
 
 def print_banner():
-    """打印ASCII艺术风格的启动横幅"""
-    ascii_art = """
-██████╗  ██████╗ ███████╗███████╗     ██████╗ ██████╗ ██████╗ ███████╗
-██╔═══██╗██╔═══██╗╚══███╔╝██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝
-██║   ██║██║   ██║  ███╔╝ █████╗      ██║     ██║   ██║██║  ██║█████╗
-██║▄▄ ██║██║   ██║ ███╔╝  ██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝
-╚██████╔╝╚██████╔╝███████╗███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗
- ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
-"""
+    """打印像素块艺术字启动横幅"""
+    from tui_components.pixel_logo import render_pixel_text
+
+    art = render_pixel_text(
+        "QOZE CODE",
+        start_color="#7aa2f7",
+        end_color="#f093c6",
+        gap=1,
+    )
     subtitle = Text("使用 ↑↓ 选择，回车确认", style="dim")
-    colored_art = Text(ascii_art, style="bold bright_cyan")
-    content = Align.center(colored_art + "\n" + subtitle)
+    content = Align.center(art + Text("\n") + subtitle)
     # 使用 Padding 代替 Panel 去掉边框
     console.print(Padding(content, (1, 2)))
     console.print()
