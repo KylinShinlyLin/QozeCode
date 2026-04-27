@@ -451,12 +451,14 @@ def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
     """
     估算消息的 token 数量
     优先使用 tiktoken 进行精确计算，如果失败则使用字符估算
+    计算范围包括：content、tool_calls、thinking/reasoning_content
     """
     total_tokens = 0
 
     # 尝试使用 tiktoken 进行精确计算
     try:
         import tiktoken
+        import json
 
         # 尝试获取对应模型的编码器
         try:
@@ -470,23 +472,52 @@ def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
                 raise ImportError("tiktoken initialization failed")
 
         for msg in messages:
+            msg_tokens = 0
+
+            # 1. 计算 content
             if hasattr(msg, 'content'):
                 content = msg.content
-
-                # 计算消息内容的 token
                 if isinstance(content, str):
-                    tokens = encoding.encode(content)
-                    total_tokens += len(tokens)
+                    msg_tokens += len(encoding.encode(content))
                 elif isinstance(content, list):
                     # 多模态消息，计算文本部分
                     for item in content:
-                        if isinstance(item, dict) and item.get('type') == 'text':
-                            text = item.get('text', '')
-                            tokens = encoding.encode(text)
-                            total_tokens += len(tokens)
+                        if isinstance(item, dict):
+                            if item.get('type') == 'text':
+                                text = item.get('text', '')
+                                msg_tokens += len(encoding.encode(text))
+                            elif item.get('type') == 'image_url':
+                                # 图片粗略估算 (gpt-4o 等模型)
+                                msg_tokens += 1000
 
-                # 每条消息有固定的开销（角色标记等）
-                total_tokens += 4
+            # 2. 计算 tool_calls (AIMessage 的工具调用参数)
+            tool_calls = getattr(msg, 'tool_calls', None)
+            if tool_calls:
+                for tc in tool_calls:
+                    tc_text = json.dumps(tc, ensure_ascii=False)
+                    msg_tokens += len(encoding.encode(tc_text))
+
+            # 3. 计算 thinking / reasoning_content
+            reasoning = ""
+            if hasattr(msg, 'additional_kwargs') and msg.additional_kwargs:
+                for key in ['reasoning_content', 'thinking', 'thought', 'reasoning']:
+                    if key in msg.additional_kwargs:
+                        val = msg.additional_kwargs[key]
+                        if isinstance(val, str):
+                            reasoning += val
+                        elif isinstance(val, dict):
+                            reasoning += val.get('text', '')
+            if hasattr(msg, 'reasoning_content') and msg.reasoning_content:
+                if isinstance(msg.reasoning_content, str):
+                    reasoning += msg.reasoning_content
+            if reasoning:
+                msg_tokens += len(encoding.encode(reasoning))
+
+            # 4. 每条消息有固定的开销（角色标记等）
+            if msg_tokens > 0 or tool_calls:
+                msg_tokens += 4
+
+            total_tokens += msg_tokens
 
         # 每次回复有固定的开销
         total_tokens += 3
@@ -509,8 +540,29 @@ def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
                     if isinstance(item, dict) and item.get('type') == 'text':
                         total_chars += len(item.get('text', ''))
 
-    # 粗略估算：平均每个字符约 0.3 token
-    return int(total_chars * 0.3)
+        # tool_calls fallback 估算
+        tool_calls = getattr(msg, 'tool_calls', None)
+        if tool_calls:
+            for tc in tool_calls:
+                total_chars += len(json.dumps(tc, ensure_ascii=False))
+
+        # thinking fallback 估算
+        reasoning = ""
+        if hasattr(msg, 'additional_kwargs') and msg.additional_kwargs:
+            for key in ['reasoning_content', 'thinking', 'thought', 'reasoning']:
+                if key in msg.additional_kwargs:
+                    val = msg.additional_kwargs[key]
+                    if isinstance(val, str):
+                        reasoning += val
+                    elif isinstance(val, dict):
+                        reasoning += val.get('text', '')
+        if hasattr(msg, 'reasoning_content') and msg.reasoning_content:
+            if isinstance(msg.reasoning_content, str):
+                reasoning += msg.reasoning_content
+        total_chars += len(reasoning)
+
+    # 粗略估算：平均每个字符约 0.4 token（混合中英文）
+    return int(total_chars * 0.4)
 
 
 def create_message_with_images(text_content: str, image_folder: str = ".qoze/image") -> HumanMessage:

@@ -109,9 +109,10 @@ class MessageList(ScrollableContainer):
     }
     """
 
-    def __init__(self, token_callback=None, tool_status_panel=None, **kwargs):
+    def __init__(self, token_callback=None, token_progress_callback=None, tool_status_panel=None, **kwargs):
         super().__init__(**kwargs)
         self._token_callback = token_callback
+        self._token_progress_callback = token_progress_callback
         self._tool_status_panel = tool_status_panel
         self._pending_tools: dict = {}
         self._tool_placeholders: dict = {}
@@ -124,7 +125,8 @@ class MessageList(ScrollableContainer):
             on_bot_updated=self._update_widget,
             on_tool_started=self._on_tool_started,
             on_tool_completed=self._on_tool_completed,
-            on_stream_complete=self._on_stream_complete
+            on_stream_complete=self._on_stream_complete,
+            on_stream_progress=self._on_stream_progress
         )
 
     def add_user_message(self, content: str, is_command: bool = False):
@@ -213,6 +215,11 @@ class MessageList(ScrollableContainer):
         _log(f"[_on_tool_completed] mounted ToolResultWidget")
 
         self._scroll_to_end()
+
+    def _on_stream_progress(self, progress_tokens: int):
+        """流式输出期间的实时 token 进度回调"""
+        if self._token_progress_callback:
+            self._token_progress_callback(progress_tokens)
 
     def _on_stream_complete(self, total_tokens: int):
         _log(f"stream_complete: tokens={total_tokens}")

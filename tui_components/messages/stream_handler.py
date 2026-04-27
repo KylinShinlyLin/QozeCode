@@ -33,19 +33,22 @@ class MessageStreamHandler:
     """流式消息处理器"""
 
     UPDATE_INTERVAL = 0.15
+    TOKEN_UPDATE_INTERVAL = 1.2  # token 计算最小间隔（秒），避免过于频繁影响渲染
 
     def __init__(self,
                  on_bot_created: Callable,
                  on_bot_updated: Callable,
                  on_tool_started: Optional[Callable[[str, str], None]] = None,
                  on_tool_completed: Optional[Callable[[str, str, bool], None]] = None,
-                 on_stream_complete: Optional[Callable[[int], None]] = None):
+                 on_stream_complete: Optional[Callable[[int], None]] = None,
+                 on_stream_progress: Optional[Callable[[int], None]] = None):
 
         self.on_bot_created = on_bot_created
         self.on_bot_updated = on_bot_updated
         self.on_tool_started = on_tool_started
         self.on_tool_completed = on_tool_completed
         self.on_stream_complete = on_stream_complete
+        self.on_stream_progress = on_stream_progress
 
         self.current_bot_message = None
         self._active_tools: Dict[str, dict] = {}
@@ -62,7 +65,10 @@ class MessageStreamHandler:
         self._active_tools.clear()
         self._processed_tool_ids.clear()
         self._last_update_time = 0
+        self._last_token_update_time = 0
         self._accumulated_content = ""
+        self._accumulated_thinking = ""
+        self._accumulated_tool_calls_text = ""
         self._expecting_new_message = False
         self._accumulated_ai_message = None
         self._pending_update = False
@@ -106,7 +112,7 @@ class MessageStreamHandler:
             await asyncio.sleep(0)
 
         if self.on_stream_complete:
-            estimated_tokens = int(len(self._accumulated_content) * 0.3)
+            estimated_tokens = self._estimate_total_tokens()
             self.on_stream_complete(estimated_tokens)
 
         _log(f"Stream ended, chunks={chunk_count}")
@@ -256,6 +262,12 @@ class MessageStreamHandler:
             if new_display_name != old_display_name:
                 tool_info["display_name"] = new_display_name
                 # _log(f"Updated display_name for {tool_id}: {new_display_name}")
+        # 更新 tool_calls 文本用于 token 估算
+        if self._accumulated_ai_message and self._accumulated_ai_message.tool_calls:
+            parts = []
+            for tc in self._accumulated_ai_message.tool_calls:
+                parts.append(json.dumps(tc, ensure_ascii=False))
+            self._accumulated_tool_calls_text = "\n".join(parts)
 
     @staticmethod
     def _format_tool_display_name(tool_name: str, tool_args: dict) -> str:
@@ -336,6 +348,7 @@ class MessageStreamHandler:
 
         if thinking:
             self.current_bot_message.append_thinking(thinking)
+            self._accumulated_thinking += thinking
             await self._flush_update()
 
         if content:
@@ -354,6 +367,14 @@ class MessageStreamHandler:
             self.on_bot_updated(self.current_bot_message)
         self._pending_update = False
         self._last_update_time = time.time()
+        # 实时回调当前 token 估算，按 TOKEN_UPDATE_INTERVAL 节流避免过于频繁
+        if self.on_stream_progress:
+            now = time.time()
+            if now - self._last_token_update_time > self.TOKEN_UPDATE_INTERVAL:
+                estimated = self._estimate_total_tokens()
+                if estimated > 0:
+                    self.on_stream_progress(estimated)
+                    self._last_token_update_time = now
         # 让出事件循环，确保 UI 能立即渲染
         await asyncio.sleep(0)
 
@@ -416,6 +437,36 @@ class MessageStreamHandler:
             )
             return is_err
         return False
+
+    def _estimate_text_tokens(self, text: str) -> int:
+        """估算单段文本的 token 数，优先使用 tiktoken 精确计算"""
+        if not text:
+            return 0
+        try:
+            import tiktoken
+            try:
+                encoding = tiktoken.encoding_for_model("gpt-4")
+            except Exception:
+                encoding = tiktoken.get_encoding("cl100k_base")
+            return len(encoding.encode(text))
+        except Exception:
+            # fallback: 混合文本（中英文）约 0.4 tokens/char
+            return int(len(text) * 0.4)
+
+    def _estimate_total_tokens(self) -> int:
+        """估算当前所有累积内容（content + thinking + tool_calls）的 token 总数"""
+        parts = []
+        if self._accumulated_content:
+            parts.append(self._accumulated_content)
+        if self._accumulated_thinking:
+            parts.append(self._accumulated_thinking)
+        if getattr(self, '_accumulated_tool_calls_text', ''):
+            parts.append(self._accumulated_tool_calls_text)
+        if not parts:
+            return 0
+        # 合并计算，比分别计算再相加更准确（避免重复计算边界开销）
+        combined = "\n".join(parts)
+        return self._estimate_text_tokens(combined)
 
     def _gen_id(self) -> str:
         """生成唯一 ID"""

@@ -124,6 +124,7 @@ class Qoze(App):
         self.audio_original_text = ""
         self.audio_check_timer = None
         self.total_tokens = 0
+        self._stream_base_tokens = 0
         self._processing_suggestion = False
 
         from plan.plan_manager import PlanManager
@@ -140,12 +141,14 @@ class Qoze(App):
             with Vertical(id="chat-area"):
                 # 欢迎区域 - 包含 ASCII Art 和 Tips
                 with Vertical(id="welcome-panel"):
-                    yield Static(render_pixel_text("QOZE CODE", start_color="#7aa2f7", end_color="#f093c6", gap=1), id="welcome-art")
+                    yield Static(render_pixel_text("QOZE CODE", start_color="#7aa2f7", end_color="#f093c6", gap=1),
+                                 id="welcome-art")
                     yield Static(self._get_tips_text(), id="welcome-tips")
 
                 yield MessageList(
                     id="message-list",
                     token_callback=self.add_tokens,
+                    token_progress_callback=self.update_token_progress,
                     tool_status_panel=None  # 稍后设置
                 )
                 yield ToolStatusPanel(id="tool-status-panel")
@@ -182,9 +185,13 @@ class Qoze(App):
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
     def add_tokens(self, new_tokens: int):
-        """累加本次对话新增的 token 数"""
-        self.total_tokens += new_tokens
-        self.status_bar.update_token_count(self.total_tokens)
+        """流结束时的回调——使用精确计算替代估算值"""
+        self.update_token_count()
+
+    def update_token_progress(self, progress_tokens: int):
+        """流式输出期间实时更新 token 显示（进度值 + 基准值）"""
+        display_tokens = self._stream_base_tokens + progress_tokens
+        self.status_bar.update_token_count(display_tokens)
 
     def update_token_count(self):
         """更新状态栏中的 token 数量"""
@@ -457,6 +464,9 @@ class Qoze(App):
 
             current_state = {"messages": [human_msg]}
 
+            # 记录本次请求开始前的 token 基准值，用于流式期间实时显示
+            self._stream_base_tokens = self.total_tokens
+
             # 新消息系统流式处理
             stream = qoze_code_agent.agent.astream(
                 current_state,
@@ -472,6 +482,8 @@ class Qoze(App):
         finally:
             self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")
+            # 请求结束后精确计算并校正 token 数
+            self.update_token_count()
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
