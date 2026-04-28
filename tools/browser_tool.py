@@ -621,14 +621,14 @@ async def browser_send_keys(selector: str, keys: str) -> str:
     Args:
         selector: The CSS selector for the target element.
         keys: The keys to send. Can include text and special keys like "Enter", "Tab", "Escape".
-              Use curly braces for special keys: "Hello{Enter}World" or "{Control}a".
+              Use curly braces for special keys: "Hello{Enter}World" or "{Control+a}".
 
     Returns:
         Status message indicating success or failure.
 
     Examples:
         - browser_send_keys("#search", "query{Enter}") - Type "query" and press Enter
-        - browser_send_keys("#editor", "{Control}a{Delete}") - Select all and delete
+        - browser_send_keys("#editor", "{Control+a}{Delete}") - Select all and delete
         - browser_send_keys("#input", "{Tab}") - Move focus to next field
     """
     try:
@@ -647,8 +647,20 @@ async def browser_send_keys(selector: str, keys: str) -> str:
         import random
         await asyncio.sleep(random.uniform(0.2, 0.4))
 
-        # Send the keys
-        await element.press(keys)
+        # Parse keys: split by {KeyName} pattern, handling both text and special keys
+        # Use page.keyboard for proper key handling
+        import re as _re
+        segments = _re.split(r'(\{[^}]+\})', keys)
+        for seg in segments:
+            if not seg:
+                continue
+            if seg.startswith('{') and seg.endswith('}'):
+                # Special key: e.g., {Enter}, {Tab}, {Control+a}
+                key_name = seg[1:-1]
+                await _session.page.keyboard.press(key_name)
+            else:
+                # Plain text
+                await _session.page.keyboard.type(seg)
 
         # Small delay after
         await asyncio.sleep(random.uniform(0.1, 0.2))
@@ -758,61 +770,132 @@ async def browser_snapshot(verbose: bool = False) -> str:
         if not _session.page:
             return "Error: No active page. Use browser_navigate first."
 
-        # Get accessibility snapshot
-        snapshot = await _session.page.accessibility.snapshot(
-            interestingOnly=not verbose,
-            includeIframes=True,
-        )
-        if not snapshot:
-            return "Error: Could not create accessibility snapshot. Page may not be loaded."
+        # Use JavaScript to build element snapshot (Playwright Python lacks accessibility API)
+        result_json = await _session.page.evaluate("""
+            (verbose) => {
+                const INTERACTIVE_SELECTOR = 'a,button,input,select,textarea,[tabindex]:not([tabindex="-1"]),'
+                    + '[onclick],[role],[contenteditable="true"],details,summary';
+                const SEMANTIC_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,li,td,th,label,legend,caption,figcaption,'
+                    + 'blockquote,code,pre,dt,dd';
+                
+                const selector = verbose
+                    ? 'body *'
+                    : INTERACTIVE_SELECTOR + ',' + SEMANTIC_SELECTOR;
+                
+                const els = document.querySelectorAll(selector);
+                const results = [];
+                let uid = 0;
+                
+                els.forEach(el => {
+                    // Skip invisible elements (non-verbose mode)
+                    if (!verbose) {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden'
+                            || style.opacity === '0' || rect.width === 0 || rect.height === 0) {
+                            return;
+                        }
+                    }
+                    
+                    const tag = el.tagName.toLowerCase();
+                    const entry = { uid: 'snap_' + uid };
+                    uid++;
+                    
+                    // Role: explicit ARIA role or inferred from tag
+                    const role = el.getAttribute('role')
+                        || (tag === 'button' ? 'button' : '')
+                        || (tag === 'a' && el.getAttribute('href') ? 'link' : '')
+                        || (tag === 'input' ? (['checkbox','radio'].includes(el.type) ? el.type : 'textbox') : '')
+                        || (tag === 'select' ? 'combobox' : '')
+                        || (tag === 'textarea' ? 'textbox' : '')
+                        || (tag.match(/^h[1-6]$/) ? 'heading' : '')
+                        || (tag === 'img' ? 'img' : '')
+                        || (tag === 'table' ? 'table' : '')
+                        || (tag === 'ul' || tag === 'ol' ? 'list' : '')
+                        || (tag === 'li' ? 'listitem' : '');
+                    
+                    if (role) {
+                        entry.role = role;
+                    } else if (verbose) {
+                        entry.role = tag;
+                    } else {
+                        return; // skip non-semantic in non-verbose mode
+                    }
+                    
+                    // Name: text content, aria-label, placeholder, or title
+                    const name = el.getAttribute('aria-label')
+                        || el.getAttribute('placeholder')
+                        || el.getAttribute('title')
+                        || el.getAttribute('alt')
+                        || (el.textContent ? el.textContent.trim().slice(0, 80) : '');
+                    
+                    if (name) entry.name = name;
+                    
+                    // ID (useful for CSS selectors)
+                    if (el.id) entry.id = '#' + el.id;
+                    
+                    // Interactive attributes
+                    if (el.tabIndex >= 0) entry.focusable = true;
+                    if (el.disabled) entry.disabled = true;
+                    if (el.checked && ['checkbox','radio'].includes(el.type)) entry.checked = true;
+                    if (el.required) entry.required = true;
+                    if (el.readOnly) entry.readonly = true;
+                    if (el.matches(':focus')) entry.focused = true;
+                    
+                    // Value for inputs
+                    if (['input','textarea','select'].includes(tag) && el.value) {
+                        entry.value = el.value.slice(0, 100);
+                    }
+                    
+                    // href for links
+                    if (tag === 'a' && el.href) {
+                        entry.url = el.href.slice(0, 120);
+                    }
+                    
+                    results.push(entry);
+                });
+                
+                return results;
+            }
+        """, (verbose,))
 
-        # Generate uid for each node and format
-        uid_counter = [0]
+        if not result_json:
+            return "No elements found on the page."
 
-        def format_node(node, depth=0) -> str:
-            uid = f"snap_{uid_counter[0]}"
-            uid_counter[0] += 1
-
-            # Build attributes
-            attrs = [f"uid={uid}"]
+        # Format results
+        lines = [f"Page Snapshot ({'verbose' if verbose else 'interesting only'}):"]
+        lines.append("-" * 60)
+        for node in result_json:
+            parts = [node.get("uid", "?")]
             role = node.get("role", "")
-            if role and role != "none":
-                attrs.append(role)
-            elif role == "none":
-                attrs.append("ignored")
-
+            if role:
+                parts.append(f"[{role}]")
             name = node.get("name", "")
             if name:
-                attrs.append(f'"{name}"')
-
-            # Boolean attributes
-            for attr in ["focusable", "disabled", "selected", "checked", "expanded", "pressed", "multiselectable",
-                         "required", "readonly"]:
+                # Truncate long names
+                display_name = name if len(name) <= 60 else name[:57] + "..."
+                parts.append(f'"{display_name}"')
+            if node.get("id"):
+                parts.append(node["id"])
+            if node.get("focused"):
+                parts.append("<=focused")
+            for attr in ["disabled", "checked", "required", "readonly", "focusable"]:
                 if node.get(attr):
-                    attrs.append(attr)
+                    parts.append(attr)
+            if node.get("value"):
+                parts.append(f'value="{node["value"]}"')
+            if node.get("url"):
+                parts.append(node["url"])
 
-            # Value attribute
-            value = node.get("value")
-            if isinstance(value, str) and value:
-                attrs.append(f'value="{value}"')
-            elif isinstance(value, (int, float)):
-                attrs.append(f'value="{value}"')
+            lines.append(" ".join(parts))
 
-            line = "  " * depth + " ".join(attrs) + "\n"
-
-            # Process children
-            for child in node.get("children", []):
-                line += format_node(child, depth + 1)
-
-            return line
-
-        result = format_node(snapshot)
+        result = "\n".join(lines)
 
         # Limit output size
         if len(result) > 15000:
             result = result[:15000] + "\n\n... [snapshot truncated]"
 
-        return f"Page Accessibility Snapshot:\n{result}"
+        return result
     except Exception as e:
         return f"Error taking snapshot: {str(e)}"
 
