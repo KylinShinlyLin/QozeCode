@@ -59,6 +59,15 @@ def get_static_system_prompt():
   - `browser_send_keys(selector, keys)` - 在特定元素发送按键，如："#search{Enter}"（输入后回车）
   - `browser_hotkey(keys)` - 组合键，如：["Control", "t"]（新标签页）
   - `browser_focus(selector)` - 聚焦元素但不点击，准备输入
+  - `browser_snapshot(verbose)` - 获取页面无障碍树快照，展示所有元素及其 uid/role/name/交互属性，比 HTML 更省 Token。推荐用于元素定位
+  - `browser_wait_for(text, timeout)` - 等待特定文本出现在页面上，用于页面跳转、表单提交后的等待
+  - `browser_handle_dialog(action, prompt_text)` - 处理浏览器弹窗（alert/confirm/prompt），支持接受/拒绝
+  - `browser_evaluate(script)` - 在页面中执行 JavaScript 代码并返回结果，用于数据提取或 DOM 操作
+  - `browser_console_messages(types, limit)` - 列出控制台消息（error/warn/log/info/debug），支持类型过滤
+  - `browser_console_get(msg_id)` - 查看特定控制台消息的完整详情
+  - `browser_network_requests(resource_types, limit)` - 列出网络请求（xhr/fetch/document/script等），含状态码
+  - `browser_network_get(req_id)` - 查看特定网络请求的完整详情（headers/body）
+  - **点击改进**：`browser_click` 现已使用 Playwright Locator API，内置自动等待（可见→稳定→可交互→无遮挡）、重试机制和 force fallback，大幅提高点击成功率
 - **人机验证阻断**：如果遇到验证码（Captcha）、Cloudflare 等待页面或强制登录墙，请**立即停止**当前操作流，并明确告知用户需要人工介入完成验证。不要尝试通过脚本绕过复杂的安全验证。
 '''
 
