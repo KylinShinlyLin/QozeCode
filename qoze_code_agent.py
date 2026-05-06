@@ -1,5 +1,3 @@
-from langgraph.checkpoint.memory import MemorySaver
-
 # !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -17,6 +15,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
+import warnings
+warnings.filterwarnings("ignore", message=".*allowed_objects.*")
+
+from langgraph.checkpoint.memory import MemorySaver
 
 import base64
 import operator
