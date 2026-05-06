@@ -55,6 +55,18 @@ class Sidebar(Static):
         # Scheduled update (Textual handles async callbacks correctly)
         self.set_interval(5, self.update_info)
 
+    def _get_mcp_info(self):
+        """获取 MCP 服务器信息（同步方法，避免阻塞 UI）"""
+        try:
+            from mcp_mgr.mcp_manager import get_mcp_manager
+            mcp = get_mcp_manager()
+            mcp.refresh()
+            available = mcp.get_available_servers()
+            active = mcp.get_active_servers()
+            return available, active, mcp.servers
+        except Exception:
+            return {}, {}, {}
+
     async def update_info(self):
         cwd = os.getcwd()
         repo_url = await get_git_info()
@@ -81,7 +93,40 @@ class Sidebar(Static):
         text.append(f"当前目录: ", style="dim white")
         text.append(f"\n{os.getcwd()}\n\n", style="bold cyan")
 
-        # 实时检测图片数量
+        # ==================== MCP 服务器状态 ====================
+        available, active, servers = self._get_mcp_info()
+        has_mcp = len(available) > 0 or len(active) > 0
+        
+        # 总是显示 MCP 标题，让用户知道这个功能存在
+        text.append("MCP 服务器\n", style="bold #7dcfff underline")
+        
+        if available:
+            active_names = set(active.keys())
+            for name in sorted(available.keys()):
+                s = servers.get(name)
+                transport = s.transport if s else "?"
+                tools = s.tools_count if s and s.active else 0
+                
+                if name in active_names:
+                    icon = "🟢"
+                    style = "bold green"
+                    tool_info = f" ({tools} tools)" if tools > 0 else ""
+                    text.append(f"{icon} {name}", style=style)
+                    text.append(f" [{transport}]{tool_info}\n", style="dim white")
+                else:
+                    icon = "⚪"
+                    style = "dim white"
+                    text.append(f"{icon} {name}", style=style)
+                    text.append(f" [{transport}]\n", style="dim white")
+        else:
+            text.append("无\n", style="dim white")
+            text.append("在 ~/.qoze/mcp/ 下\n", style="dim white")
+            text.append("创建 JSON 配置文件\n", style="dim white")
+            text.append("来添加 MCP 服务器\n", style="dim white")
+
+        text.append("\n")
+
+        # ==================== 实时检测图片数量 ====================
         image_folder = ".qoze/image"
         img_count = 0
         if os.path.exists(image_folder):

@@ -153,15 +153,20 @@ class MessageList(ScrollableContainer):
             import traceback
             tb = traceback.format_exc()
             _log(tb)
-            # 显示错误到 UI，帮助快速定位问题
+            # 显示错误到 UI，用红色字体方便定位
             error_msg = str(e)
-            # 截取关键错误信息，避免过长刷屏
             if len(error_msg) > 600:
                 error_msg = error_msg[:600] + "..."
-            # 压缩空白字符，避免 Static 渲染异常
-            error_msg_short = " ".join(error_msg.split())[:600]
+            # 转义方括号避免 Rich markup 冲突
+            safe_msg = error_msg.replace("[", "\\[").replace("]", "\\]")
+            # 提取 traceback 最后几行（最相关的错误位置）
+            tb_lines = tb.strip().split('\n')
+            tb_short = '\n'.join(tb_lines[-4:]).replace("[", "\\[").replace("]", "\\]")
             from textual.widgets import Static
-            self.mount(Static("❌ 请求失败: " + error_msg_short))
+            await self.mount(Static(
+                f"[red bold]❌ 请求失败:[/] [red]{safe_msg}[/]\n"
+                f"[dim red]{tb_short}[/]"
+            ))
             self.refresh(layout=True)
             self._scroll_to_end()
 

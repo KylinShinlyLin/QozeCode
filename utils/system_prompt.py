@@ -74,7 +74,8 @@ def get_static_system_prompt():
 
 def get_dynamic_context(system_info, system_release, system_version, machine_type,
                         processor, shell, current_dir, directory_tree, rules_prompt="",
-                        available_skills=None, active_skills_content="", plan_prompt=""):
+                        available_skills=None, active_skills_content="", plan_prompt="",
+                        mcp_context=""):
     """
     获取动态上下文信息（每次请求可能变化的部分）
     
@@ -125,6 +126,10 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
         context += f"\n## 🔥 Currently Active Skills:\n{active_skills_content}\n"
 
 
+
+    # 添加 MCP 上下文
+    if mcp_context:
+        context += f"{mcp_context}\n"
 
     # 添加执行计划
     if plan_prompt:

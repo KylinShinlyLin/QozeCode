@@ -47,8 +47,10 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
 from tools.plan_tools import update_plan_progress
+from mcp_mgr.mcp_manager import list_mcp_servers, get_mcp_install_guide
 # from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
+from mcp_mgr.mcp_manager import get_mcp_manager
 from utils.directory_tree import get_directory_tree
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context
 
@@ -136,6 +138,10 @@ def get_context_info(system_info="", system_release="", system_version="", machi
         plan_prompt = plan_mgr.load_plan_context()
 
     # 构建动态上下文（放在 User Message 中，避免影响 System Prompt 缓存）
+    # 获取 MCP 上下文
+    mcp_manager = get_mcp_manager()
+    mcp_context = mcp_manager.get_mcp_context()
+
     dynamic_context = get_dynamic_context(
         system_info=system_info,
         system_release=system_release,
@@ -148,7 +154,8 @@ def get_context_info(system_info="", system_release="", system_version="", machi
         rules_prompt=rules_prompt,
         available_skills=available_skills,
         active_skills_content=active_skills_content,
-        plan_prompt=plan_prompt
+        plan_prompt=plan_prompt,
+        mcp_context=mcp_context
     )
 
     return static_prompt, dynamic_context
@@ -207,13 +214,61 @@ base_tools = [
     browser_network_get,
     read_lark_document,
     update_plan_progress,
+    list_mcp_servers,
+    get_mcp_install_guide,  # 只读查看 MCP 状态，激活/反激活由用户手动控制
 ]
 
 # 初始时不加载浏览器工具
-tools = base_tools
+tools = list(base_tools)
 browser_loaded = False
 plan_mode = False
 conversation_state = {"llm_calls": 0, "last_image_count": 0, "sent_images": {}}
+_mcp_extra_tools = []  # MCP 动态加载的工具
+
+
+def rebuild_tools():
+    """重建工具列表，合并 base_tools 和 MCP 动态工具，并更新 tools_by_name
+    当 MCP 服务器被激活或反激活时调用此函数。
+    """
+    global tools, tools_by_name, _mcp_extra_tools, llm_with_tools, llm
+    
+    mcp = get_mcp_manager()
+    _mcp_extra_tools = mcp.get_active_tools()
+    tools = list(base_tools) + _mcp_extra_tools
+    tools_by_name = {tool.name: tool for tool in tools}
+    
+    # 如果 LLM 已初始化，重新绑定工具
+    if llm is not None and llm_with_tools is not None:
+        try:
+            # 重新绑定工具到模型
+            llm_with_tools = llm.bind_tools(tools)
+        except Exception as e:
+            console.print(f"[yellow]⚠️ 重新绑定 MCP 工具到 LLM 失败: {e}[/yellow]")
+
+
+def get_all_tools():
+    """获取当前所有可用工具（包括 MCP 工具）"""
+    return list(base_tools) + _mcp_extra_tools
+
+
+async def init_mcp_tools():
+    """在启动时异步加载 MCP 工具"""
+    try:
+        mcp = get_mcp_manager()
+        # 恢复上次激活的 MCP 服务器
+        active_names = mcp._active_server_names
+        if active_names:
+            console.print(f"[dim]📡 正在恢复 MCP 服务器: {', '.join(active_names)}...[/dim]")
+            for name in active_names:
+                if name in mcp.servers:
+                    mcp.servers[name].active = True
+            await mcp.load_tools()
+            rebuild_tools()
+            if mcp.get_active_tools():
+                console.print(f"[green]✅ 已恢复 {len(mcp.get_active_tools())} 个 MCP 工具[/green]")
+    except Exception as e:
+        console.print(f"[yellow]⚠️ MCP 初始化失败: {e}[/yellow]")
+
 
 tools_by_name = {tool.name: tool for tool in tools}
 
@@ -348,15 +403,11 @@ async def tool_node(state: dict):
     for tool_call in state["messages"][-1].tool_calls:
         tool = tools_by_name[tool_call["name"]]
         try:
-            # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "read_url", "execute_command", "browser_navigate",
-                                     "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
-                                     "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
-                                     "browser_switch_tab", "browser_list_tabs", "browser_press_key",
-                                     "browser_send_keys", "browser_hotkey", "browser_focus", 
-                                     "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate", 
-                                     "browser_console_messages", "browser_console_get", "browser_network_requests", "browser_network_get"]:
+            # 动态判断是否是异步工具：优先使用 ainvoke，回退到 invoke
+            if hasattr(tool, 'ainvoke') and callable(tool.ainvoke):
                 observation = await tool.ainvoke(tool_call["args"])
+            elif callable(tool):
+                observation = tool.invoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
             result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))

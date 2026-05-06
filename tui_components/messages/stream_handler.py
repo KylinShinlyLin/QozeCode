@@ -96,11 +96,25 @@ class MessageStreamHandler:
                 except Exception as e:
                     _log(f"ERROR chunk {chunk_count}: {e}")
                     import traceback
-                    _log(traceback.format_exc())
+                    tb = traceback.format_exc()
+                    _log(tb)
+                    # 在 UI 中显示红色错误信息（转义方括号避免 Rich markup 冲突）
+                    safe_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+                    if self.current_bot_message:
+                        self.current_bot_message.append_content(
+                            f"\n[red bold]⚠️ 流式处理异常 (chunk {chunk_count}): {safe_msg}[/]\n"
+                        )
         except Exception as e:
             _log(f"Fatal error: {e}")
             import traceback
-            _log(traceback.format_exc())
+            tb = traceback.format_exc()
+            _log(tb)
+            # 在 UI 中显示红色错误信息（转义方括号避免 Rich markup 冲突）
+            safe_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+            if self.current_bot_message:
+                self.current_bot_message.append_content(
+                    f"\n[red bold]❌ 流式处理致命错误: {safe_msg}[/]\n"
+                )
             raise
 
         if self._pending_update and self.current_bot_message:

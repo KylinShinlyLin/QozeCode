@@ -351,6 +351,15 @@ class Qoze(App):
             llm = model_initializer.initialize_llm(self.provider, self.model_type)
             qoze_code_agent.llm = llm
             qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
+            
+            # 初始化 MCP 工具（异步加载）
+            try:
+                await qoze_code_agent.init_mcp_tools()
+                # 重新绑定工具（包含 MCP 工具）
+                qoze_code_agent.rebuild_tools()
+            except Exception as mcp_err:
+                logging.warning(f"MCP initialization skipped: {mcp_err}")
+            
             self.agent_ready = True
             self.input_box.disabled = False
             self.input_box.placeholder = "Type message..."
@@ -478,7 +487,9 @@ class Qoze(App):
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         except Exception as e:
-            self.message_list.mount(Static(f"Error: {e}"))
+            await self.message_list.mount(Static(
+                f"[red bold]❌ 请求异常:[/] [red]{e}[/]"
+            ))
         finally:
             self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")

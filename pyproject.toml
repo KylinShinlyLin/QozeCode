@@ -16,6 +16,7 @@ dependencies = [
     "langgraph",
     "typing_extensions>=4.15.0",
     "langchain-core",
+    "langchain-mcp-adapters",
     "langchain-deepseek",
     "langchain-google-genai",
     "langchain-aws",
