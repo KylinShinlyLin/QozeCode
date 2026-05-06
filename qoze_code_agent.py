@@ -33,6 +33,7 @@ from shared_console import console
 import sys
 import os
 
+from enums import supports_vision
 from tools.execute_command_tool import execute_command
 from tools.file_tools import read_file, list_files, search_in_files, cat_file, list_dir, grep_file, \
     find_files
@@ -100,7 +101,7 @@ def load_qoze_rules(current_dir):
 
 
 def get_context_info(system_info="", system_release="", system_version="", machine_type="", processor="",
-                     shell="", current_dir="", directory_tree=""):
+                     shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True):
     """
     获取上下文信息（分离静态和动态内容以优化 Prompt Caching）
 
@@ -148,7 +149,9 @@ def get_context_info(system_info="", system_release="", system_version="", machi
         rules_prompt=rules_prompt,
         available_skills=available_skills,
         active_skills_content=active_skills_content,
-        plan_prompt=plan_prompt
+        plan_prompt=plan_prompt,
+        model_name=model_name,
+        model_supports_vision=model_supports_vision
     )
 
     return static_prompt, dynamic_context
@@ -156,10 +159,11 @@ def get_context_info(system_info="", system_release="", system_version="", machi
 
 # 保留向后兼容的函数名
 def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
-                               shell="", current_dir="", directory_tree=""):
+                               shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True):
     """【向后兼容】获取完整的系统提示词"""
     static, dynamic = get_context_info(system_info, system_release, system_version, machine_type,
-                                       processor, shell, current_dir, directory_tree)
+                                       processor, shell, current_dir, directory_tree,
+                                       model_name, model_supports_vision)
     return static + "\n" + dynamic
 
 
@@ -167,6 +171,7 @@ def get_enhanced_system_prompt(system_info="", system_release="", system_version
 llm = None
 llm_with_tools = None
 browser_tools = None
+current_model_type = None  # 当前使用的模型类型，用于判断视觉支持等能力
 
 base_tools = [
     execute_command,
@@ -259,7 +264,9 @@ async def llm_call(state: dict):
         processor=processor,
         shell=shell,
         current_dir=current_dir,
-        directory_tree=directory_tree
+        directory_tree=directory_tree,
+        model_name=current_model_type.value if current_model_type else "未知",
+        model_supports_vision=supports_vision(current_model_type) if current_model_type else True
     )
 
     # 构造消息：SystemMessage 放静态内容（可被缓存），UserMessage 放动态上下文
@@ -577,8 +584,15 @@ def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
     return int(total_chars * 0.4)
 
 
-def create_message_with_images(text_content: str, image_folder: str = ".qoze/image") -> HumanMessage:
-    """创建包含文本和图片的消息"""
+def create_message_with_images(text_content: str, image_folder: str = ".qoze/image",
+                                   supports_vision: bool = True) -> HumanMessage:
+    """创建包含文本和图片的消息
+
+    Args:
+        text_content: 文本消息内容
+        image_folder: 图片文件夹路径
+        supports_vision: 当前模型是否支持视觉（图片输入），默认 True
+    """
     # 基础消息内容
     message_content = [{"type": "text", "text": text_content}]
 
@@ -588,8 +602,8 @@ def create_message_with_images(text_content: str, image_folder: str = ".qoze/ima
     sent_images = conversation_state.get("sent_images", {})
     new_sent_images = sent_images.copy()
 
-    # 检查图片文件夹
-    if os.path.exists(image_folder):
+    # 检查图片文件夹（仅当模型支持视觉时才加载图片）
+    if supports_vision and os.path.exists(image_folder):
         image_files = get_image_files(image_folder)
 
         if image_files:

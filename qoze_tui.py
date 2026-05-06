@@ -31,7 +31,7 @@ from textual.widgets import Input, Label, TextArea, OptionList, Markdown, Static
 from textual.widgets.option_list import Option
 
 # Import Enums
-from enums import ModelProvider, ModelType
+from enums import ModelProvider, ModelType, supports_vision
 
 # Configure logging for debugging
 log_file = os.path.join(os.path.dirname(__file__), '.qoze', 'debug.log')
@@ -152,7 +152,7 @@ class Qoze(App):
                     tool_status_panel=None  # 稍后设置
                 )
                 yield ToolStatusPanel(id="tool-status-panel")
-            yield Sidebar(id="sidebar", model_name=self.model_name, provider=self.provider)
+            yield Sidebar(id="sidebar", model_name=self.model_name, provider=self.provider, model_type=self.model_type)
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
             yield Label(id="audio-status", classes="hidden")
@@ -351,6 +351,7 @@ class Qoze(App):
             llm = model_initializer.initialize_llm(self.provider, self.model_type)
             qoze_code_agent.llm = llm
             qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
+            qoze_code_agent.current_model_type = self.model_type
             self.agent_ready = True
             self.input_box.disabled = False
             self.input_box.placeholder = "Type message..."
@@ -460,7 +461,24 @@ class Qoze(App):
                 self.message_list.add_user_message(display_input, is_command=is_cmd)
 
             image_folder = ".qoze/image"
-            human_msg = qoze_code_agent.create_message_with_images(actual_input, image_folder)
+            model_has_vision = supports_vision(self.model_type)
+            human_msg = qoze_code_agent.create_message_with_images(
+                actual_input, image_folder, supports_vision=model_has_vision
+            )
+            # 如果当前模型不支持视觉，但 .qoze/image 下有图片，给出提示
+            if not model_has_vision:
+                import os as _os
+                from qoze_code_agent import get_image_files
+                try:
+                    img_files = get_image_files(image_folder)
+                    if img_files:
+                        self.message_list.mount(Static(
+                            Text(f"⚠️ 当前模型 ({self.model_name}) 不支持视觉模态，"
+                                 f"{len(img_files)} 张图片不会被加载到上下文",
+                                 style="dim yellow")
+                        ))
+                except Exception:
+                    pass
 
             current_state = {"messages": [human_msg]}
 

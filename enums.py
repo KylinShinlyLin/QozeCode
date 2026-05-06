@@ -39,6 +39,33 @@ class ModelType(Enum):
     GLM_5V_TURBO = "glm-5v-turbo"
 
 
+# 模型视觉（图片输入）支持映射表
+# True = 支持图片输入（多模态），False = 仅支持文本
+MODEL_VISION_SUPPORT = {
+    ModelType.GEMINI_3_1_PRO: True,      # Gemini 原生多模态
+    ModelType.GEMINI_3_FLASH: True,       # Gemini 原生多模态
+    ModelType.GROK_4_1_FAST: False,       # Grok API 不支持图片输入
+    ModelType.GPT_5_4: True,              # OpenAI GPT 支持视觉
+    ModelType.GPT_5_2: True,              # OpenAI GPT 支持视觉
+    ModelType.GPT_5_2_CODEX: True,        # OpenAI GPT 支持视觉
+    ModelType.KIMI_K2_5: True,            # Kimi k2.5 支持图片输入
+    ModelType.KIMI_FOR_CODING: True,      # 专用编程模型，支持视觉
+    ModelType.KIMI_2_5: True,             # Kimi 2.5 支持图片输入
+    ModelType.QWEN_3_MAX: True,           # Qwen 支持多模态
+    ModelType.QWEN_3_6_PLUS: True,        # Qwen 支持多模态
+    ModelType.DEEPSEEK_REASONER: False,   # DeepSeek 不支持图片输入
+    ModelType.DEEPSEEK_CHAT: False,       # DeepSeek 不支持图片输入
+    ModelType.GLM_4_6: False,             # GLM-4.6 纯文本模型
+    ModelType.GLM_5: False,               # GLM-5 纯文本模型
+    ModelType.GLM_5V_TURBO: True,         # GLM-5V-Turbo 多模态模型 (V=Vision)
+}
+
+
+def supports_vision(model_type: ModelType) -> bool:
+    """查询指定模型是否支持视觉（图片输入）"""
+    return MODEL_VISION_SUPPORT.get(model_type, False)
+
+
 # 厂商与模型的映射关系建议（注：GPT_5_2 在 launcher 中同时对应 LiteLLM 和 OpenAI 两种选项）
 MODEL_PROVIDER_MAP = {
     # ModelType.CLAUDE_4_6_SONNET: ModelProvider.LITELLM,

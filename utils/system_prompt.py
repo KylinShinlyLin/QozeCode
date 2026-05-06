@@ -74,7 +74,8 @@ def get_static_system_prompt():
 
 def get_dynamic_context(system_info, system_release, system_version, machine_type,
                         processor, shell, current_dir, directory_tree, rules_prompt="",
-                        available_skills=None, active_skills_content="", plan_prompt=""):
+                        available_skills=None, active_skills_content="", plan_prompt="",
+                        model_name="", model_supports_vision=True):
     """
     获取动态上下文信息（每次请求可能变化的部分）
     
@@ -93,6 +94,8 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
         available_skills: 可用技能列表
         active_skills_content: 当前激活的技能内容
         plan_prompt: 当前执行计划内容
+        model_name: 当前使用的模型名称
+        model_supports_vision: 当前模型是否支持视觉（图片输入）
     
     Returns:
         str: 格式化的动态上下文
@@ -129,5 +132,12 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     # 添加执行计划
     if plan_prompt:
         context += f"\n{plan_prompt}\n"
+
+    # 添加模型视觉支持信息
+    if model_name:
+        if model_supports_vision:
+            context += f"\n## 🖼️ 视觉模态: 当前模型 {model_name} **支持**图片输入，.qoze/image/ 目录下的图片会自动加载到上下文。\n"
+        else:
+            context += f"\n## 🖼️ 视觉模态: 当前模型 {model_name} **不支持**图片输入，.qoze/image/ 目录下的图片将不会被加载。如果需要处理图片，请切换到支持多模态的模型（如 GPT-5、Gemini、GLM-5V-Turbo、Qwen3 等）。\n"
 
     return context

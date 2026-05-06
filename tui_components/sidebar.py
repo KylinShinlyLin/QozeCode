@@ -4,6 +4,8 @@ import os
 from rich.text import Text
 from textual.widgets import Static
 import qoze_code_agent
+from enums import supports_vision, ModelType
+
 
 # --- Async Git Helpers ---
 async def run_async_cmd(args, timeout=2.0):
@@ -18,13 +20,16 @@ async def run_async_cmd(args, timeout=2.0):
     except Exception:
         return ""
 
+
 async def get_git_info():
     url = await run_async_cmd(['git', 'remote', 'get-url', 'origin'])
     return url if url else "local"
 
+
 async def get_git_branch():
     branch = await run_async_cmd(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
     return branch if branch else None
+
 
 async def get_modified_files():
     status = await run_async_cmd(['git', 'status', '-s'])
@@ -37,10 +42,12 @@ async def get_modified_files():
             files.append((parts[0], parts[-1]))
     return files
 
+
 class Sidebar(Static):
-    def __init__(self, *args, model_name="Unknown", provider, **kwargs):
+    def __init__(self, *args, model_name="Unknown", provider, model_type: ModelType = None, **kwargs):
         self.model_name = model_name
         self.provider = provider
+        self.model_type = model_type
         self.plan_mode = False
         super().__init__(*args, **kwargs)
 
@@ -104,9 +111,12 @@ class Sidebar(Static):
                     new_count = img_count
             text.append("图片上下文: ", style="dim white")
             if new_count > 0:
-                text.append(f"{img_count} 张 ({new_count} 新)", style="bold yellow")
+                text.append(f"{img_count} 张 ({new_count} 新)\n", style="bold yellow")
             else:
-                text.append(f"{img_count} 张 (已发送)", style="dim green")
+                text.append(f"{img_count} 张 (已发送)\n", style="dim green")
+            # 检查当前模型是否支持视觉
+            if self.model_type and not supports_vision(self.model_type):
+                text.append("\n⚠️ 当前模型不支持视觉模态\n", style="bold red")
 
         if modified:
             text.append("\nGIT 变更记录\n", style="bold #7dcfff underline")
