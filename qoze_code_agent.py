@@ -17,7 +17,8 @@ limitations under the License.
 """
 
 import warnings
-warnings.filterwarnings("ignore", message=".*allowed_objects.*")
+from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 
 from langgraph.checkpoint.memory import MemorySaver
 
