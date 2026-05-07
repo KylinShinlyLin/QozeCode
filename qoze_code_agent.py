@@ -297,6 +297,26 @@ async def llm_call(state: dict):
     else:
         messages.append(HumanMessage(content=dynamic_context))
 
+    # 辅助函数：从消息中移除图片内容
+    def _strip_images(msgs):
+        cleaned = []
+        for msg in msgs:
+            if isinstance(msg, HumanMessage) and isinstance(msg.content, list):
+                text_parts = [part for part in msg.content if isinstance(part, dict) and part.get("type") == "text"]
+                if text_parts:
+                    # 保留纯文本部分，移除图片
+                    cleaned_text = "\n".join([p.get("text", "") for p in text_parts])
+                    cleaned.append(HumanMessage(content=cleaned_text))
+                else:
+                    cleaned.append(msg)
+            else:
+                cleaned.append(msg)
+        return cleaned
+
+    # 如果当前模型不支持视觉，清理所有消息中的图片
+    if current_model_type and not supports_vision(current_model_type):
+        messages = _strip_images(messages)
+
     try:
         response = await llm_with_tools.ainvoke(messages)
         return {
@@ -309,6 +329,18 @@ async def llm_call(state: dict):
         err_detail = str(e)
         # 对常见错误给出更友好的提示
         if "unknown variant" in err_detail and "image_url" in err_detail:
+            # 尝试移除图片后重试一次
+            messages_no_img = _strip_images(messages)
+            if messages_no_img != messages:
+                try:
+                    response = await llm_with_tools.ainvoke(messages_no_img)
+                    return {
+                        "messages": [response],
+                        "llm_calls": state.get('llm_calls', 0) + 1,
+                        "ask_user_question": None
+                    }
+                except Exception:
+                    pass  # 重试也失败，返回友好错误提示
             friendly_msg = (
                 "❌ **API 请求失败**\n\n"
                 "当前模型不支持图片输入。DeepSeek 的 API 不接受 `image_url` 类型的多模态消息。\n\n"
@@ -357,30 +389,36 @@ async def tool_node(state: dict):
     ask_question = None
 
     for tool_call in state["messages"][-1].tool_calls:
-        tool = tools_by_name[tool_call["name"]]
+        tool_name = tool_call["name"]
         try:
+            tool = tools_by_name[tool_name]
             # 检查是否是异步工具
-            if tool_call["name"] in ["tavily_search", "read_url", "execute_command", "browser_navigate",
-                                     "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
-                                     "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
-                                     "browser_switch_tab", "browser_list_tabs", "browser_press_key",
-                                     "browser_send_keys", "browser_hotkey", "browser_focus", 
-                                     "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate", 
-                                     "browser_console_messages", "browser_console_get", "browser_network_requests", "browser_network_get"]:
+            if tool_name in ["tavily_search", "read_url", "execute_command", "browser_navigate",
+                             "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
+                             "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
+                             "browser_switch_tab", "browser_list_tabs", "browser_press_key",
+                             "browser_send_keys", "browser_hotkey", "browser_focus",
+                             "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate",
+                             "browser_console_messages", "browser_console_get", "browser_network_requests", "browser_network_get"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])
-            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_call["name"]))
+            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_name))
 
-            # # 如果调用了 ask_for_user，提取问题
-            # if tool_call["name"] == "ask_for_user":
-            #     ask_question = tool_call["args"].get("question", "")
-
+        except KeyError:
+            available = ", ".join(sorted(tools_by_name.keys()))
+            error_msg = (
+                f"❌ 工具 '{tool_name}' 不存在。"
+                f"当前可用工具列表: {available}"
+                f"请使用上述列表中的工具名称重新调用。"
+            )
+            console.print(error_msg, style="red")
+            result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_name))
         except Exception as e:
             traceback.print_exc()
-            error_msg = f"  ❌ '{tool_call['name']}' 调用失败，错误信息:{e}"
+            error_msg = f"❌ '{tool_name}' 调用失败: {type(e).__name__}: {e}"
             console.print(error_msg, style="red")
-            result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_call["name"]))
+            result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_name))
 
     return {"messages": result, "ask_user_question": ask_question}
 

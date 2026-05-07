@@ -98,8 +98,14 @@ class _AutoCopyMixin:
 
 
 class AutoCopyStatic(_AutoCopyMixin, Static):
-    """Static 组件子类：选中文本后自动复制到系统剪贴板。"""
-    pass
+    """Static 组件子类：选中文本后自动复制到系统剪贴板。
+    
+    默认关闭 Rich 标记解析，避免内容中的方括号 [...] 被误解析为标记语法导致 MarkupError。
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("markup", False)
+        super().__init__(*args, **kwargs)
 
 
 class AutoCopyMarkdown(_AutoCopyMixin, Markdown):

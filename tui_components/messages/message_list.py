@@ -149,19 +149,22 @@ class MessageList(ScrollableContainer):
         try:
             await self._stream_handler.process_stream(agent_stream)
         except Exception as e:
-            _log(f"Error: {e}")
             import traceback
             tb = traceback.format_exc()
+            _log(f"Error: {e}")
             _log(tb)
-            # 显示错误到 UI，帮助快速定位问题
-            error_msg = str(e)
-            # 截取关键错误信息，避免过长刷屏
-            if len(error_msg) > 600:
-                error_msg = error_msg[:600] + "..."
-            # 压缩空白字符，避免 Static 渲染异常
-            error_msg_short = " ".join(error_msg.split())[:600]
+
+            # 构建清晰的错误展示：异常类型 + 消息 + 精简堆栈
+            exc_type = type(e).__name__
+            exc_msg = str(e)
+            # 提取堆栈最后 6 行（通常包含最关键的文件和行号）
+            tb_lines = tb.strip().split("\n")
+            concise_tb = "\n".join(tb_lines[-6:]) if len(tb_lines) > 6 else "\n".join(tb_lines)
+
+            display_text = f"❌ 请求失败: {exc_type}: {exc_msg}\n\n堆栈跟踪 (最后几行):\n{concise_tb}"
+
             from textual.widgets import Static
-            self.mount(Static("❌ 请求失败: " + error_msg_short))
+            self.mount(Static(display_text))
             self.refresh(layout=True)
             self._scroll_to_end()
 
