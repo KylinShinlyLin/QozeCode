@@ -134,7 +134,7 @@ class SubagentState(TypedDict):
 
 
 # 最大 ReAct 迭代次数
-MAX_SUBAGENT_ITERATIONS = 120
+MAX_SUBAGENT_ITERATIONS = 60
 
 
 # ============================================================
