@@ -102,7 +102,7 @@ def _get_subagent_tools():
     from tools.execute_command_tool import execute_command
     from tools.file_tools import (
         read_file, list_files, list_dir, find_files,
-        grep_file, search_in_files, replace_in_file,
+        grep_file, search_in_files,
     )
     from tools.search_tool import tavily_search, read_url
     from tools.lark_tools import read_lark_document
@@ -112,8 +112,8 @@ def _get_subagent_tools():
         # 命令执行
         execute_command,
         # 文件操作
-        read_file, list_files, list_dir, find_files,
-        grep_file, search_in_files, replace_in_file,
+        read_file, list_files,
+        grep_file,
         # 搜索 & 网络
         tavily_search, read_url,
         # 飞书文档
@@ -134,7 +134,7 @@ class SubagentState(TypedDict):
 
 
 # 最大 ReAct 迭代次数
-MAX_SUBAGENT_ITERATIONS = 15
+MAX_SUBAGENT_ITERATIONS = 120
 
 
 # ============================================================
