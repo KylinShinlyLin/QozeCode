@@ -52,6 +52,7 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.lark_tools import read_lark_document
 from tools.plan_tools import update_plan_progress
+from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 # from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
@@ -215,6 +216,7 @@ base_tools = [
     browser_network_get,
     read_lark_document,
     update_plan_progress,
+    dispatch_subagent,
 ]
 
 # 初始时不加载浏览器工具
@@ -398,7 +400,7 @@ async def tool_node(state: dict):
                              "browser_switch_tab", "browser_list_tabs", "browser_press_key",
                              "browser_send_keys", "browser_hotkey", "browser_focus",
                              "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate",
-                             "browser_console_messages", "browser_console_get", "browser_network_requests", "browser_network_get"]:
+                             "browser_console_messages", "browser_console_get", "browser_network_requests", "browser_network_get", "dispatch_subagent"]:
                 observation = await tool.ainvoke(tool_call["args"])
             else:
                 observation = tool.invoke(tool_call["args"])

@@ -352,6 +352,8 @@ class Qoze(App):
             qoze_code_agent.llm = llm
             qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
             qoze_code_agent.current_model_type = self.model_type
+            from tools.subagent_tool import reset_subagent_cache
+            reset_subagent_cache()
             self.agent_ready = True
             self.input_box.disabled = False
             self.input_box.placeholder = "Type message..."
@@ -385,6 +387,8 @@ class Qoze(App):
 
         if user_input.lower() == "clear":
             qoze_code_agent.reset_conversation_state()
+            from tools.subagent_tool import reset_subagent_cache
+            reset_subagent_cache()
             self.message_list.clear_messages()
             self.thread_id = str(uuid.uuid4())
             self.total_tokens = 0
