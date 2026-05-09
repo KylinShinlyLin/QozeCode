@@ -216,7 +216,7 @@ base_tools = [
     browser_network_get,
     read_lark_document,
     update_plan_progress,
-    # dispatch_subagent,
+    dispatch_subagent,
 ]
 
 # 初始时不加载浏览器工具

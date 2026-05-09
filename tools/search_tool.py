@@ -117,7 +117,7 @@ async def read_url(url: str) -> str:
         jina_key = config_manager.get_jina_key()
         if jina_key:
             jina_headers["Authorization"] = f"Bearer {jina_key}"
-        response = await client.get(api_url, headers=jina_headers, follow_redirects=True)
+        response = await client.get(api_url, headers=jina_headers, follow_redirects=True, timeout=15)
         if response.status_code == 200:
             return response.text
         raise RuntimeError(f"Jina Reader API 返回错误: {response.status_code}")
@@ -143,7 +143,7 @@ async def read_url(url: str) -> str:
             task = progress.add_task(
                 f"[bold dim cyan]访问页面: {url[:66]}{'...' if len(url) > 66 else ''}[/bold dim cyan]", total=None)
 
-            async with httpx.AsyncClient(timeout=30.0, proxy=proxy_url) as client:
+            async with httpx.AsyncClient(timeout=15.0, proxy=proxy_url) as client:
                 try:
                     markdown_content = await _fetch_with_jina(client)
                     source_info = "通过 Jina Reader API 解析"
