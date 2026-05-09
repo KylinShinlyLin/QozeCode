@@ -63,6 +63,17 @@ class BotMessageWidget(Static):
     BotMessageWidget .hidden {
         display: none;
     }
+
+    /* 错误消息样式 */
+    BotMessageWidget.error {
+        border-left: solid #f7768e;
+    }
+    BotMessageWidget.error Static {
+        color: #f7768e;
+    }
+    BotMessageWidget.error Markdown {
+        color: #f7768e;
+    }
     """
 
     content: reactive[str] = reactive("")
@@ -93,6 +104,8 @@ class BotMessageWidget(Static):
             self._update_thinking_display()
         if self._content_buffer:
             self._update_content_display()
+        # 检测是否为错误消息，应用红色样式
+        self._apply_error_style()
 
     def _update_thinking_display(self):
         try:
@@ -111,11 +124,17 @@ class BotMessageWidget(Static):
 
     def watch_thinking_content(self, new_content: str):
         _log(f"watch_thinking_content: len={len(new_content) if new_content else 0}")
+        # 保护：reactive 挂载时初始值为空字符串，不应覆盖流式期间已设置的内容
+        if not new_content and self._thinking_buffer:
+            return
         self._thinking_buffer = new_content
         if self._mounted:
             self._update_thinking_display()
 
     def watch_content(self, new_content: str):
+        # 保护：reactive 挂载时初始值为空字符串，不应覆盖流式期间已设置的内容
+        if not new_content and self._content_buffer:
+            return
         self._content_buffer = new_content
         if self._mounted:
             self._update_content_display()
@@ -146,5 +165,14 @@ class BotMessageWidget(Static):
             
             # 触发布局刷新，确保高度重新计算
             self.refresh(layout=True)
+            # 检测是否为错误消息，应用红色样式
+            self._apply_error_style()
         except Exception as e:
             _log(f"finalize: ERROR - {e}")
+
+    def _apply_error_style(self):
+        """检测内容是否为错误消息（以 ❌ 开头），应用红色错误样式"""
+        if self._content_buffer and self._content_buffer.strip().startswith("❌"):
+            self.add_class("error")
+            _log("_apply_error_style: error class added")
+

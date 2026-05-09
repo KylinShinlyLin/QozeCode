@@ -41,7 +41,8 @@ class MessageStreamHandler:
                  on_tool_started: Optional[Callable[[str, str], None]] = None,
                  on_tool_completed: Optional[Callable[[str, str, bool], None]] = None,
                  on_stream_complete: Optional[Callable[[int], None]] = None,
-                 on_stream_progress: Optional[Callable[[int], None]] = None):
+                 on_stream_progress: Optional[Callable[[int], None]] = None,
+                 on_error: Optional[Callable[[str, str], None]] = None):
 
         self.on_bot_created = on_bot_created
         self.on_bot_updated = on_bot_updated
@@ -49,6 +50,7 @@ class MessageStreamHandler:
         self.on_tool_completed = on_tool_completed
         self.on_stream_complete = on_stream_complete
         self.on_stream_progress = on_stream_progress
+        self.on_error = on_error
 
         self.current_bot_message = None
         self._active_tools: Dict[str, dict] = {}
@@ -96,12 +98,29 @@ class MessageStreamHandler:
                 except Exception as e:
                     _log(f"ERROR chunk {chunk_count}: {e}")
                     import traceback
-                    _log(traceback.format_exc())
+                    tb = traceback.format_exc()
+                    _log(tb)
+                    # 通知 UI 显示错误
+                    self._notify_error(e, tb)
+
+        except asyncio.CancelledError:
+            _log("Stream cancelled by user")
+            # 取消不算错误，静默处理
+            if self._pending_update and self.current_bot_message:
+                await self._flush_update()
+            if self.current_bot_message:
+                self.current_bot_message.finalize()
+            return
+
         except Exception as e:
             _log(f"Fatal error: {e}")
             import traceback
-            _log(traceback.format_exc())
-            raise
+            tb = traceback.format_exc()
+            _log(tb)
+            # 通知 UI 显示错误
+            self._notify_error(e, tb)
+            # 注意：不再 raise，异常已通过 on_error 通知 UI
+            return
 
         if self._pending_update and self.current_bot_message:
             await self._flush_update()
@@ -117,6 +136,24 @@ class MessageStreamHandler:
 
         _log(f"Stream ended, chunks={chunk_count}")
         _log("=" * 60)
+
+    def _notify_error(self, exc: Exception, traceback_str: str):
+        """通过 on_error 回调通知 UI 层显示错误"""
+        if not self.on_error:
+            return
+
+        exc_type = type(exc).__name__
+        exc_msg = str(exc)
+
+        # 构建清晰的错误展示：异常类型 + 消息 + 精简堆栈
+        tb_lines = traceback_str.strip().split("\n")
+        concise_tb = "\n".join(tb_lines[-8:]) if len(tb_lines) > 8 else "\n".join(tb_lines)
+
+        error_summary = f"{exc_type}: {exc_msg}" if exc_msg else exc_type
+        error_detail = f"发生时间: {datetime.now().strftime('%H:%M:%S')}\n堆栈跟踪 (最后几行):\n{concise_tb}"
+
+        # 同步调用回调（回调可能涉及 UI 操作，在 async 上下文中由调用者处理）
+        self.on_error(error_summary, error_detail)
 
     async def _process_ai_message_chunk(self, message_chunk, chunk_count: int):
         """处理 AI 消息块 - 累积内容并检测 tool_calls"""
@@ -163,8 +200,6 @@ class MessageStreamHandler:
                         updated = True
                 
                 if updated:
-                    # _log(f"Updated tool_call {tool_call_id}: name={tool_name}, args={tool_args}")
-                    
                     # 检查是否需要显示（如果之前未显示过）
                     if tool_call_id not in self._processed_tool_ids:
                         has_content = any(v for v in (existing.get("args") or {}).values() if v)
@@ -178,7 +213,6 @@ class MessageStreamHandler:
                             
                             if self.on_tool_started:
                                 self.on_tool_started(tool_call_id, display_name)
-                                # _log(f"Displayed tool_call after update: {display_name}")
                             
                             self._processed_tool_ids.add(tool_call_id)
                     else:
@@ -192,7 +226,6 @@ class MessageStreamHandler:
                             existing["display_name"] = new_display
                             if self.on_tool_started:
                                 self.on_tool_started(tool_call_id, new_display)
-                            # _log(f"Updated display_name: {old_display} -> {new_display}")
             else:
                 # 新 tool_call，注册
                 self._active_tools[tool_call_id] = {
@@ -235,11 +268,11 @@ class MessageStreamHandler:
             _log(f"Using last active tool: {_id}")
 
         if not tool_info:
-            tool_info = {"name": "Tool", "display_name": "run: unknown"}
+            tool_info = {"name": "Tool", "display_name": "command: unknown"}
             _log("No tool_info found, using default")
 
         is_error = self._is_error(message_chunk)
-        display_name = tool_info.get("display_name", "run: unknown")
+        display_name = tool_info.get("display_name", "command: unknown")
         _log(f"Tool completed: display_name='{display_name}', is_error={is_error}")
 
         if self.on_tool_completed:

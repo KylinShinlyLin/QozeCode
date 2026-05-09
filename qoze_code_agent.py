@@ -39,7 +39,7 @@ import os
 
 from enums import supports_vision
 from tools.execute_command_tool import execute_command
-from tools.file_tools import read_file, list_files, search_in_files, cat_file, list_dir, grep_file, \
+from tools.file_tools import read_file, list_files, search_in_files, list_dir, grep_file, \
     find_files
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
@@ -188,7 +188,6 @@ base_tools = [
     read_file,
     # list_files,
     # search_in_files,
-    cat_file,
     # list_dir,
     # file_stats,
     # grep_file,

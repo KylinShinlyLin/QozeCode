@@ -472,7 +472,7 @@ class Qoze(App):
                 try:
                     img_files = get_image_files(image_folder)
                     if img_files:
-                        self.message_list.mount(Static(
+                        await self.message_list.mount(Static(
                             Text(f"⚠️ 当前模型 ({self.model_name}) 不支持视觉模态，"
                                  f"{len(img_files)} 张图片不会被加载到上下文",
                                  style="dim yellow")
@@ -496,7 +496,7 @@ class Qoze(App):
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         except Exception as e:
-            self.message_list.mount(Static(f"Error: {e}"))
+            await self.message_list.mount(Static(f"Error: {e}"))
         finally:
             self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")

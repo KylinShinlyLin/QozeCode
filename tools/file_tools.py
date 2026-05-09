@@ -99,49 +99,49 @@ def read_file(path: str, start_line: int = 1, end_line: int = 200) -> str:
         return f"Error reading file: {str(e)}"
 
 
-@tool
-def cat_file(paths: str | list[str] | None = None) -> str:
-    """Return full file content (cat-like) for text files only.
-
-    Args:
-        paths: A single file path or a list of file paths (relative to cwd or absolute).
-
-    Returns:
-        Concatenated file contents or an error message.
-    """
-    try:
-        if paths is None:
-            return "Error: paths must be a non-empty string or list of strings."
-        if isinstance(paths, str):
-            paths = [paths]
-        if not isinstance(paths, list) or not paths:
-            return "Error: paths must be a non-empty string or list of strings."
-
-        outputs = []
-        for path in paths:
-            target = _resolve_under_cwd(path)
-            if not target.exists():
-                outputs.append(f"Error: File not found: {path}")
-                continue
-            if not target.is_file():
-                outputs.append(f"Error: Path is not a file: {path}")
-                continue
-
-            # 跳过二进制文件
-            with target.open("rb") as f:
-                sample = f.read(4096)
-                if b"\x00" in sample:
-                    outputs.append(f"Error: Binary file detected (skipped): {path}")
-                    continue
-
-            with target.open("r", encoding="utf-8", errors="replace") as f:
-                content = f.read()
-            header = f"[CAT_FILE] {target}"
-            outputs.append(header + "\n" + content)
-
-        return "\n\n".join(outputs) if outputs else "No readable files."
-    except Exception as e:
-        return f"Error reading file: {str(e)}"
+# @tool
+# def cat_file(paths: str | list[str] | None = None) -> str:
+#     """Return full file content (cat-like) for text files only.
+#
+#     Args:
+#         paths: A single file path or a list of file paths (relative to cwd or absolute).
+#
+#     Returns:
+#         Concatenated file contents or an error message.
+#     """
+#     try:
+#         if paths is None:
+#             return "Error: paths must be a non-empty string or list of strings."
+#         if isinstance(paths, str):
+#             paths = [paths]
+#         if not isinstance(paths, list) or not paths:
+#             return "Error: paths must be a non-empty string or list of strings."
+#
+#         outputs = []
+#         for path in paths:
+#             target = _resolve_under_cwd(path)
+#             if not target.exists():
+#                 outputs.append(f"Error: File not found: {path}")
+#                 continue
+#             if not target.is_file():
+#                 outputs.append(f"Error: Path is not a file: {path}")
+#                 continue
+#
+#             # 跳过二进制文件
+#             with target.open("rb") as f:
+#                 sample = f.read(4096)
+#                 if b"\x00" in sample:
+#                     outputs.append(f"Error: Binary file detected (skipped): {path}")
+#                     continue
+#
+#             with target.open("r", encoding="utf-8", errors="replace") as f:
+#                 content = f.read()
+#             header = f"[CAT_FILE] {target}"
+#             outputs.append(header + "\n" + content)
+#
+#         return "\n\n".join(outputs) if outputs else "No readable files."
+#     except Exception as e:
+#         return f"Error reading file: {str(e)}"
 
 
 @tool

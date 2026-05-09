@@ -26,6 +26,36 @@ def _log(msg):
         print(f"[LOG ERROR] {e}", file=sys.stderr)
 
 
+class ErrorMessageWidget(Static):
+    """流式异常展示组件 - 在 chat-area 中醒目显示错误信息"""
+
+    DEFAULT_CSS = """
+    ErrorMessageWidget {
+        width: 100%;
+        height: auto;
+        margin: 1 0;
+        padding: 1 2;
+        color: #f7768e;
+        background: #1a1a2e;
+        border: solid #f7768e;
+        content-align: left top;
+    }
+    """
+
+    def __init__(self, error_summary: str, error_detail: str = "", **kwargs):
+        # 关闭 Rich markup，避免 error_summary 中的 [...] 被误解析
+        kwargs.setdefault("markup", False)
+        super().__init__(**kwargs)
+        lines = [
+            "❌ 请求失败",
+            error_summary,
+        ]
+        if error_detail:
+            lines.append("")
+            lines.append(error_detail)
+        self.update("\n".join(lines))
+
+
 class ToolResultWidget(Static):
     """工具执行结果组件 - 参考配色：成功图标green/文本cyan，失败图标red/文本red"""
 
@@ -78,8 +108,6 @@ class ToolResultWidget(Static):
             self.add_class("success")
 
 
-
-
 class ToolPlaceholderWidget(Static):
     """工具占位组件 - 最小化尺寸避免空白区域"""
     DEFAULT_CSS = """
@@ -126,7 +154,8 @@ class MessageList(ScrollableContainer):
             on_tool_started=self._on_tool_started,
             on_tool_completed=self._on_tool_completed,
             on_stream_complete=self._on_stream_complete,
-            on_stream_progress=self._on_stream_progress
+            on_stream_progress=self._on_stream_progress,
+            on_error=self._on_stream_error,
         )
 
     def add_user_message(self, content: str, is_command: bool = False):
@@ -149,24 +178,46 @@ class MessageList(ScrollableContainer):
         try:
             await self._stream_handler.process_stream(agent_stream)
         except Exception as e:
+            # 最后防线：process_stream 内部已通过 on_error 处理异常，
+            # 但如果仍有异常泄漏到这里，提供双重保险
             import traceback
             tb = traceback.format_exc()
-            _log(f"Error: {e}")
+            _log(f"Uncaught error in stream_agent_response: {e}")
             _log(tb)
-
-            # 构建清晰的错误展示：异常类型 + 消息 + 精简堆栈
             exc_type = type(e).__name__
             exc_msg = str(e)
-            # 提取堆栈最后 6 行（通常包含最关键的文件和行号）
             tb_lines = tb.strip().split("\n")
             concise_tb = "\n".join(tb_lines[-6:]) if len(tb_lines) > 6 else "\n".join(tb_lines)
+            self._mount_error_widget(
+                f"{exc_type}: {exc_msg}" if exc_msg else exc_type,
+                f"发生时间: {datetime.now().strftime('%H:%M:%S')}\n堆栈跟踪 (最后几行):\n{concise_tb}"
+            )
 
-            display_text = f"❌ 请求失败: {exc_type}: {exc_msg}\n\n堆栈跟踪 (最后几行):\n{concise_tb}"
+    def _on_stream_error(self, error_summary: str, error_detail: str):
+        """流错误回调 - 在 chat-area 中显示错误信息"""
+        _log(f"_on_stream_error: summary='{error_summary}'")
+        self._mount_error_widget(error_summary, error_detail)
 
-            from textual.widgets import Static
-            self.mount(Static(display_text))
+    def _mount_error_widget(self, error_summary: str, error_detail: str):
+        """挂载错误展示组件到聊天区域"""
+        try:
+            widget = ErrorMessageWidget(error_summary, error_detail)
+            self.mount(widget)
             self.refresh(layout=True)
             self._scroll_to_end()
+        except Exception as e:
+            # 如果 UI 操作也失败了，至少保证日志可见
+            _log(f"CRITICAL: Failed to mount error widget: {e}")
+            import traceback
+            _log(traceback.format_exc())
+
+            # 兜底：尝试用最简单的 Static 展示
+            try:
+                fallback = Static(f"❌ 错误: {error_summary}")
+                self.mount(fallback)
+                self.refresh(layout=True)
+            except Exception:
+                _log("CRITICAL: Even fallback error display failed")
 
     def _add_widget(self, widget):
         _log(f"_add_widget: {type(widget).__name__}")
@@ -227,7 +278,7 @@ class MessageList(ScrollableContainer):
     def _on_stream_complete(self, total_tokens: int):
         _log(f"stream_complete: tokens={total_tokens}")
         # 最终刷新确保所有内容都显示
-        if hasattr(self._stream_handler, '_current_bot_message') and self._stream_handler.current_bot_message:
+        if hasattr(self._stream_handler, 'current_bot_message') and self._stream_handler.current_bot_message:
             self._stream_handler.current_bot_message.refresh(layout=True)
         self.scroll_end(animate=False)
         self.refresh(layout=True)
