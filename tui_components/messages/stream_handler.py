@@ -90,9 +90,10 @@ class MessageStreamHandler:
                 try:
                     if isinstance(message_chunk, (AIMessage,)) or chunk_type in ["AIMessageChunk", "AIMessage"]:
                         await self._process_ai_message_chunk(message_chunk, chunk_count)
-                    elif isinstance(message_chunk, (LC_ToolMessage,)) or chunk_type in ["ToolMessageChunk", "ToolMessage"]:
+                    elif isinstance(message_chunk, (LC_ToolMessage,)) or chunk_type in ["ToolMessageChunk",
+                                                                                        "ToolMessage"]:
                         await self._process_tool_result(message_chunk, chunk_count)
-                    
+
                     # 关键：让出事件循环，给 UI 刷新机会
                     await asyncio.sleep(0)
                 except Exception as e:
@@ -167,6 +168,14 @@ class MessageStreamHandler:
 
         await self._handle_ai_content(message_chunk, thinking, content)
 
+        # 检测 finish_reason，若是 tool_calls 则立即从 Static 切换到 Markdown
+        # 避免工具执行期间用户仍看到 Static 纯文本
+        finish_reason = getattr(message_chunk, 'response_metadata', {}).get('finish_reason', '')
+        if finish_reason == 'tool_calls' and self.current_bot_message:
+            _log(f'Early finalize: finish_reason=tool_calls, content_len={len(self._accumulated_content)}')
+            self.current_bot_message.finalize()
+            self._expecting_new_message = True
+
         if self._accumulated_ai_message.tool_calls:
             self._update_tool_calls_from_accumulated()
 
@@ -184,12 +193,12 @@ class MessageStreamHandler:
                 # 更新现有 tool_call 的信息
                 existing = self._active_tools[tool_call_id]
                 updated = False
-                
+
                 # 更新 name
                 if tool_name and not existing.get("name"):
                     existing["name"] = tool_name
                     updated = True
-                
+
                 # 更新 args（如果新的 args 有实质内容）
                 existing_args = existing.get("args", {}) or {}
                 if tool_args and len(tool_args) >= len(existing_args):
@@ -198,7 +207,7 @@ class MessageStreamHandler:
                     if has_content or not any(v for v in existing_args.values() if v):
                         existing["args"] = tool_args
                         updated = True
-                
+
                 if updated:
                     # 检查是否需要显示（如果之前未显示过）
                     if tool_call_id not in self._processed_tool_ids:
@@ -206,19 +215,19 @@ class MessageStreamHandler:
                         if has_content:
                             # 现在有内容了，显示它
                             display_name = self._format_tool_display_name(
-                                existing.get("name", ""), 
+                                existing.get("name", ""),
                                 existing.get("args", {})
                             )
                             existing["display_name"] = display_name
-                            
+
                             if self.on_tool_started:
                                 self.on_tool_started(tool_call_id, display_name)
-                            
+
                             self._processed_tool_ids.add(tool_call_id)
                     else:
                         # 已经显示过，检查是否需要更新显示名称
                         new_display = self._format_tool_display_name(
-                            existing.get("name", ""), 
+                            existing.get("name", ""),
                             existing.get("args", {})
                         )
                         old_display = existing.get("display_name", "")
@@ -234,19 +243,19 @@ class MessageStreamHandler:
                     "display_name": ""
                 }
                 _log(f"Registered new tool_call {tool_call_id}: name={tool_name}, args={tool_args}")
-                
+
                 # 检查 args 是否有实质内容
                 has_content = any(v for v in (tool_args or {}).values() if v)
-                
+
                 if has_content:
                     # 有内容，立即显示
                     display_name = self._format_tool_display_name(tool_name, tool_args)
                     self._active_tools[tool_call_id]["display_name"] = display_name
-                    
+
                     if self.on_tool_started:
                         self.on_tool_started(tool_call_id, display_name)
                         _log(f"Displayed tool_call immediately: {display_name}")
-                    
+
                     self._processed_tool_ids.add(tool_call_id)
                 else:
                     # 无内容，先不显示，等待后续更新
@@ -286,11 +295,11 @@ class MessageStreamHandler:
         for tool_id, tool_info in list(self._active_tools.items()):
             tool_name = tool_info.get("name", "")
             tool_args = tool_info.get("args", {})
-            
+
             # 重新计算 display_name（可能 args 在后续 chunk 中更新了）
             new_display_name = self._format_tool_display_name(tool_name, tool_args)
             old_display_name = tool_info.get("display_name", "")
-            
+
             # 如果显示名称有变化，更新存储
             if new_display_name != old_display_name:
                 tool_info["display_name"] = new_display_name
@@ -367,6 +376,9 @@ class MessageStreamHandler:
     async def _handle_ai_content(self, chunk, thinking: str, content: str):
         """处理 AI 内容（thinking 和 content）"""
         if self.current_bot_message is None or self._expecting_new_message:
+            # 没有任何实质内容时（纯 tool_calls），不创建空 widget，避免占位空行
+            if not thinking and not content:
+                return
             msg = BotMessage(
                 id=self._gen_id(),
                 thinking_content="",
@@ -460,13 +472,13 @@ class MessageStreamHandler:
             first_line = result_content.splitlines()[0] if result_content else ""
             # 错误标记：[RUN_FAILED]、Error:、非零退出码、包含 ❌ 但不属于特定成功标记的情况
             is_err = (
-                first_line.startswith("[RUN_FAILED]") or 
-                first_line.startswith("Error:") or
-                # 非零退出码视为错误 (Exit Code: X, X != 0)
-                ("Exit Code:" in first_line and "Exit Code: 0" not in first_line) or
-                ("❌" in first_line and not any(first_line.startswith(p) for p in
-                    ["[READ_FILE]", "[CAT_FILE]", "[SEARCH_IN_FILES]",
-                     "[LIST_DIR]", "[LIST_FILES]", "[SUCCESS]"]))
+                    first_line.startswith("[RUN_FAILED]") or
+                    first_line.startswith("Error:") or
+                    # 非零退出码视为错误 (Exit Code: X, X != 0)
+                    ("Exit Code:" in first_line and "Exit Code: 0" not in first_line) or
+                    ("❌" in first_line and not any(first_line.startswith(p) for p in
+                                                   ["[READ_FILE]", "[CAT_FILE]", "[SEARCH_IN_FILES]",
+                                                    "[LIST_DIR]", "[LIST_FILES]", "[SUCCESS]"]))
             )
             return is_err
         return False

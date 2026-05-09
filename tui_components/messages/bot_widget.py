@@ -44,6 +44,8 @@ class BotMessageWidget(Static):
     BotMessageWidget > Vertical {
         width: 100%;
         height: auto;
+        margin: 0;
+        padding: 0;
     }
 
     BotMessageWidget Static {
@@ -100,8 +102,7 @@ class BotMessageWidget(Static):
     def on_mount(self) -> None:
         self._mounted = True
         _log(f"on_mount: thinking_buffer len={len(self._thinking_buffer)}, content len={len(self._content_buffer)}")
-        if self._thinking_buffer:
-            self._update_thinking_display()
+        self._update_thinking_display()
         if self._content_buffer:
             self._update_content_display()
         # 检测是否为错误消息，应用红色样式
@@ -110,8 +111,11 @@ class BotMessageWidget(Static):
     def _update_thinking_display(self):
         try:
             thinking_static = self.query_one("#thinking-static", Static)
-            display_content = self._thinking_buffer if self._thinking_buffer else " "
-            thinking_static.update(display_content)
+            if self._thinking_buffer and self._thinking_buffer.strip():
+                thinking_static.remove_class("hidden")
+                thinking_static.update(self._thinking_buffer)
+            else:
+                thinking_static.add_class("hidden")
         except Exception as e:
             _log(f"_update_thinking_display: ERROR - {e}")
 
