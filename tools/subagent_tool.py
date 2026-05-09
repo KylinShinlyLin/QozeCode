@@ -10,6 +10,7 @@ Subagent 调度工具 - 实现 LangChain Subagents 模式
 - 上下文隔离：subagent 不继承主 agent 的对话历史，避免上下文膨胀
 - 动态 System Prompt：主 agent 可根据具体场景为每个 subagent 定制 system prompt
 - subagent_type 可选为空：不指定类型时，必须提供 system_prompt 来完全自定义 subagent
+- Graph 架构完全模仿主 agent：llm_call → should_continue → tool_node → should_continue_from_tool → llm_call
 """
 
 import asyncio
@@ -124,34 +125,59 @@ def _get_subagent_tools():
 
 
 # ============================================================
-# Subagent 状态和执行器
+# Subagent 状态 —— 模仿主 agent 的 MessagesState
 # ============================================================
 
 class SubagentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
+    llm_calls: int
 
+
+# 最大 ReAct 迭代次数
+MAX_SUBAGENT_ITERATIONS = 15
+
+
+# ============================================================
+# Subagent Graph 构建 —— 完全模仿主 agent 的架构
+# ============================================================
 
 def _build_subagent(model_with_tools):
     """
-    构建一个通用的 subagent LangGraph agent。
+    构建 subagent 的 LangGraph agent，架构完全对标主 agent：
+    
+    START → llm_call → should_continue ──→ tool_node → should_continue_from_tool ──→ llm_call
+                          │                                                │
+                          └──→ END                                         └──→ END
     
     无 checkpointer（无状态 subagent），每次调用独立执行。
-    system_prompt 在运行时动态注入，而不是编译时固定。
+    system_prompt 在运行时动态注入。
     """
 
+    # --------------------------------------------------
+    # Node 1: llm_call —— 模型推理节点
+    # --------------------------------------------------
     async def _subagent_llm_call(state: SubagentState):
-        """Subagent 的 LLM 调用节点"""
+        """Subagent 的 LLM 调用节点（对标主 agent 的 llm_call）"""
         msgs = state["messages"]
         try:
             response = await model_with_tools.ainvoke(msgs)
-            return {"messages": [response]}
+            return {
+                "messages": [response],
+                "llm_calls": state.get("llm_calls", 0) + 1,
+            }
         except Exception as e:
             error_msg = f"Subagent LLM error: {type(e).__name__}: {e}"
             console.print(f"[red]{error_msg}[/red]")
-            return {"messages": [AIMessage(content=error_msg)]}
+            return {
+                "messages": [AIMessage(content=error_msg)],
+                "llm_calls": state.get("llm_calls", 0) + 1,
+            }
 
+    # --------------------------------------------------
+    # Node 2: tool_node —— 工具执行节点
+    # --------------------------------------------------
     async def _subagent_tool_node(state: SubagentState):
-        """Subagent 的工具执行节点"""
+        """Subagent 的工具执行节点（对标主 agent 的 tool_node）"""
         subagent_tools = _get_subagent_tools()
         tools_by_name = {t.name: t for t in subagent_tools}
         result = []
@@ -188,19 +214,64 @@ def _build_subagent(model_with_tools):
 
         return {"messages": result}
 
+    # --------------------------------------------------
+    # Edge 1: should_continue —— llm_call 后判断
+    # --------------------------------------------------
     def _should_continue(state: SubagentState) -> Literal["tool_node", END]:
-        last_msg = state["messages"][-1]
-        if last_msg.tool_calls:
+        """
+        对标主 agent 的 should_continue：
+        - 有 tool_calls → tool_node
+        - 无 tool_calls 或 超过最大迭代 → END
+        """
+        messages = state["messages"]
+        last_message = messages[-1]
+
+        # 超过最大迭代次数，强制结束
+        if state.get("llm_calls", 0) > MAX_SUBAGENT_ITERATIONS:
+            console.print(f"[yellow]⚠️ Subagent 达到最大迭代次数 {MAX_SUBAGENT_ITERATIONS}，强制结束[/yellow]")
+            return END
+
+        # 有工具调用 → 执行工具
+        if last_message.tool_calls:
             return "tool_node"
+
+        # 无工具调用 → 结束
         return END
 
-    # 构建 subagent 的 graph（无 checkpointer = 无状态）
+    # --------------------------------------------------
+    # Edge 2: should_continue_from_tool —— tool_node 后判断
+    # --------------------------------------------------
+    def _should_continue_from_tool(state: SubagentState) -> Literal["llm_call", END]:
+        """
+        对标主 agent 的 should_continue_from_tool：
+        - 正常情况 → 回到 llm_call 继续推理
+        - 超过最大迭代 → END
+        """
+        if state.get("llm_calls", 0) > MAX_SUBAGENT_ITERATIONS:
+            console.print(f"[yellow]⚠️ Subagent 达到最大迭代次数 {MAX_SUBAGENT_ITERATIONS}，强制结束[/yellow]")
+            return END
+
+        return "llm_call"
+
+    # --------------------------------------------------
+    # 组装 Graph —— 完全对标主 agent
+    # --------------------------------------------------
     builder = StateGraph(SubagentState)
+
     builder.add_node("llm_call", _subagent_llm_call)
     builder.add_node("tool_node", _subagent_tool_node)
+
     builder.add_edge(START, "llm_call")
-    builder.add_conditional_edges("llm_call", _should_continue, ["tool_node", END])
-    builder.add_edge("tool_node", "llm_call")
+    builder.add_conditional_edges(
+        "llm_call",
+        _should_continue,
+        ["tool_node", END]
+    )
+    builder.add_conditional_edges(
+        "tool_node",
+        _should_continue_from_tool,
+        ["llm_call", END]
+    )
 
     return builder.compile()
 
@@ -210,9 +281,6 @@ def _build_subagent(model_with_tools):
 # ============================================================
 
 _subagent_instance = None
-
-# 最大 ReAct 迭代次数
-MAX_SUBAGENT_ITERATIONS = 15
 
 
 def _get_or_build_subagent(model_with_tools):
@@ -237,10 +305,10 @@ def reset_subagent_cache():
 
 @tool
 async def dispatch_subagent(
-    task: str,
-    subagent_type: Optional[str] = None,
-    system_prompt: Optional[str] = None,
-    context: Optional[str] = None,
+        task: str,
+        subagent_type: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        context: Optional[str] = None,
 ) -> str:
     """
     派遣一个专门的子代理 (subagent) 来独立完成一个子任务。
@@ -280,7 +348,7 @@ async def dispatch_subagent(
     - 子代理之间不能直接通信，所有协调由你（主代理）完成
     - 子代理返回结果后，你需要综合所有结果向用户汇报
     - 适合并行分派的场景：同时研究多个主题、同时探索多个模块、同时编写多个独立文件
-    - 每个子代理有 120 秒超时限制和 15 轮迭代限制
+    - 每个子代理有 120 秒超时限制和 15 轮推理限制
 
     Args:
         task: 要分配给子代理的具体任务描述，越详细越好
@@ -297,7 +365,6 @@ async def dispatch_subagent(
 
     # ---- 参数校验 ----
 
-    # 规范化：空字符串等同于 None
     if subagent_type is not None:
         subagent_type = subagent_type.strip()
         if not subagent_type:
@@ -308,7 +375,6 @@ async def dispatch_subagent(
         if not system_prompt:
             system_prompt = None
 
-    # subagent_type 和 system_prompt 必须至少提供一个
     if not subagent_type and not system_prompt:
         return (
             "❌ 参数错误：subagent_type 和 system_prompt 不能同时为空。\n"
@@ -318,7 +384,6 @@ async def dispatch_subagent(
             "- 或者不指定 subagent_type，但必须提供 system_prompt 来完全自定义子代理"
         )
 
-    # 如果指定了 type，验证其有效性
     if subagent_type and subagent_type not in SUBAGENT_TYPE_PROMPTS:
         valid_types = ", ".join(SUBAGENT_TYPE_PROMPTS.keys())
         return (
@@ -334,36 +399,30 @@ async def dispatch_subagent(
         return "❌ Subagent 无法初始化：主 agent 的 LLM 尚未就绪，请稍后重试。"
 
     try:
-        # 获取或构建 subagent graph
         subagent = _get_or_build_subagent(llm_with_tools)
 
-        # 确定 system prompt：优先使用用户提供的，否则用类型默认
         effective_system_prompt = system_prompt or SUBAGENT_TYPE_PROMPTS[subagent_type]
 
-        # 构建 subagent 的输入消息
         user_content = f"## Task\n{task}"
         if context:
             user_content += f"\n\n## Additional Context\n{context}"
         user_content += "\n\nComplete the task and return a clear summary of what you did and the results."
 
-        # 构建消息列表：SystemMessage + HumanMessage
         messages = [
             SystemMessage(content=effective_system_prompt),
             HumanMessage(content=user_content),
         ]
 
-        # 执行 subagent（异步），带超时
+        # 执行 subagent，带超时
         result = await asyncio.wait_for(
-            subagent.ainvoke({"messages": messages}),
-            timeout=120.0
+            subagent.ainvoke({"messages": messages, "llm_calls": 0}),
+            timeout=600.0
         )
 
-        # 提取最终响应
         result_messages = result.get("messages", [])
         if not result_messages:
             return "⚠️ Subagent 完成但没有返回任何消息。"
 
-        # 收集所有 AI 消息的内容，取最后一条非空响应
         final_response = ""
         for msg in reversed(result_messages):
             if isinstance(msg, AIMessage) and msg.content:
@@ -377,10 +436,11 @@ async def dispatch_subagent(
                 else "Subagent 执行完成（无文本输出）"
             )
 
-        # 添加执行统计
+        # 统计
+        total_llm_calls = result.get("llm_calls", 0)
         ai_count = sum(1 for m in result_messages if isinstance(m, AIMessage))
         tool_count = sum(1 for m in result_messages if isinstance(m, ToolMessage))
-        stats = f"\n\n---\n📊 Subagent 统计: {ai_count} 轮推理, {tool_count} 次工具调用"
+        stats = f"\n\n---\n📊 Subagent 统计: {ai_count} 轮推理, {tool_count} 次工具调用, {total_llm_calls} 次 LLM 调用"
 
         return final_response + stats
 
