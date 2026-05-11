@@ -14,8 +14,10 @@ Subagent 调度工具 - 实现 LangChain Subagents 模式
 
 import asyncio
 import operator
+import time
 import traceback
-from typing import Literal, Annotated, Optional
+import uuid
+from typing import Literal, Annotated, Optional, Callable, Awaitable
 
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage, AnyMessage
@@ -23,6 +25,26 @@ from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict
 
 from shared_console import console
+
+# ============================================================
+# Subagent Stream Callback —— TUI 注册此回调来接收 subagent 实时输出
+# ============================================================
+
+# 回调签名: async (event: dict) -> None
+# event 格式:
+#   {"type": "subagent_start",  "agent_id": str, "label": str}
+#   {"type": "subagent_think",  "agent_id": str, "content": str}
+#   {"type": "subagent_content","agent_id": str, "content": str}
+#   {"type": "subagent_tool",   "agent_id": str, "tool_name": str, "tool_args": str, "status": "start"|"end"}
+#   {"type": "subagent_done",   "agent_id": str, "result": str, "stats": dict}
+_subagent_stream_callback: Optional[Callable[[dict], Awaitable[None]]] = None
+
+
+def set_subagent_stream_callback(cb: Optional[Callable[[dict], Awaitable[None]]]):
+    """注册 subagent 流式回调。TUI 层调用此函数。传 None 取消注册。"""
+    global _subagent_stream_callback
+    _subagent_stream_callback = cb
+
 
 # ============================================================
 # Subagent 专用 System Prompt（从 system_prompt.py 加载）
@@ -90,7 +112,7 @@ class SubagentState(TypedDict):
 
 
 # 最大 ReAct 迭代次数
-MAX_SUBAGENT_ITERATIONS = 15
+MAX_SUBAGENT_ITERATIONS = 10  # 从 15 降到 10，更快兜底
 
 
 # ============================================================
@@ -146,53 +168,6 @@ def _format_tool_args(tool_name: str, args: dict) -> str:
         if len(first_val) > 50:
             first_val = first_val[:47] + "..."
         return f'{first_key}="{first_val}"'
-
-
-# ============================================================
-# 构建详细执行日志
-# ============================================================
-
-def _build_execution_log(result_messages: list, total_llm_calls: int) -> str:
-    """
-    从 subagent 的消息历史中提取并构建详细执行日志。
-
-    返回格式:
-    ---
-    📊 Subagent 执行详情: 3 轮推理, 6 次工具调用, 3 次 LLM 调用
-    [1/3] tavily_search("AI 最新新闻")
-    [1/3] read_url("https://...")
-    [2/3] tavily_search("AI safety 2025")
-    [2/3] read_url("https://...")
-    [2/3] tavily_search("大模型 开源")
-    [3/3] → 任务完成
-    """
-    ai_count = sum(1 for m in result_messages if isinstance(m, AIMessage))
-    tool_count = sum(1 for m in result_messages if isinstance(m, ToolMessage))
-
-    lines = [
-        "\n\n---",
-        f"📊 Subagent 执行详情: {ai_count} 轮推理, {tool_count} 次工具调用, {total_llm_calls} 次 LLM 调用",
-    ]
-
-    round_num = 0
-    has_final = False
-    for msg in result_messages:
-        if isinstance(msg, AIMessage):
-            round_num += 1
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    tool_name = tc["name"]
-                    args = tc.get("args", {})
-                    args_str = _format_tool_args(tool_name, args)
-                    lines.append(f"  [{round_num}/{ai_count}] 🔧 {tool_name}({args_str})")
-            else:
-                lines.append(f"  [{round_num}/{ai_count}] ✅ 任务完成，返回结果")
-                has_final = True
-
-    if not has_final and ai_count > 0:
-        lines.append(f"  [{ai_count}/{ai_count}] ✅ 任务完成，返回结果")
-
-    return "\n".join(lines)
 
 
 # ============================================================
@@ -367,9 +342,126 @@ def reset_subagent_cache():
     global _subagent_instance, _subagent_tools_cache, _subagent_system_prompt_cache
     _subagent_instance = None
     _subagent_tools_cache = None
-    _subagent_tools_cache = None
     _subagent_system_prompt_cache = None
     console.print("[dim]🧹 Subagent 缓存已清除[/dim]")
+
+
+# ============================================================
+# Subagent 流式执行 —— 使用 astream_events 实时输出
+# ============================================================
+
+async def _stream_subagent(
+    subagent,
+    messages: list,
+    agent_id: str,
+    label: str,
+) -> str:
+    """
+    使用 astream_events 执行 subagent，每轮 LLM 结束时回调完整 AIMessage content。
+
+    不做 token 级流式，不发送 thinking / tool 细节。
+    返回最终的文本结果。
+    """
+    cb = _subagent_stream_callback
+    if cb is None:
+        # 无回调时回退到 ainvoke
+        config = {"recursion_limit": MAX_SUBAGENT_ITERATIONS * 2 + 5}
+        result = await asyncio.wait_for(
+            subagent.ainvoke({"messages": messages, "llm_calls": 0}, config=config),
+            timeout=300.0
+        )
+        result_messages = result.get("messages", [])
+        final = ""
+        for msg in reversed(result_messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                final = msg.content
+                break
+        return final or "Subagent 执行完成（无文本输出）"
+
+    # --- 回调模式：只关注 on_chat_model_end ---
+    await cb({"type": "subagent_start", "agent_id": agent_id, "label": label})
+
+    config = {"recursion_limit": MAX_SUBAGENT_ITERATIONS * 2 + 5}
+    final_content = ""
+    total_llm_calls = 0
+    total_tool_calls = 0
+
+    try:
+        async for event in subagent.astream_events(
+            {"messages": messages, "llm_calls": 0},
+            config=config,
+            version="v2",
+        ):
+            kind = event["event"]
+
+            # LLM 流式输出 —— 逐 token 发送
+            if kind == "on_chat_model_stream":
+                chunk = event["data"]["chunk"]
+                if hasattr(chunk, "content") and chunk.content:
+                    text = chunk.content
+                    if isinstance(text, str) and text:
+                        final_content += text
+                        await cb({
+                            "type": "subagent_stream",
+                            "agent_id": agent_id,
+                            "content": text,
+                        })
+
+            # LLM 调用结束 —— 本轮完成
+            elif kind == "on_chat_model_end":
+                total_llm_calls += 1
+
+            # 工具开始
+            elif kind == "on_tool_start":
+                tool_name = event.get("name", "unknown")
+                tool_input = event["data"].get("input", {})
+                args_summary = _format_tool_args(tool_name, tool_input)
+                await cb({
+                    "type": "subagent_tool",
+                    "agent_id": agent_id,
+                    "tool_name": tool_name,
+                    "tool_args": args_summary,
+                    "status": "start",
+                })
+
+            # 工具结束
+            elif kind == "on_tool_end":
+                total_tool_calls += 1
+                tool_name = event.get("name", "unknown")
+                await cb({
+                    "type": "subagent_tool",
+                    "agent_id": agent_id,
+                    "tool_name": tool_name,
+                    "tool_args": "",
+                    "status": "end",
+                })
+
+    except asyncio.CancelledError:
+        # 被 dispatch_subagent 的 wait_for 取消，直接向上抛
+        raise
+
+    except Exception as e:
+        traceback.print_exc()
+        error_msg = f"❌ Subagent 执行失败: {type(e).__name__}: {e}"
+        await cb({
+            "type": "subagent_done",
+            "agent_id": agent_id,
+            "result": error_msg,
+            "stats": {"llm_calls": total_llm_calls, "tool_calls": total_tool_calls},
+        })
+        return error_msg
+
+    # --- 完成 ---
+    stats = {"llm_calls": total_llm_calls, "tool_calls": total_tool_calls}
+    await cb({
+        "type": "subagent_done",
+        "agent_id": agent_id,
+        "result": final_content,
+        "stats": stats,
+    })
+
+    stats_str = f"\n\n---\n📊 Subagent 统计: {total_llm_calls} 轮推理, {total_tool_calls} 次工具调用"
+    return final_content + stats_str
 
 
 # ============================================================
@@ -405,6 +497,10 @@ async def dispatch_subagent(
         # 统一使用主 Agent 的 system prompt（去掉不可用的章节）
         effective_system_prompt = await _get_subagent_system_prompt()
 
+        # 生成唯一 ID 和标签
+        agent_id = str(uuid.uuid4())[:8]
+        label = task[:60] + "..." if len(task) > 60 else task
+
         user_content = f"## Task\n{task}"
         if context:
             user_content += f"\n\n## Additional Context\n{context}"
@@ -415,41 +511,13 @@ async def dispatch_subagent(
             HumanMessage(content=user_content),
         ]
 
-        # 执行 subagent，带超时（300 秒）
-        result = await asyncio.wait_for(
-            subagent.ainvoke({"messages": messages, "llm_calls": 0}),
+        # 使用流式执行（如果 TUI 注册了回调），否则回退到 ainvoke
+        # 注意：asyncio.wait_for 包裹整个流式执行，300s 超时
+        return await asyncio.wait_for(
+            _stream_subagent(subagent, messages, agent_id, label),
             timeout=300.0
         )
 
-        result_messages = result.get("messages", [])
-        if not result_messages:
-            return "⚠️ Subagent 完成但没有返回任何消息。"
-
-        final_response = ""
-        for msg in reversed(result_messages):
-            if isinstance(msg, AIMessage) and msg.content:
-                final_response = msg.content
-                break
-
-        if not final_response:
-            final_response = (
-                str(result_messages[-1].content)
-                if result_messages[-1].content
-                else "Subagent 执行完成（无文本输出）"
-            )
-
-        # 详细执行日志
-        # stats = _build_execution_log(result_messages, result.get("llm_calls", 0))
-
-        # return final_response
-
-        # 统计
-        total_llm_calls = result.get("llm_calls", 0)
-        ai_count = sum(1 for m in result_messages if isinstance(m, AIMessage))
-        tool_count = sum(1 for m in result_messages if isinstance(m, ToolMessage))
-        stats = f"\n\n---\n📊 Subagent 统计: {ai_count} 轮推理, {tool_count} 次工具调用, {total_llm_calls} 次 LLM 调用"
-
-        return final_response + stats
     except asyncio.TimeoutError:
         return "⚠️ Subagent 执行超时，任务可能过于复杂。请尝试拆分为更小的子任务。"
     except Exception as e:

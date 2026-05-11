@@ -10,6 +10,7 @@ from datetime import datetime
 from .types import UserMessage
 from .user_widget import UserMessageWidget
 from .bot_widget import BotMessageWidget
+from .subagent_widget import SubagentWidget
 from .stream_handler import MessageStreamHandler
 
 # 日志文件路径
@@ -157,6 +158,60 @@ class MessageList(ScrollableContainer):
             on_stream_progress=self._on_stream_progress,
             on_error=self._on_stream_error,
         )
+
+        # --- Subagent 流式回调 ---
+        self._subagent_widgets: dict = {}  # agent_id -> SubagentWidget
+        self._subagent_labels: dict = {}   # agent_id -> str (显示标签)
+        self._register_subagent_callback()
+
+    def _register_subagent_callback(self):
+        """注册 subagent 流式回调到 subagent_tool 模块"""
+        try:
+            from tools.subagent_tool import set_subagent_stream_callback
+            set_subagent_stream_callback(self._on_subagent_event)
+            _log("subagent stream callback registered")
+        except Exception as e:
+            _log(f"Failed to register subagent callback: {e}")
+
+    async def _on_subagent_event(self, event: dict):
+        """处理 subagent 事件，使用 SubagentWidget 流式展示"""
+        try:
+            etype = event["type"]
+            agent_id = event["agent_id"]
+
+            if etype == "subagent_start":
+                label = event.get("label", "Subagent")
+                self._subagent_labels[agent_id] = label
+                widget = SubagentWidget(agent_id=agent_id, label=label)
+                self._subagent_widgets[agent_id] = widget
+                self._add_widget(widget)
+                _log(f"subagent_start: {agent_id} '{label}'")
+
+            elif etype == "subagent_stream":
+                text = event.get("content", "")
+                if agent_id in self._subagent_widgets:
+                    self._subagent_widgets[agent_id].append_content(text)
+                    self._update_widget(self._subagent_widgets[agent_id])
+
+            elif etype == "subagent_tool":
+                tool_name = event.get("tool_name", "")
+                tool_args = event.get("tool_args", "")
+                status = event.get("status", "")
+                if agent_id in self._subagent_widgets:
+                    self._subagent_widgets[agent_id].append_tool(tool_name, tool_args, status)
+                    self._update_widget(self._subagent_widgets[agent_id])
+
+            elif etype == "subagent_done":
+                if agent_id in self._subagent_widgets:
+                    widget = self._subagent_widgets[agent_id]
+                    widget.finalize()
+                    self._update_widget(widget)
+                    self._subagent_widgets.pop(agent_id, None)
+                    self._subagent_labels.pop(agent_id, None)
+                stats = event.get("stats", {})
+                _log(f"subagent_done: {agent_id} llm={stats.get('llm_calls','?')} tools={stats.get('tool_calls','?')}")
+        except Exception as e:
+            _log(f"_on_subagent_event error: {type(e).__name__}: {e}")
 
     def add_user_message(self, content: str, is_command: bool = False):
         _log(f"add_user_message: content='{content[:50]}...'")

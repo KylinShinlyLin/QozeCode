@@ -36,6 +36,7 @@ from typing_extensions import TypedDict, Annotated
 from shared_console import console
 import sys
 import os
+import asyncio
 
 from enums import supports_vision
 from tools.execute_command_tool import execute_command
@@ -383,29 +384,33 @@ async def llm_call(state: dict):
 
 
 # Step 3: Define tool node
+# 异步工具名集合（模块级常量，避免每次调用重建列表）
+_ASYNC_TOOL_NAMES = {
+    "tavily_search", "read_url", "execute_command", "browser_navigate",
+    "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
+    "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
+    "browser_switch_tab", "browser_list_tabs", "browser_press_key",
+    "browser_send_keys", "browser_hotkey", "browser_focus",
+    "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate",
+    "browser_console_messages", "browser_console_get", "browser_network_requests",
+    "browser_network_get", "dispatch_subagent", "read_lark_document",
+}
+
 async def tool_node(state: dict):
-    """Performs the tool call"""
+    """并发执行工具调用 —— 所有独立工具调用并行执行"""
 
-    result = []
-    ask_question = None
+    tool_calls = state["messages"][-1].tool_calls
 
-    for tool_call in state["messages"][-1].tool_calls:
-        tool_name = tool_call["name"]
+    async def _execute_one(tc):
+        """执行单个工具调用，返回 ToolMessage"""
+        tool_name = tc["name"]
         try:
             tool = tools_by_name[tool_name]
-            # 检查是否是异步工具
-            if tool_name in ["tavily_search", "read_url", "execute_command", "browser_navigate",
-                             "browser_click", "browser_type", "browser_read_page", "browser_screenshot",
-                             "browser_get_html", "browser_close", "browser_scroll", "browser_open_tab",
-                             "browser_switch_tab", "browser_list_tabs", "browser_press_key",
-                             "browser_send_keys", "browser_hotkey", "browser_focus",
-                             "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate",
-                             "browser_console_messages", "browser_console_get", "browser_network_requests", "browser_network_get", "dispatch_subagent"]:
-                observation = await tool.ainvoke(tool_call["args"])
+            if tool_name in _ASYNC_TOOL_NAMES:
+                observation = await tool.ainvoke(tc["args"])
             else:
-                observation = tool.invoke(tool_call["args"])
-            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"], name=tool_name))
-
+                observation = tool.invoke(tc["args"])
+            return ToolMessage(content=observation, tool_call_id=tc["id"], name=tool_name)
         except KeyError:
             available = ", ".join(sorted(tools_by_name.keys()))
             error_msg = (
@@ -414,14 +419,22 @@ async def tool_node(state: dict):
                 f"请使用上述列表中的工具名称重新调用。"
             )
             console.print(error_msg, style="red")
-            result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_name))
+            return ToolMessage(content=error_msg, tool_call_id=tc["id"], name=tool_name)
         except Exception as e:
             traceback.print_exc()
             error_msg = f"❌ '{tool_name}' 调用失败: {type(e).__name__}: {e}"
             console.print(error_msg, style="red")
-            result.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"], name=tool_name))
+            return ToolMessage(content=error_msg, tool_call_id=tc["id"], name=tool_name)
 
-    return {"messages": result, "ask_user_question": ask_question}
+    # 并发执行所有工具调用
+    if len(tool_calls) == 1:
+        result = [await _execute_one(tool_calls[0])]
+    else:
+        console.print(f"[dim]⚡ 并发执行 {len(tool_calls)} 个工具调用...[/dim]")
+        result = await asyncio.gather(*[_execute_one(tc) for tc in tool_calls])
+
+    return {"messages": result, "ask_user_question": None}
+
 
 
 # Step 4: Define logic to determine whether to end
