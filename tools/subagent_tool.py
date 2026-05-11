@@ -65,6 +65,48 @@ async def _get_subagent_system_prompt() -> str:
     return _subagent_system_prompt_cache
 
 
+def _load_rules() -> str:
+    """加载当前工作目录下 .qoze/rules/ 的自定义规则（与主 agent 一致）"""
+    import os
+    current_dir = os.getcwd()
+    rules_dir = os.path.join(current_dir, '.qoze', 'rules')
+    if not os.path.isdir(rules_dir):
+        return ""
+
+    try:
+        rule_files = [f for f in os.listdir(rules_dir) if os.path.isfile(os.path.join(rules_dir, f))]
+        if not rule_files:
+            return ""
+
+        parts = ["\n## 当前自定义 agent 规则\n"]
+        for file_name in sorted(rule_files):
+            file_path = os.path.join(rules_dir, file_name)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                parts.append(f"### {file_name}\n{file_content}\n")
+            except Exception:
+                pass
+        return "".join(parts)
+    except Exception:
+        return ""
+
+
+def _load_directory_tree() -> str:
+    """加载当前目录结构树（与主 agent 一致）"""
+    import os
+    import asyncio
+    try:
+        from utils.directory_tree import get_directory_tree
+        current_dir = os.getcwd()
+        tree = get_directory_tree(current_dir)
+        if tree and tree.strip():
+            return f"\n## 当前项目目录\n```\n{tree}\n```\n"
+    except Exception:
+        pass
+    return ""
+
+
 # ============================================================
 # Subagent 可用工具 —— 除 browser / skill / plan / subagent 之外的全部工具
 # ============================================================
@@ -505,6 +547,16 @@ async def dispatch_subagent(
         if context:
             user_content += f"\n\n## Additional Context\n{context}"
         user_content += "\n\nComplete the task and return a clear summary of what you did and the results."
+
+        # 加载 .qoze/rules 规则并注入到 system prompt
+        rules = _load_rules()
+        if rules:
+            effective_system_prompt = effective_system_prompt + "\n" + rules
+
+        # 加载目录树注入到 user message
+        directory_tree = _load_directory_tree()
+        if directory_tree:
+            user_content = directory_tree + "\n" + user_content
 
         messages = [
             SystemMessage(content=effective_system_prompt),
