@@ -220,7 +220,6 @@ class MessageList(ScrollableContainer):
             widget = UserMessageWidget(msg)
             self.mount(widget)
             self.refresh(layout=True)
-            self._scroll_to_end()
             return widget
         except Exception as e:
             _log(f"add_user_message ERROR: {type(e).__name__}: {e}")
@@ -259,7 +258,6 @@ class MessageList(ScrollableContainer):
             widget = ErrorMessageWidget(error_summary, error_detail)
             self.mount(widget)
             self.refresh(layout=True)
-            self._scroll_to_end()
         except Exception as e:
             # 如果 UI 操作也失败了，至少保证日志可见
             _log(f"CRITICAL: Failed to mount error widget: {e}")
@@ -278,15 +276,22 @@ class MessageList(ScrollableContainer):
         _log(f"_add_widget: {type(widget).__name__}")
         self.mount(widget)
         self.refresh(layout=True)
-        self._scroll_to_end()
 
     def _update_widget(self, widget):
-        # 关键修复：需要 layout=True 来重新计算 auto height
         widget.refresh(layout=True)
         self.refresh(layout=True)
-        self._scroll_to_end()
+
+    def _is_at_bottom(self) -> bool:
+        """用户是否在列表底部（允许 2 行误差）"""
+        try:
+            return self.scroll_offset.y >= max(0, self.max_scroll_offset.y - 2)
+        except Exception:
+            return True  # 异常时默认滚动
 
     def _scroll_to_end(self):
+        """仅当用户在底部时才自动滚动"""
+        if not self._is_at_bottom():
+            return
         current_time = time.time()
         if current_time - self._last_scroll_time > self._scroll_interval:
             self.scroll_end(animate=False)
@@ -323,8 +328,6 @@ class MessageList(ScrollableContainer):
         self.refresh(layout=True)
         _log(f"[_on_tool_completed] mounted ToolResultWidget")
 
-        self._scroll_to_end()
-
     def _on_stream_progress(self, progress_tokens: int):
         """流式输出期间的实时 token 进度回调"""
         if self._token_progress_callback:
@@ -335,7 +338,6 @@ class MessageList(ScrollableContainer):
         # 最终刷新确保所有内容都显示
         if hasattr(self._stream_handler, 'current_bot_message') and self._stream_handler.current_bot_message:
             self._stream_handler.current_bot_message.refresh(layout=True)
-        self.scroll_end(animate=False)
         self.refresh(layout=True)
         if self._token_callback:
             self._token_callback(total_tokens)

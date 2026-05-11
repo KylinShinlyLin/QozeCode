@@ -86,6 +86,10 @@ QozeCode 的 Subagent 并行调度系统，让 Agent 能够将独立子任务分
 - **并行加速**：主 Agent 在单轮中同时发起多个 `dispatch_subagent` 调用，LangGraph 自动并行执行所有子代理
 - **动态定制**：主 Agent 可根据具体场景为每个子代理定制专属 system prompt，实现"因材施教"
 
+#### 📺 演示视频
+
+[![Subagent 并行调度演示](https://img.youtube.com/vi/0MNlpJefpnc/hqdefault.jpg)](https://www.youtube.com/watch?v=0MNlpJefpnc)
+
 #### 四种预定义子代理类型
 
 | 类型 | 专长 | 适用场景 |

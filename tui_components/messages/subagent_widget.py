@@ -4,10 +4,9 @@ Subagent 专用消息组件
 
 视觉区分于 BotMessageWidget：
   - 左侧橙色边框 + 暗背景
-  - 头部显示 spinner + label，运行中动画旋转
+  - 头部：运行中显示 braille spinner，完成显示 ✅
   - 流式期间 Static 逐 token 更新，结束后切 Markdown
   - 高度自适应内容
-  - 完成时 spinner → ✓ 绿色
 """
 import os
 from datetime import datetime
@@ -36,9 +35,9 @@ def _log(msg):
 class SubagentWidget(Static):
     """Subagent 消息组件
 
-    头部：
-      运行中: `⠋ 探索 opencode 项目结构...` （spinner 动画）
-      完成:   `✓ 探索 opencode 项目结构...` （绿色）
+    头部（纯文本 emoji，无 Rich markup）：
+      运行中: `⠋ Subagent · 探索 opencode...`
+      完成:   `✅ Subagent · 探索 opencode...`
     """
 
     DEFAULT_CSS = """
@@ -59,6 +58,8 @@ class SubagentWidget(Static):
 
     SubagentWidget .subagent-header {
         height: auto;
+        color: #e0af68;
+        text-style: bold;
         margin: 0;
         padding: 0;
     }
@@ -117,10 +118,10 @@ class SubagentWidget(Static):
 
     def _render_header(self) -> str:
         if self._is_done:
-            return f"[#9ece6a]✓[/] [#e0af68]{self.label}[/]"
+            return f"✓ Subagent · {self.label}"
         else:
             frame = SPINNER_FRAMES[self._spinner_frame % len(SPINNER_FRAMES)]
-            return f"[#e0af68]{frame} {self.label}[/]"
+            return f"{frame} Subagent · {self.label}"
 
     def _update_header(self):
         try:
@@ -166,22 +167,21 @@ class SubagentWidget(Static):
         if self._mounted:
             self._update_content_display()
 
-    # ---------- 完成 ----------
-
     def append_tool(self, tool_name: str, tool_args: str, status: str):
         """追加工具调用信息到内容区"""
         if status == "start":
             args = f"({tool_args})" if tool_args else ""
             line = f"\n🔧 {tool_name}{args}\n"
         else:
-            # tool end — just a brief note
             line = ""
         self._content_buffer += line
         if self._mounted:
             self._update_content_display()
 
+    # ---------- 完成 ----------
+
     def finalize(self):
-        """流式结束：停 spinner、切 ✓、Static → Markdown"""
+        """流式结束：停 spinner、切 ✅、Static → Markdown"""
         self._is_done = True
         self._stop_timer()
         self._update_header()

@@ -3,7 +3,7 @@
 提供带自动复制到剪贴板功能的 Static 和 Markdown 子类。
 
 当用户在组件中选择文本时，会自动将选中的文本内容复制到系统剪贴板，
-并通过 toast 通知用户。
+并通过 toast 通知用户。所有复制操作都带 try/except 保护，失败时 toast 提示。
 """
 
 import subprocess
@@ -18,13 +18,12 @@ def _copy_text_to_clipboard(text: str) -> bool:
     """将文本复制到系统剪贴板。
 
     在 macOS 上使用 pbcopy（原生支持，所有终端可用）；
-    其他平台使用 Textual 内置的 OSC 52 转义序列。
+    其他平台返回 False 让调用方使用 Textual 内置方法。
 
     Returns:
         True 表示复制成功。
     """
     if platform.system() == "Darwin":
-        # macOS: pbcopy 始终可用，不受终端类型限制
         try:
             subprocess.run(
                 ["pbcopy"],
@@ -36,70 +35,97 @@ def _copy_text_to_clipboard(text: str) -> bool:
         except Exception:
             return False
     else:
-        # Linux / Windows: 依赖终端对 OSC 52 的支持
-        # 大多数现代终端（iTerm2, kitty, wezterm, Windows Terminal 等）都支持
-        return False  # 让调用方使用 Textual 内置方法
+        return False
+
+
+def _safe_notify(app, message: str):
+    """安全地弹出 toast，失败不抛异常"""
+    try:
+        if app is not None:
+            app.notify(message, timeout=2)
+    except Exception:
+        pass
+
+
+def _safe_copy_to_clipboard(app, text: str) -> bool:
+    """安全地调用 Textual 内置剪贴板，失败返回 False"""
+    try:
+        if app is not None:
+            app.copy_to_clipboard(text)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 class _AutoCopyMixin:
     """为 Static 和 Markdown 子类提供自动复制能力的混入。"""
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
-        """记录鼠标按下位置，用于判断是否发生了拖拽选择。"""
-        self._mouse_down_pos = (event.x, event.y)
+        try:
+            self._mouse_down_pos = (event.x, event.y)
+        except Exception:
+            pass
 
     def on_mouse_up(self, event: events.MouseUp) -> None:
-        """鼠标释放时检查是否有文本被选中，有则复制到剪贴板。"""
-        self._check_and_copy()
+        try:
+            self._check_and_copy()
+        except Exception:
+            _safe_notify(getattr(self, 'app', None), "⚠️ 复制失败")
 
     def _check_and_copy(self) -> None:
         """检查当前 screen 上是否有文本被选中，有则复制并通知。"""
         try:
             screen = self.screen
+            if screen is None:
+                return
             selected_text = screen.get_selected_text()
             if not selected_text or not selected_text.strip():
                 return
-
-            copied = _copy_text_to_clipboard(selected_text)
-            if not copied:
-                # 非 macOS 平台：回退到 Textual 内置方法
-                self.app.copy_to_clipboard(selected_text)
-
-            # Toast 提示
-            preview = selected_text[:60].replace("\n", " ")
-            suffix = "…" if len(selected_text) > 60 else ""
-            self.app.notify(
-                f"📋 [bold]已复制[/bold]: {preview}{suffix}",
-                timeout=2,
-            )
+            self._do_copy(selected_text)
         except Exception:
-            pass
+            _safe_notify(getattr(self, 'app', None), "⚠️ 复制失败")
+
+    def _do_copy(self, text: str) -> None:
+        """执行复制 + toast"""
+        try:
+            copied = _copy_text_to_clipboard(text)
+            if not copied:
+                copied = _safe_copy_to_clipboard(self.app, text)
+
+            if not copied:
+                _safe_notify(self.app, "⚠️ 复制失败，请手动复制")
+                return
+
+            preview = text[:60].replace("\n", " ")
+            suffix = "…" if len(text) > 60 else ""
+            _safe_notify(self.app, f"📋 已复制: {preview}{suffix}")
+        except Exception:
+            _safe_notify(getattr(self, 'app', None), "⚠️ 复制失败")
 
     def selection_updated(self, selection: Selection | None) -> None:
         """当 Textual 内部选择更新时也触发自动复制（备用路径）。"""
-        super().selection_updated(selection)
-        if selection is not None:
-            try:
-                result = self.get_selection(selection)
-                if result is not None:
-                    text, _ = result
-                    if text and text.strip():
-                        copied = _copy_text_to_clipboard(text)
-                        if not copied:
-                            self.app.copy_to_clipboard(text)
-                        preview = text[:60].replace("\n", " ")
-                        suffix = "…" if len(text) > 60 else ""
-                        self.app.notify(
-                            f"📋 [bold]已复制[/bold]: {preview}{suffix}",
-                            timeout=2,
-                        )
-            except Exception:
-                pass
+        try:
+            super().selection_updated(selection)
+        except Exception:
+            pass
+
+        if selection is None:
+            return
+
+        try:
+            result = self.get_selection(selection)
+            if result is not None:
+                text, _ = result
+                if text and text.strip():
+                    self._do_copy(text)
+        except Exception:
+            _safe_notify(getattr(self, 'app', None), "⚠️ 复制失败")
 
 
 class AutoCopyStatic(_AutoCopyMixin, Static):
     """Static 组件子类：选中文本后自动复制到系统剪贴板。
-    
+
     默认关闭 Rich 标记解析，避免内容中的方括号 [...] 被误解析为标记语法导致 MarkupError。
     """
 
