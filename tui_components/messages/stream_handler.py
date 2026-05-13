@@ -164,7 +164,15 @@ class MessageStreamHandler:
         if self._accumulated_ai_message is None:
             self._accumulated_ai_message = message_chunk
         else:
-            self._accumulated_ai_message += message_chunk
+            try:
+                self._accumulated_ai_message += message_chunk
+            except TypeError:
+                # 流中混入了不同类型的消息（AIMessageChunk vs AIMessage），
+                # 直接用新消息替换，保留最新的完整 tool_calls 信息
+                _log(f"Accumulation type mismatch: "
+                     f"{type(self._accumulated_ai_message).__name__} "
+                     f"+ {type(message_chunk).__name__}, replacing")
+                self._accumulated_ai_message = message_chunk
 
         await self._handle_ai_content(message_chunk, thinking, content)
 
