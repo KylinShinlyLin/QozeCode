@@ -13,10 +13,12 @@ from tui_components import tui_constants
 
 try:
     from utils.audio_transcriber import AudioTranscriber
+    from utils.meeting_note_recorder import MeetingNoteRecorder
 
     AUDIO_TRANSCRIBER_IMPORT_ERROR = None
 except ImportError as e:
     AudioTranscriber = None
+    MeetingNoteRecorder = None
     AUDIO_TRANSCRIBER_IMPORT_ERROR = str(e)
 
 from rich.console import Group
@@ -106,6 +108,7 @@ class Qoze(App):
         Binding("escape", "cancel_action", "Cancel", priority=True),
         Binding("ctrl+q", "start_recording", "Record", priority=True),
         Binding("ctrl+e", "stop_recording", "Stop", priority=True),
+        Binding("ctrl+n", "toggle_meeting_note", "Meeting Note", priority=True),
     ]
 
     def __init__(self, provider, model_type):
@@ -126,6 +129,14 @@ class Qoze(App):
         self.total_tokens = 0
         self._stream_base_tokens = 0
         self._processing_suggestion = False
+
+        # Meeting note recorder state
+        self.meeting_note_recorder = None
+        self.meeting_note_queue = queue.Queue()
+        self.meeting_note_mode = False
+        self.meeting_note_check_timer = None
+        self.meeting_note_start_time = None
+        self._last_mn_text = ""  # last transcribed text for flicker-free display
 
         from plan.plan_manager import PlanManager
         self.plan_mode = False
@@ -156,6 +167,7 @@ class Qoze(App):
         with Vertical(id="bottom-container"):
             yield OptionList(id="command-suggestions")
             yield Label(id="audio-status", classes="hidden")
+            yield Label(id="meeting-note-status", classes="hidden")
             with Horizontal(id="input-line"):
                 yield Label("❯", classes="prompt-symbol")
                 yield Input(placeholder="Initializing Agent...", id="input-box", disabled=True)
@@ -315,7 +327,150 @@ class Qoze(App):
         self.status_bar.update_state("Idle")
         self.check_audio_queue()
 
+    # ------------------------------------------------------------------
+    # Meeting Note Recorder (Ctrl+N toggle) - independent of AI agent
+    # ------------------------------------------------------------------
+
+    def action_toggle_meeting_note(self):
+        """Toggle meeting note recording on / off."""
+        if self.meeting_note_mode:
+            self.stop_meeting_note()
+        else:
+            self.start_meeting_note()
+
+    def start_meeting_note(self):
+        """Begin recording meeting audio + real-time transcription."""
+        if MeetingNoteRecorder is None:
+            self.message_list.mount(Static(
+                "Meeting Note Recorder not available. Dependencies may be missing."))
+            return
+
+        # Prevent dual mic access: stop voice input if active
+        if self.audio_mode:
+            self.stop_audio()
+
+        import config_manager
+        soniox_key = config_manager.get_soniox_key()
+        if not soniox_key:
+            self.message_list.mount(Static(
+                "🔴 未检测到 Soniox API Key。请在 qoze.conf 的 [soniox] 节点下添加 api_key"))
+            return
+
+        # Build output paths: .qoze/note/YYYY-MM-DD/HHMMSS.{wav,txt}
+        from datetime import datetime
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H%M%S")
+        note_dir = os.path.join(".qoze", "note", date_str)
+        os.makedirs(note_dir, exist_ok=True)
+
+        audio_path = os.path.join(note_dir, f"{time_str}.wav")
+        text_path = os.path.join(note_dir, f"{time_str}.txt")
+
+        self.meeting_note_mode = True
+        self.meeting_note_start_time = time.time()
+        self.meeting_note_recorder = MeetingNoteRecorder(
+            api_key=soniox_key,
+            event_queue=self.meeting_note_queue,
+            audio_path=audio_path,
+            text_path=text_path,
+        )
+        self.meeting_note_recorder.start()
+
+        self.message_list.mount(Static(
+            f"📝 Meeting note started → {note_dir}/{time_str}"))
+
+        # Show meeting note wave bar label
+        mn_status = self.query_one("#meeting-note-status", Label)
+        mn_status.remove_class("hidden")
+        mn_status.update(Text("📝 Initializing Mic...", style="bold #FF8C00"))
+
+        self.status_bar.update_state(
+            "📝 Meeting Note | 00:00  Ctrl+N 停止", style="bold yellow")
+
+        if self.meeting_note_check_timer:
+            self.meeting_note_check_timer.stop()
+        self.meeting_note_check_timer = self.set_interval(
+            0.1, self.check_meeting_note_queue)
+
+    def stop_meeting_note(self):
+        """Stop recording, flush files, display summary."""
+        if not self.meeting_note_mode:
+            return
+
+        self.meeting_note_mode = False
+        if self.meeting_note_recorder:
+            self.meeting_note_recorder.stop()
+            self.meeting_note_recorder = None
+
+        if self.meeting_note_check_timer:
+            self.meeting_note_check_timer.stop()
+            self.meeting_note_check_timer = None
+
+        self.meeting_note_start_time = None
+        self._last_mn_text = ""
+        # Hide meeting note wave bar
+        mn_status = self.query_one("#meeting-note-status", Label)
+        mn_status.add_class("hidden")
+        mn_status.update("")
+        self.status_bar.update_state("Idle")
+
+    def check_meeting_note_queue(self):
+        """Poll the meeting note event queue for wave/text display + timer."""
+        if not self.meeting_note_mode:
+            return
+
+        wave_content = None
+        text_content = None
+        has_error = None
+
+        # Drain ALL pending events in one go
+        while not self.meeting_note_queue.empty():
+            msg = self.meeting_note_queue.get()
+            if msg["type"] == "error":
+                has_error = msg["data"]
+                break
+            elif msg["type"] == "wave":
+                wave_content = msg["data"]
+            elif msg["type"] == "text":
+                text_content = msg["data"]
+
+        if has_error is not None:
+            self.stop_meeting_note()
+            self.message_list.mount(Static(
+                f'📝 Meeting Note Error: {has_error}'))
+            return
+
+        # Persist latest transcription so it never flickers
+        if text_content is not None:
+            self._last_mn_text = text_content
+
+        # Only touch DOM if we have new data
+        if wave_content is not None or text_content is not None:
+            mn_status = self.query_one("#meeting-note-status", Label)
+            if wave_content is not None:
+                display = f"📝 {wave_content}"
+                if self._last_mn_text:
+                    display += f"  |  {self._last_mn_text[-60:]}"
+                mn_status.update(Text(display, style="bold #FF8C00"))
+            else:
+                mn_status.update(Text(f"📝 {text_content[-80:]}", style="bold #FF8C00"))
+
+        # Update elapsed time in status bar
+        if self.meeting_note_start_time:
+            elapsed = int(time.time() - self.meeting_note_start_time)
+            mins = elapsed // 60
+            secs = elapsed % 60
+            self.status_bar.update_state(
+                f"📝 Meeting Note | {mins:02d}:{secs:02d}  Ctrl+N 停止", style="bold yellow")
+
+    # ------------------------------------------------------------------
+    # Voice Input (Ctrl+Q / Ctrl+E) - feeds transcribed text into input
+    # ------------------------------------------------------------------
+
     def action_start_recording(self):
+        if self.meeting_note_mode:
+            return  # meeting note is active, block voice input
         if self.audio_mode:
             return
         if self.multiline_mode:
@@ -329,7 +484,9 @@ class Qoze(App):
             self.stop_audio()
 
     def action_cancel_action(self):
-        if self.audio_mode:
+        if self.meeting_note_mode:
+            self.stop_meeting_note()
+        elif self.audio_mode:
             self.stop_audio()
         elif self.multiline_mode:
             self.action_cancel_multiline()

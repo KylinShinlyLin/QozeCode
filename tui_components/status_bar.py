@@ -8,11 +8,13 @@ class StatusBar(Static):
         super().__init__("")
         self.model_name = model_name
         self.state_desc = "Idle"
+        self.state_style = None
         self.token_count = 0
         self.plan_mode = False
 
-    def update_state(self, state):
+    def update_state(self, state, style=None):
         self.state_desc = state
+        self.state_style = style
         self.refresh()
 
     def update_plan_mode(self, enabled: bool):
@@ -39,21 +41,23 @@ class StatusBar(Static):
         else:
             token_str = str(count)
 
-        # 构建左侧文本
-        mode_tag = "[PLAN] " if self.plan_mode else ""
+        # 构建状态栏，逐段精确控制样式
         shortcuts = "输入 line | Ctrl+Q:语音输入 | Ctrl+C:终止 | Ctrl+D:提交"
+        mode_tag = "[PLAN] " if self.plan_mode else ""
+
         if self.state_desc == "Idle":
             left = f" {mode_tag}{shortcuts}"
+            result = Text(left, style="dim")
+
+        elif self.state_style:
+            result = Text(f" {mode_tag}", style="dim")
+            result.append(f"{self.state_desc} | ", style=self.state_style)
+            result.append(shortcuts, style="dim")
+
         else:
             left = f" {mode_tag}{self.state_desc} | {shortcuts}"
+            result = Text(left, style="dim")
 
-        # 右侧 token 计数 - 使用固定的标签
-        right = f"Context: {token_str} tokens"
-
-        padding = 5
-
-        # 组合完整行
-        full_line = f"{left}{' ' * padding}{right}"
-
-        # 返回 Text 对象，使用 dim 样式
-        return Text(full_line, style="dim")
+        result.append(" " * 5)
+        result.append(f"Context: {token_str} tokens", style="dim")
+        return result
