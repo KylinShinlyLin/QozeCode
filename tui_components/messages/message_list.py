@@ -10,6 +10,7 @@ from datetime import datetime
 from .types import UserMessage
 from .user_widget import UserMessageWidget
 from .bot_widget import BotMessageWidget
+from .thinking_widget import ThinkingWidget
 from .subagent_widget import SubagentWidget
 from .stream_handler import MessageStreamHandler
 
@@ -157,6 +158,9 @@ class MessageList(ScrollableContainer):
             on_stream_complete=self._on_stream_complete,
             on_stream_progress=self._on_stream_progress,
             on_error=self._on_stream_error,
+            on_thinking_created=self._on_thinking_created,
+            on_thinking_updated=self._on_thinking_updated,
+            on_thinking_finalized=self._on_thinking_finalized,
         )
 
         # --- Subagent 流式回调 ---
@@ -172,6 +176,22 @@ class MessageList(ScrollableContainer):
             _log("subagent stream callback registered")
         except Exception as e:
             _log(f"Failed to register subagent callback: {e}")
+
+    # ---------- Thinking Widget 回调 ----------
+
+    def _on_thinking_created(self, widget: ThinkingWidget):
+        """thinking 开始，将 ThinkingWidget 挂载到消息列表"""
+        self._add_widget(widget)
+
+    def _on_thinking_updated(self, widget: ThinkingWidget):
+        """thinking 内容更新，刷新 widget"""
+        self._update_widget(widget)
+
+    def _on_thinking_finalized(self, widget: ThinkingWidget):
+        """thinking 结束，刷新 widget 以显示完成状态"""
+        self._update_widget(widget)
+
+    # ---------- Subagent 回调 ----------
 
     async def _on_subagent_event(self, event: dict):
         """处理 subagent 事件，使用 SubagentWidget 流式展示"""
@@ -203,153 +223,135 @@ class MessageList(ScrollableContainer):
 
             elif etype == "subagent_done":
                 if agent_id in self._subagent_widgets:
-                    widget = self._subagent_widgets[agent_id]
-                    widget.finalize()
-                    self._update_widget(widget)
-                    self._subagent_widgets.pop(agent_id, None)
-                    self._subagent_labels.pop(agent_id, None)
-                stats = event.get("stats", {})
-                _log(f"subagent_done: {agent_id} llm={stats.get('llm_calls','?')} tools={stats.get('tool_calls','?')}")
-        except Exception as e:
-            _log(f"_on_subagent_event error: {type(e).__name__}: {e}")
+                    self._subagent_widgets[agent_id].finalize()
+                    self._update_widget(self._subagent_widgets[agent_id])
+                    _log(f"subagent_done: {agent_id}")
 
-    def add_user_message(self, content: str, is_command: bool = False):
-        _log(f"add_user_message: content='{content[:50]}...'")
-        try:
-            msg = UserMessage(id=str(uuid.uuid4()), content=content, is_command=is_command)
-            widget = UserMessageWidget(msg)
-            self.mount(widget)
-            self.refresh(layout=True)
-            return widget
         except Exception as e:
-            _log(f"add_user_message ERROR: {type(e).__name__}: {e}")
-            import traceback
-            _log(traceback.format_exc())
-            raise
+            _log(f"_on_subagent_event error: {e}")
 
-    async def stream_agent_response(self, agent_stream):
-        _log("stream_agent_response called")
-        try:
-            await self._stream_handler.process_stream(agent_stream)
-        except Exception as e:
-            # 最后防线：process_stream 内部已通过 on_error 处理异常，
-            # 但如果仍有异常泄漏到这里，提供双重保险
-            import traceback
-            tb = traceback.format_exc()
-            _log(f"Uncaught error in stream_agent_response: {e}")
-            _log(tb)
-            exc_type = type(e).__name__
-            exc_msg = str(e)
-            tb_lines = tb.strip().split("\n")
-            concise_tb = "\n".join(tb_lines[-6:]) if len(tb_lines) > 6 else "\n".join(tb_lines)
-            self._mount_error_widget(
-                f"{exc_type}: {exc_msg}" if exc_msg else exc_type,
-                f"发生时间: {datetime.now().strftime('%H:%M:%S')}\n堆栈跟踪 (最后几行):\n{concise_tb}"
+    async def stream_agent_response(self, stream):
+        """处理流式输出"""
+        _log("process_stream called")
+        await self._stream_handler.process_stream(stream)
+
+    def add_user_message(self, user_message, is_command: bool = False):
+        """添加用户消息到列表
+
+        Args:
+            user_message: UserMessage 对象或纯文本字符串
+            is_command: 是否为命令消息（仅当 user_message 为字符串时使用）
+        """
+        if isinstance(user_message, str):
+            user_message = UserMessage(
+                id=str(uuid.uuid4())[:8],
+                content=user_message,
+                is_command=is_command
             )
+        widget = UserMessageWidget(user_message)
+        self._add_widget(widget)
 
-    def _on_stream_error(self, error_summary: str, error_detail: str):
-        """流错误回调 - 在 chat-area 中显示错误信息"""
-        _log(f"_on_stream_error: summary='{error_summary}'")
-        self._mount_error_widget(error_summary, error_detail)
-
-    def _mount_error_widget(self, error_summary: str, error_detail: str):
-        """挂载错误展示组件到聊天区域"""
-        try:
-            widget = ErrorMessageWidget(error_summary, error_detail)
-            self.mount(widget)
-            self.refresh(layout=True)
-        except Exception as e:
-            # 如果 UI 操作也失败了，至少保证日志可见
-            _log(f"CRITICAL: Failed to mount error widget: {e}")
-            import traceback
-            _log(traceback.format_exc())
-
-            # 兜底：尝试用最简单的 Static 展示
-            try:
-                fallback = Static(f"❌ 错误: {error_summary}")
-                self.mount(fallback)
-                self.refresh(layout=True)
-            except Exception:
-                _log("CRITICAL: Even fallback error display failed")
+    def add_static_text(self, text: str):
+        """添加纯文本消息（如系统提示）"""
+        widget = Static(text)
+        self._add_widget(widget)
 
     def _add_widget(self, widget):
-        _log(f"_add_widget: {type(widget).__name__}")
+        """挂载组件并滚动到底部"""
         self.mount(widget)
-        self.refresh(layout=True)
+        # 滚动到底部
+        self._safe_scroll_to_bottom()
 
     def _update_widget(self, widget):
-        widget.refresh(layout=True)
-        self.refresh(layout=True)
-
-    def _is_at_bottom(self) -> bool:
-        """用户是否在列表底部（允许 2 行误差）"""
+        """刷新组件（已挂载时无需额外操作，内容更新会自动反映）"""
         try:
-            return self.scroll_offset.y >= max(0, self.max_scroll_offset.y - 2)
+            widget.refresh(layout=True)
         except Exception:
-            return True  # 异常时默认滚动
+            pass
+        self._safe_scroll_to_bottom()
 
-    def _scroll_to_end(self):
-        """仅当用户在底部时才自动滚动"""
-        if not self._is_at_bottom():
+    def _safe_scroll_to_bottom(self):
+        """节流滚动到底部"""
+        now = time.time()
+        if now - self._last_scroll_time < self._scroll_interval:
             return
-        current_time = time.time()
-        if current_time - self._last_scroll_time > self._scroll_interval:
-            self.scroll_end(animate=False)
-            self._last_scroll_time = current_time
+        self._last_scroll_time = now
+        try:
+            if hasattr(self, 'scroll_end'):
+                self.call_after_refresh(self.scroll_end, animate=False)
+        except Exception:
+            pass
 
-    def _on_tool_started(self, tool_id: str, display_text: str):
-        _log(f"[_on_tool_started] tool_id={tool_id[:30]}..., display_text='{display_text}'")
-        self._pending_tools[tool_id] = display_text
+    def _on_tool_started(self, tool_id: str, display_name: str):
+        """工具开始执行回调"""
+        _log(f"_on_tool_started: {tool_id} - {display_name}")
+        self._pending_tools[tool_id] = {
+            "display_name": display_name,
+            "start_time": time.time(),
+        }
+
+        # 在消息列表中插入占位（最小化布局空间）
+        placeholder = ToolPlaceholderWidget(tool_id)
+        self._tool_placeholders[tool_id] = placeholder
+        self._add_widget(placeholder)
+
+        # 在工具状态面板中显示运行中状态
         if self._tool_status_panel:
-            self._tool_status_panel.add_tool(tool_id, display_text)
-        # 不再创建 placeholder，避免空白区域
-        # placeholder 仅用于标识工具是否已在进行中
-        self._tool_placeholders[tool_id] = None
+            self._tool_status_panel.add_tool(tool_id, display_name)
 
-    def _on_tool_completed(self, tool_id: str, display_text: str, is_error: bool):
-        _log(f"[_on_tool_completed] tool_id={tool_id[:30]}...")
-        _log(f"[_on_tool_completed] display_text='{display_text}', is_error={is_error}")
-        
-        elapsed_time = 0.0
+    def _on_tool_completed(self, tool_id: str, display_name: str, is_error: bool):
+        """工具执行完成回调"""
+        _log(f"_on_tool_completed: {tool_id} - {display_name}, is_error={is_error}")
+        elapsed = 0.0
+        if tool_id in self._pending_tools:
+            elapsed = time.time() - self._pending_tools[tool_id]["start_time"]
+            del self._pending_tools[tool_id]
+
+        # 移除工具状态面板中的条目
         if self._tool_status_panel:
-            elapsed_time = self._tool_status_panel.remove_tool(tool_id)
-            _log(f"[_on_tool_completed] elapsed_time={elapsed_time}")
-        self._pending_tools.pop(tool_id, None)
+            panel_elapsed = self._tool_status_panel.remove_tool(tool_id)
+            if panel_elapsed > 0:
+                elapsed = panel_elapsed
 
-        widget = ToolResultWidget(
-            display_text=display_text,
+        # 移除占位组件
+        placeholder = self._tool_placeholders.pop(tool_id, None)
+        if placeholder:
+            try:
+                placeholder.remove()
+            except Exception:
+                pass
+
+        # 在消息列表中插入工具结果
+        result_widget = ToolResultWidget(
+            display_name,
             is_error=is_error,
-            elapsed_time=elapsed_time
+            elapsed_time=elapsed,
         )
+        self._add_widget(result_widget)
 
-        # 直接挂载 ToolResultWidget，不处理 placeholder
-        self._tool_placeholders.pop(tool_id, None)
-        self.mount(widget)
-        self.refresh(layout=True)
-        _log(f"[_on_tool_completed] mounted ToolResultWidget")
-
-    def _on_stream_progress(self, progress_tokens: int):
-        """流式输出期间的实时 token 进度回调"""
-        if self._token_progress_callback:
-            self._token_progress_callback(progress_tokens)
-
-    def _on_stream_complete(self, total_tokens: int):
-        _log(f"stream_complete: tokens={total_tokens}")
-        # 最终刷新确保所有内容都显示
-        if hasattr(self._stream_handler, 'current_bot_message') and self._stream_handler.current_bot_message:
-            self._stream_handler.current_bot_message.refresh(layout=True)
-        self.refresh(layout=True)
+    def _on_stream_complete(self, estimated_tokens: int):
+        """流式完成回调"""
+        _log(f"_on_stream_complete: estimated_tokens={estimated_tokens}")
         if self._token_callback:
-            self._token_callback(total_tokens)
-        for placeholder in self._tool_placeholders.values():
-            if placeholder is None:
-                continue
-            placeholder.remove()
-        self._tool_placeholders.clear()
+            self._token_callback(estimated_tokens)
+
+    def _on_stream_progress(self, estimated_tokens: int):
+        """流式进度回调（实时 token 计数）"""
+        if self._token_progress_callback:
+            self._token_progress_callback(estimated_tokens)
+
+    def _on_stream_error(self, error_summary: str, error_detail: str):
+        """流式异常回调 - 创建 ErrorMessageWidget 并挂载"""
+        _log(f"_on_stream_error: {error_summary}")
+        try:
+            error_widget = ErrorMessageWidget(error_summary, error_detail)
+            self._add_widget(error_widget)
+        except Exception as e:
+            _log(f"Failed to mount error widget: {e}")
 
     def clear_messages(self):
-        self.remove_children()
+        """清除所有消息"""
+        for child in self.children[:]:
+            child.remove()
         self._pending_tools.clear()
         self._tool_placeholders.clear()
-        if self._tool_status_panel:
-            self._tool_status_panel.clear_all()

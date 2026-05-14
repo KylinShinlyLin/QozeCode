@@ -2,6 +2,8 @@
 """
 MessageStreamHandler - 参考 demo_tui_stream_output.py 的简洁实现
 处理 AI 消息流和工具调用
+
+thinking 内容通过独立的 ThinkingWidget 展示（可折叠），不再嵌入 BotMessageWidget。
 """
 import asyncio
 import time
@@ -14,6 +16,7 @@ from langchain_core.messages import AIMessage, ToolMessage as LC_ToolMessage
 
 from .types import BotMessage, ToolMessage, ToolStatus
 from .bot_widget import BotMessageWidget
+from .thinking_widget import ThinkingWidget
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
@@ -30,7 +33,10 @@ def _log(msg):
 
 
 class MessageStreamHandler:
-    """流式消息处理器"""
+    """流式消息处理器
+
+    thinking 内容通过独立的 ThinkingWidget 展示，与 BotMessageWidget 分离。
+    """
 
     UPDATE_INTERVAL = 0.15
     TOKEN_UPDATE_INTERVAL = 1.2  # token 计算最小间隔（秒），避免过于频繁影响渲染
@@ -42,7 +48,10 @@ class MessageStreamHandler:
                  on_tool_completed: Optional[Callable[[str, str, bool], None]] = None,
                  on_stream_complete: Optional[Callable[[int], None]] = None,
                  on_stream_progress: Optional[Callable[[int], None]] = None,
-                 on_error: Optional[Callable[[str, str], None]] = None):
+                 on_error: Optional[Callable[[str, str], None]] = None,
+                 on_thinking_created: Optional[Callable] = None,
+                 on_thinking_updated: Optional[Callable] = None,
+                 on_thinking_finalized: Optional[Callable] = None):
 
         self.on_bot_created = on_bot_created
         self.on_bot_updated = on_bot_updated
@@ -51,8 +60,12 @@ class MessageStreamHandler:
         self.on_stream_complete = on_stream_complete
         self.on_stream_progress = on_stream_progress
         self.on_error = on_error
+        self.on_thinking_created = on_thinking_created
+        self.on_thinking_updated = on_thinking_updated
+        self.on_thinking_finalized = on_thinking_finalized
 
         self.current_bot_message = None
+        self._thinking_widget = None  # 独立的 ThinkingWidget
         self._active_tools: Dict[str, dict] = {}
         self._processed_tool_ids: Set[str] = set()
         self._last_update_time = 0
@@ -64,6 +77,7 @@ class MessageStreamHandler:
     def reset(self):
         """重置状态"""
         self.current_bot_message = None
+        self._thinking_widget = None
         self._active_tools.clear()
         self._processed_tool_ids.clear()
         self._last_update_time = 0
@@ -111,6 +125,10 @@ class MessageStreamHandler:
                 await self._flush_update()
             if self.current_bot_message:
                 self.current_bot_message.finalize()
+            if self._thinking_widget:
+                self._thinking_widget.finalize()
+                if self.on_thinking_finalized:
+                    self.on_thinking_finalized(self._thinking_widget)
             return
 
         except Exception as e:
@@ -131,11 +149,26 @@ class MessageStreamHandler:
             self.current_bot_message.finalize()
             await asyncio.sleep(0)
 
+        # finalize thinking widget
+        if self._thinking_widget:
+            self._thinking_widget.finalize()
+            if self.on_thinking_finalized:
+                self.on_thinking_finalized(self._thinking_widget)
+
         if self.on_stream_complete:
             estimated_tokens = self._estimate_total_tokens()
             self.on_stream_complete(estimated_tokens)
 
-        _log(f"Stream ended, chunks={chunk_count}")
+        # 诊断：thinking 有内容但 content 为空 → 可能是模型 thinking 超时/卡死
+        think_len = len(self._accumulated_thinking)
+        content_len_final = len(self._accumulated_content)
+        _log(f"Stream ended, chunks={chunk_count}, thinking_len={think_len}, content_len={content_len_final}")
+        if think_len > 0 and content_len_final == 0 and self.current_bot_message:
+            _log("WARNING: thinking produced but content is empty — model may have timed out during reasoning")
+            self.current_bot_message.append_content(
+                "\n\n⚠️ 模型推理完成但未返回内容，可能是推理超时或 token 预算耗尽。请重试。"
+            )
+            self.current_bot_message.finalize()
         _log("=" * 60)
 
     def _notify_error(self, exc: Exception, traceback_str: str):
@@ -168,11 +201,23 @@ class MessageStreamHandler:
                 self._accumulated_ai_message += message_chunk
             except TypeError:
                 # 流中混入了不同类型的消息（AIMessageChunk vs AIMessage），
-                # 直接用新消息替换，保留最新的完整 tool_calls 信息
+                # 尝试手动合并关键字段，避免丢失已累积的 content/thinking
                 _log(f"Accumulation type mismatch: "
                      f"{type(self._accumulated_ai_message).__name__} "
-                     f"+ {type(message_chunk).__name__}, replacing")
-                self._accumulated_ai_message = message_chunk
+                     f"+ {type(message_chunk).__name__}, manual merge")
+                # 将新 chunk 的 content 附加到旧消息上（如果旧消息是 str 类型）
+                old_content = getattr(self._accumulated_ai_message, 'content', '')
+                new_content = getattr(message_chunk, 'content', '')
+                if isinstance(old_content, str) and isinstance(new_content, str):
+                    combined = type(message_chunk)(content=old_content + new_content)
+                else:
+                    combined = message_chunk
+                # 保留新消息的 tool_calls（更完整）
+                if hasattr(combined, 'tool_calls') and hasattr(message_chunk, 'tool_calls'):
+                    combined.tool_calls = message_chunk.tool_calls
+                if hasattr(combined, 'additional_kwargs') and hasattr(message_chunk, 'additional_kwargs'):
+                    combined.additional_kwargs = message_chunk.additional_kwargs
+                self._accumulated_ai_message = combined
 
         await self._handle_ai_content(message_chunk, thinking, content)
 
@@ -382,31 +427,55 @@ class MessageStreamHandler:
             return f"{tool_name}"
 
     async def _handle_ai_content(self, chunk, thinking: str, content: str):
-        """处理 AI 内容（thinking 和 content）"""
-        if self.current_bot_message is None or self._expecting_new_message:
-            # 没有任何实质内容时（纯 tool_calls），不创建空 widget，避免占位空行
-            if not thinking and not content:
-                return
-            msg = BotMessage(
-                id=self._gen_id(),
-                thinking_content="",
-                content="",
-                is_streaming=True
-            )
-            self.current_bot_message = BotMessageWidget(msg)
-            self.on_bot_created(self.current_bot_message)
-            self._expecting_new_message = False
-            self._last_update_time = time.time()
-            _log("Created new BotMessageWidget")
+        """处理 AI 内容（thinking 和 content）
 
+        thinking → 独立 ThinkingWidget（可折叠，位于消息列表）
+        content → BotMessageWidget（原有逻辑）
+        """
+        # --- 处理 thinking：创建/更新 ThinkingWidget ---
         if thinking:
-            self.current_bot_message.append_thinking(thinking)
+            if self._thinking_widget is None:
+                self._thinking_widget = ThinkingWidget()
+                if self.on_thinking_created:
+                    self.on_thinking_created(self._thinking_widget)
+                _log("Created new ThinkingWidget")
+            self._thinking_widget.append_thinking(thinking)
             self._accumulated_thinking += thinking
-            await self._flush_update()
+            if self.on_thinking_updated:
+                self.on_thinking_updated(self._thinking_widget)
 
+        # --- 处理 content：创建/更新 BotMessageWidget ---
         if content:
+            if self.current_bot_message is None or self._expecting_new_message:
+                # 新一轮回复开始，重置 thinking widget
+                if self._expecting_new_message and self._thinking_widget:
+                    # 上一轮 thinking 已结束，finalize 它
+                    if not getattr(self._thinking_widget, '_is_finalized', False):
+                        self._thinking_widget.finalize()
+                        if self.on_thinking_finalized:
+                            self.on_thinking_finalized(self._thinking_widget)
+                    self._thinking_widget = None
+
+                msg = BotMessage(
+                    id=self._gen_id(),
+                    thinking_content="",
+                    content="",
+                    is_streaming=True
+                )
+                self.current_bot_message = BotMessageWidget(msg)
+                self.on_bot_created(self.current_bot_message)
+                self._expecting_new_message = False
+                self._last_update_time = time.time()
+                _log("Created new BotMessageWidget")
+
             self.current_bot_message.append_content(content)
             self._accumulated_content += content
+
+        # 如果只有 thinking 没有 content，也要确保 BotMessageWidget 在流继续时会创建
+        # 这里不需要额外处理，因为 content 到达时自然会创建
+        if not thinking and not content:
+            # 纯 tool_calls 场景，不创建空 widget
+            return
 
         current_time = time.time()
         if current_time - self._last_update_time > self.UPDATE_INTERVAL:
@@ -485,8 +554,8 @@ class MessageStreamHandler:
                     # 非零退出码视为错误 (Exit Code: X, X != 0)
                     ("Exit Code:" in first_line and "Exit Code: 0" not in first_line) or
                     ("❌" in first_line and not any(first_line.startswith(p) for p in
-                                                   ["[READ_FILE]", "[CAT_FILE]", "[SEARCH_IN_FILES]",
-                                                    "[LIST_DIR]", "[LIST_FILES]", "[SUCCESS]"]))
+                                                    ["[READ_FILE]", "[CAT_FILE]", "[SEARCH_IN_FILES]",
+                                                     "[LIST_DIR]", "[LIST_FILES]", "[SUCCESS]"]))
             )
             return is_err
         return False

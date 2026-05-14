@@ -2,6 +2,7 @@
 from .types import MessageType, ToolStatus, UserMessage, BotMessage, ToolMessage
 from .user_widget import UserMessageWidget
 from .bot_widget import BotMessageWidget
+from .thinking_widget import ThinkingWidget
 from .tool_widget import ToolMessageWidget
 from .stream_handler import MessageStreamHandler
 from .message_list import MessageList
@@ -18,6 +19,7 @@ __all__ = [
     # Widgets
     "UserMessageWidget",
     "BotMessageWidget",
+    "ThinkingWidget",
     "ToolMessageWidget",
     "ToolStatusPanel",
     "RunningToolItem",
