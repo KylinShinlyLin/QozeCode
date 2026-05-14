@@ -564,10 +564,10 @@ async def dispatch_subagent(
         ]
 
         # 使用流式执行（如果 TUI 注册了回调），否则回退到 ainvoke
-        # 注意：asyncio.wait_for 包裹整个流式执行，300s 超时
+        # 注意：asyncio.wait_for 包裹整个流式执行，600s 超时
         return await asyncio.wait_for(
             _stream_subagent(subagent, messages, agent_id, label),
-            timeout=300.0
+            timeout=600.0
         )
 
     except asyncio.TimeoutError:

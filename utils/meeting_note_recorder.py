@@ -127,7 +127,7 @@ class MeetingNoteRecorder:
                 f.write("")
         except Exception as e:
             self.event_queue.put({"type": "error",
-                                  "data": f"Cannot create transcript file: {e}"})
+                                   "data": f"Cannot create transcript file: {e}"})
 
         self.thread = threading.Thread(target=self._run_stt, daemon=True)
         self.thread.start()

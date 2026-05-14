@@ -356,11 +356,11 @@ class Qoze(App):
                 "🔴 未检测到 Soniox API Key。请在 qoze.conf 的 [soniox] 节点下添加 api_key"))
             return
 
-        # Build output paths: .qoze/note/YYYY-MM-DD/HHMMSS.{wav,txt}
+        # Build output paths: .qoze/note/YYYY-MM-DD/HH-MM-SS.{wav,txt}
         from datetime import datetime
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d")
-        time_str = now.strftime("%H%M%S")
+        time_str = now.strftime("%H-%M-%S")
         note_dir = os.path.join(".qoze", "note", date_str)
         os.makedirs(note_dir, exist_ok=True)
 
