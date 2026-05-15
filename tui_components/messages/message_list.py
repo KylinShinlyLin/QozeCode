@@ -263,12 +263,11 @@ class MessageList(ScrollableContainer):
         self._safe_scroll_to_bottom()
 
     def _update_widget(self, widget):
-        """刷新组件（已挂载时无需额外操作，内容更新会自动反映）"""
+        """刷新组件（不自动滚动，保持用户阅读位置）"""
         try:
             widget.refresh(layout=True)
         except Exception:
             pass
-        self._safe_scroll_to_bottom()
 
     def _safe_scroll_to_bottom(self):
         """节流滚动到底部"""

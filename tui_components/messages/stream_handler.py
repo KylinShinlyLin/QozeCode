@@ -224,9 +224,18 @@ class MessageStreamHandler:
         # 检测 finish_reason，若是 tool_calls 则立即从 Static 切换到 Markdown
         # 避免工具执行期间用户仍看到 Static 纯文本
         finish_reason = getattr(message_chunk, 'response_metadata', {}).get('finish_reason', '')
-        if finish_reason == 'tool_calls' and self.current_bot_message:
-            _log(f'Early finalize: finish_reason=tool_calls, content_len={len(self._accumulated_content)}')
-            self.current_bot_message.finalize()
+        if finish_reason == 'tool_calls':
+            if self.current_bot_message:
+                _log(f'Early finalize: finish_reason=tool_calls, content_len={len(self._accumulated_content)}')
+                self.current_bot_message.finalize()
+                self.current_bot_message = None  # 防止后续 content 错误追加到旧 widget
+            # 同时 finalize 当前 thinking widget，下次 thinking 到来时创建新的
+            if self._thinking_widget:
+                if not getattr(self._thinking_widget, '_is_finalized', False):
+                    self._thinking_widget.finalize()
+                    if self.on_thinking_finalized:
+                        self.on_thinking_finalized(self._thinking_widget)
+                self._thinking_widget = None
             self._expecting_new_message = True
 
         if self._accumulated_ai_message.tool_calls:
@@ -429,32 +438,15 @@ class MessageStreamHandler:
     async def _handle_ai_content(self, chunk, thinking: str, content: str):
         """处理 AI 内容（thinking 和 content）
 
-        thinking → 独立 ThinkingWidget（可折叠，位于消息列表）
-        content → BotMessageWidget（原有逻辑）
+        content → BotMessageWidget（先处理，确保 BotMessage 在 Thinking 前面）
+        thinking → 独立 ThinkingWidget（可折叠，位于 BotMessage 之后）
         """
-        # --- 处理 thinking：创建/更新 ThinkingWidget ---
-        if thinking:
-            if self._thinking_widget is None:
-                self._thinking_widget = ThinkingWidget()
-                if self.on_thinking_created:
-                    self.on_thinking_created(self._thinking_widget)
-                _log("Created new ThinkingWidget")
-            self._thinking_widget.append_thinking(thinking)
-            self._accumulated_thinking += thinking
-            if self.on_thinking_updated:
-                self.on_thinking_updated(self._thinking_widget)
-
-        # --- 处理 content：创建/更新 BotMessageWidget ---
+        # --- 处理 content：创建/更新 BotMessageWidget（优先，保证顺序）---
         if content:
             if self.current_bot_message is None or self._expecting_new_message:
-                # 新一轮回复开始，重置 thinking widget
-                if self._expecting_new_message and self._thinking_widget:
-                    # 上一轮 thinking 已结束，finalize 它
-                    if not getattr(self._thinking_widget, '_is_finalized', False):
-                        self._thinking_widget.finalize()
-                        if self.on_thinking_finalized:
-                            self.on_thinking_finalized(self._thinking_widget)
-                    self._thinking_widget = None
+                # 新一轮回复开始
+                # thinking widget 由 _handle_ai_content 和 finish_reason 分支独立管理，
+                # 此处不再 finalize，避免误杀同一轮尚在流式输出的 thinking widget
 
                 msg = BotMessage(
                     id=self._gen_id(),
@@ -470,6 +462,30 @@ class MessageStreamHandler:
 
             self.current_bot_message.append_content(content)
             self._accumulated_content += content
+
+        # --- 处理 thinking：创建/更新 ThinkingWidget ---
+        if thinking:
+            # 如果是新一轮（工具调用刚结束），finalize 旧的 thinking widget
+            if self._expecting_new_message and self._thinking_widget is not None:
+                if not getattr(self._thinking_widget, '_is_finalized', False):
+                    self._thinking_widget.finalize()
+                    if self.on_thinking_finalized:
+                        self.on_thinking_finalized(self._thinking_widget)
+                self._thinking_widget = None
+                _log("Finalized old ThinkingWidget for new round")
+
+            if self._thinking_widget is None:
+                self._thinking_widget = ThinkingWidget()
+                if self.on_thinking_created:
+                    self.on_thinking_created(self._thinking_widget)
+                _log("Created new ThinkingWidget")
+                # thinking 标志着新一轮已经开始，清除期待标记
+                # 避免后续同一轮的 thinking chunk 被误判为新轮次
+                self._expecting_new_message = False
+            self._thinking_widget.append_thinking(thinking)
+            self._accumulated_thinking += thinking
+            if self.on_thinking_updated:
+                self.on_thinking_updated(self._thinking_widget)
 
         # 如果只有 thinking 没有 content，也要确保 BotMessageWidget 在流继续时会创建
         # 这里不需要额外处理，因为 content 到达时自然会创建

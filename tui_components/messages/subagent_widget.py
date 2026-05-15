@@ -5,6 +5,7 @@ Subagent 专用消息组件
 视觉区分于 BotMessageWidget：
   - 左侧橙色边框 + 暗背景
   - 头部：运行中显示 braille spinner，完成显示 ✅
+  - 可折叠：默认收起，头部显示 ▸ 箭头；点击展开显示 ▾ 箭头
   - 流式期间 Static 逐 token 更新，结束后切 Markdown
   - 高度自适应内容
 """
@@ -33,11 +34,13 @@ def _log(msg):
 
 
 class SubagentWidget(Static):
-    """Subagent 消息组件
+    """Subagent 消息组件 — 可折叠展开
 
     头部（纯文本 emoji，无 Rich markup）：
-      运行中: `⠋ Subagent · 探索 opencode...`
-      完成:   `✅ Subagent · 探索 opencode...`
+       运行中:   `⠋ ▸ Subagent · 探索 opencode...`（收起）/ `⠋ ▾ ...`（展开）
+       完成:     `✓ ▸ Subagent · 探索 opencode...`（收起）/ `✓ ▾ ...`（展开）
+
+    默认收起，点击头部切换展开/收起。
     """
 
     DEFAULT_CSS = """
@@ -93,6 +96,7 @@ class SubagentWidget(Static):
         self._content_buffer = ""
         self._mounted = False
         self._is_done = False
+        self._collapsed = True   # 默认收起，与 ThinkingWidget 一致
         self._spinner_frame = 0
         self._timer = None
 
@@ -105,7 +109,7 @@ class SubagentWidget(Static):
                 classes="subagent-header",
                 id="subagent-header",
             )
-            yield AutoCopyStatic("", id="subagent-content-static", classes="subagent-content")
+            yield AutoCopyStatic("", id="subagent-content-static", classes="subagent-content hidden")
             yield AutoCopyMarkdown("", id="subagent-content-md", classes="hidden")
 
     def on_mount(self) -> None:
@@ -117,11 +121,13 @@ class SubagentWidget(Static):
     # ---------- Spinner / Header ----------
 
     def _render_header(self) -> str:
+        """渲染头部文本，包含折叠箭头"""
+        arrow = "▾" if not self._collapsed else "▸"
         if self._is_done:
-            return f"✓ Subagent · {self.label}"
+            return f"✓ {arrow} Subagent · {self.label}"
         else:
             frame = SPINNER_FRAMES[self._spinner_frame % len(SPINNER_FRAMES)]
-            return f"{frame} Subagent · {self.label}"
+            return f"{frame} {arrow} Subagent · {self.label}"
 
     def _update_header(self):
         try:
@@ -145,9 +151,50 @@ class SubagentWidget(Static):
             self._timer.stop()
             self._timer = None
 
+    # ---------- 内容可见性管理 ----------
+
+    def _hide_content(self):
+        """隐藏所有内容区域"""
+        try:
+            static = self.query_one("#subagent-content-static", Static)
+            static.add_class("hidden")
+        except Exception:
+            pass
+        try:
+            md = self.query_one("#subagent-content-md", AutoCopyMarkdown)
+            md.add_class("hidden")
+        except Exception:
+            pass
+
+    def _show_content(self):
+        """显示当前应可见的内容区域（static 或 md，取决于是否已完成）"""
+        if self._is_done:
+            try:
+                md = self.query_one("#subagent-content-md", AutoCopyMarkdown)
+                md.remove_class("hidden")
+            except Exception:
+                pass
+            try:
+                static = self.query_one("#subagent-content-static", Static)
+                static.add_class("hidden")
+            except Exception:
+                pass
+        else:
+            try:
+                static = self.query_one("#subagent-content-static", Static)
+                static.remove_class("hidden")
+            except Exception:
+                pass
+            try:
+                md = self.query_one("#subagent-content-md", AutoCopyMarkdown)
+                md.add_class("hidden")
+            except Exception:
+                pass
+
     # ---------- 内容更新 ----------
 
     def _update_content_display(self):
+        """刷新内容区域，折叠状态下仅更新 buffer 不显示"""
         try:
             static = self.query_one("#subagent-content-static", Static)
             static.update(self._content_buffer if self._content_buffer else " ")
@@ -162,7 +209,7 @@ class SubagentWidget(Static):
             self._update_content_display()
 
     def append_content(self, text: str):
-        """流式追加内容（逐 token）"""
+        """流式追加内容（逐 token），折叠时静默累积"""
         self._content_buffer += text
         if self._mounted:
             self._update_content_display()
@@ -181,7 +228,7 @@ class SubagentWidget(Static):
     # ---------- 完成 ----------
 
     def finalize(self):
-        """流式结束：停 spinner、切 ✅、Static → Markdown"""
+        """流式结束：停 spinner、切 ✅、Static → Markdown，保持折叠状态"""
         self._is_done = True
         self._stop_timer()
         self._update_header()
@@ -191,9 +238,33 @@ class SubagentWidget(Static):
         try:
             content_static = self.query_one("#subagent-content-static", Static)
             content_md = self.query_one("#subagent-content-md", AutoCopyMarkdown)
-            content_static.add_class("hidden")
-            content_md.remove_class("hidden")
+
+            # 始终更新 Markdown 内容
             content_md.update(self._content_buffer if self._content_buffer else " ")
+
+            # 根据折叠状态决定显示哪个以及是否隐藏
+            if self._collapsed:
+                content_static.add_class("hidden")
+                content_md.add_class("hidden")
+            else:
+                content_static.add_class("hidden")
+                content_md.remove_class("hidden")
+
             self.refresh(layout=True)
         except Exception:
             pass
+
+    # ---------- 交互 ----------
+
+    def on_click(self, event) -> None:
+        """点击切换折叠/展开"""
+        event.stop()
+        self._collapsed = not self._collapsed
+        self._update_header()
+
+        if self._collapsed:
+            self._hide_content()
+        else:
+            self._show_content()
+
+        self.refresh(layout=True)
