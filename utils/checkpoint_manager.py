@@ -3,34 +3,51 @@
 """
 会话 checkpoint 管理器
 过滤消息、构造 prompt、调用 LLM 生成结构化摘要、保存到文件
+
+典型用法:
+    from utils.checkpoint_manager import CheckpointManager
+    mgr = CheckpointManager()
+    filtered = mgr.filter_messages(state["messages"])
+    prompt = mgr.build_checkpoint_prompt(filtered, "gpt-4", 50000, [], "无", 10)
+    summary = await mgr.summarize(llm, prompt)
+    filepath = mgr.save(summary)
 """
 import os
+import logging
 from datetime import datetime
-from typing import List, Optional
 
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import (
+    HumanMessage, AIMessage, ToolMessage, SystemMessage, BaseMessage
+)
+from langchain_core.language_models import BaseChatModel
+
+logger = logging.getLogger(__name__)
 
 
 class CheckpointManager:
     """管理会话 checkpoint 的保存"""
 
-    CHECKPOINT_DIR = ".qoze/memory"
-    MAX_CONTENT_LENGTH = 8000  # 每条消息最大保留字符数
+    # 使用绝对路径避免 cwd 变化导致写入位置异常
+    CHECKPOINT_DIR = os.path.abspath(".qoze/memory")
+    # 每条消息最大保留字符数，基于常见模型 8K 上下文和对话轮次估算
+    MAX_CONTENT_LENGTH = 8000
 
     def __init__(self):
         os.makedirs(self.CHECKPOINT_DIR, exist_ok=True)
 
-    def filter_messages(self, messages: list) -> list:
+    def filter_messages(self, messages: list) -> list[dict]:
         """
         过滤消息列表：
         - 丢弃 SystemMessage、ToolMessage
         - 丢弃 AIMessage 中的 thinking/reasoning_content
+          (LangChain 已将 thinking 分离到 additional_kwargs/reasoning_content 属性，
+           msg.content 中不包含 thinking 内容，_extract_text_content 只读取 content)
         - 丢弃 AIMessage 中纯 tool_calls 的消息
         - 保留 HumanMessage.content 和 AIMessage.content (纯文字)
         - 超长消息截断
         返回: [{"role": "user"|"assistant", "content": "..."}, ...]
         """
-        filtered = []
+        filtered: list[dict] = []
         for msg in messages:
             role = None
             content = None
@@ -61,7 +78,7 @@ class CheckpointManager:
 
         return filtered
 
-    def _has_text_content(self, msg) -> bool:
+    def _has_text_content(self, msg: BaseMessage) -> bool:
         """判断 AIMessage 是否有文字内容 (不是纯 tool_calls)"""
         content = msg.content
         if isinstance(content, str):
@@ -73,7 +90,7 @@ class CheckpointManager:
             )
         return False
 
-    def _extract_text_content(self, msg) -> str:
+    def _extract_text_content(self, msg: BaseMessage) -> str:
         """从 LangChain Message 中提取纯文本 (不含 thinking)"""
         content = msg.content
         if isinstance(content, str):
@@ -89,18 +106,20 @@ class CheckpointManager:
 
     def build_checkpoint_prompt(
         self,
-        filtered_messages: list,
+        filtered_messages: list[dict],
         model_name: str,
         token_count: int,
-        active_skills: list,
+        active_skills: list[str],
         plan_status: str,
         conversation_rounds: int,
     ) -> str:
         """构造给 LLM 的 checkpoint 摘要 prompt"""
         dialog_lines = []
-        for i, m in enumerate(filtered_messages):
+        user_idx = 0
+        for m in filtered_messages:
             if m["role"] == "user":
-                dialog_lines.append(f"### 用户 (第 {i + 1} 条)\n{m['content']}")
+                user_idx += 1
+                dialog_lines.append(f"### 用户 (第 {user_idx} 轮)\n{m['content']}")
             else:
                 dialog_lines.append(f"### AI\n{m['content']}")
 
@@ -152,16 +171,24 @@ class CheckpointManager:
 
         return prompt
 
-    async def summarize(self, llm, prompt: str) -> str:
+    async def summarize(self, llm: BaseChatModel, prompt: str) -> str:
         """独立调用 LLM 生成 checkpoint 摘要 (无流式、无工具)"""
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        return response.content if hasattr(response, "content") else str(response)
+        try:
+            response = await llm.ainvoke([HumanMessage(content=prompt)])
+            return response.content if hasattr(response, "content") else str(response)
+        except Exception as e:
+            logger.error(f"Checkpoint LLM summarization failed: {e}")
+            raise RuntimeError(f"Checkpoint 摘要生成失败: {e}") from e
 
     def save(self, content: str) -> str:
         """保存 checkpoint 到 .qoze/memory/ 目录，返回文件路径"""
         timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
         filename = f"checkpoint-{timestamp}.md"
         filepath = os.path.join(self.CHECKPOINT_DIR, filename)
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(content)
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to save checkpoint: {e}")
+            raise RuntimeError(f"Checkpoint 文件写入失败: {e}") from e
         return filepath
