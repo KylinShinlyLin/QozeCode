@@ -925,6 +925,9 @@ class Qoze(App):
 
         self.status_bar.update_state("Saving checkpoint...")
         self.query_one("#input-line").add_class("hidden")
+        self.request_indicator.start_request()
+        if self.tool_status_panel:
+            self.tool_status_panel.add_tool("checkpoint", "提取会话摘要...")
 
         try:
             mgr = CheckpointManager()
@@ -1006,6 +1009,9 @@ class Qoze(App):
                 Text(f"✗ Checkpoint 失败: {e}", style="bold red")
             ))
         finally:
+            if self.tool_status_panel:
+                self.tool_status_panel.remove_tool("checkpoint")
+            self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
