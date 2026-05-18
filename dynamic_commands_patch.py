@@ -26,6 +26,8 @@ class DynamicCommandsGenerator:
             ("/plan", "切换计划模式"),
             ("/plan status", "显示计划状态"),
             ("/plan clear", "清空当前计划"),
+            ("/checkpoint", "保存会话 checkpoint"),
+            ("/checkpoint --clear", "保存 checkpoint 并清空会话"),
             ("/skills", "显示技能系统帮助"),
             ("/skills list", "列出所有可用技能"),
             ("/skills status", "显示技能系统状态"),
