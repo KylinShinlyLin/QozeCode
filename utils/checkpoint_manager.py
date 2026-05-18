@@ -182,7 +182,7 @@ class CheckpointManager:
 
     def save(self, content: str) -> str:
         """保存 checkpoint 到 .qoze/memory/ 目录，返回文件路径"""
-        timestamp = datetime.now().strftime("%H%M%S")
+        timestamp = datetime.now().strftime("%H-%M-%S")
         filename = f"checkpoint-{timestamp}.md"
         filepath = os.path.join(self.CHECKPOINT_DIR, filename)
         try:
