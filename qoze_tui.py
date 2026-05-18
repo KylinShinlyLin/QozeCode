@@ -534,6 +534,14 @@ class Qoze(App):
             self.exit()
             return
 
+        # ---- checkpoint 命令 (独立 LLM 调用，不经过 Agent StateGraph) ----
+        if user_input.lower() == "checkpoint":
+            await self._handle_checkpoint(clear_after=False)
+            return
+        if user_input.lower() == "checkpoint --clear":
+            await self._handle_checkpoint(clear_after=True)
+            return
+
         if user_input.lower() == "line":
             self.multiline_mode = True
             self.query_one("#input-line").add_class("hidden")
@@ -909,6 +917,98 @@ class Qoze(App):
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None
+
+    async def _handle_checkpoint(self, clear_after: bool = False):
+        """处理 /checkpoint 命令 — 独立 LLM 调用，不经过 Agent StateGraph"""
+        from utils.checkpoint_manager import CheckpointManager
+        from textual.widgets import Static
+
+        self.status_bar.update_state("Saving checkpoint...")
+        self.query_one("#input-line").add_class("hidden")
+
+        try:
+            mgr = CheckpointManager()
+
+            # 1. 读取主会话状态
+            config = {"configurable": {"thread_id": self.thread_id}}
+            state = qoze_code_agent.agent.get_state(config)
+
+            messages = []
+            if state and hasattr(state, 'values') and state.values:
+                messages = state.values.get("messages", [])
+            elif state and isinstance(state, dict):
+                messages = state.get("values", {}).get("messages", [])
+
+            if not messages:
+                self.message_list.mount(Static(
+                    Text("⚠️ 暂无会话内容可保存", style="bold yellow")
+                ))
+                return
+
+            # 2. 过滤消息
+            filtered = mgr.filter_messages(messages)
+            if not filtered:
+                self.message_list.mount(Static(
+                    Text("⚠️ 过滤后无有效对话内容", style="bold yellow")
+                ))
+                return
+
+            # 3. 收集元信息
+            token_count = qoze_code_agent.estimate_token_count(messages)
+            active_skills = []
+            if skills_tui_handler and hasattr(skills_tui_handler, 'skill_manager'):
+                sm = skills_tui_handler.skill_manager
+                if hasattr(sm, 'active_skills'):
+                    active_skills = list(sm.active_skills)
+
+            if self.plan_mode and self.plan_manager:
+                plan_status = self.plan_manager.get_status_summary()
+            else:
+                plan_status = "无活跃计划"
+
+            rounds = sum(1 for m in filtered if m["role"] == "user")
+
+            # 4. 构造 prompt + 独立 LLM 调用
+            prompt = mgr.build_checkpoint_prompt(
+                filtered_messages=filtered,
+                model_name=str(self.model_type.value) if self.model_type else "未知",
+                token_count=token_count,
+                active_skills=active_skills,
+                plan_status=plan_status,
+                conversation_rounds=rounds,
+            )
+            summary = await mgr.summarize(qoze_code_agent.llm, prompt)
+
+            # 5. 保存
+            filepath = mgr.save(summary)
+
+            # 6. 显示结果
+            self.message_list.mount(Static(
+                Text(f"✓ Checkpoint 已保存到 {filepath}", style="bold green")
+            ))
+
+            # 7. 可选清理
+            if clear_after:
+                qoze_code_agent.reset_conversation_state()
+                from tools.subagent_tool import reset_subagent_cache
+                reset_subagent_cache()
+                self.message_list.clear_messages()
+                self.thread_id = str(uuid.uuid4())
+                self.total_tokens = 0
+                self.status_bar.update_token_count(0)
+                self.show_welcome()
+                self.print_welcome()
+
+        except Exception as e:
+            import logging
+            logging.exception("Checkpoint failed")
+            self.message_list.mount(Static(
+                Text(f"✗ Checkpoint 失败: {e}", style="bold red")
+            ))
+        finally:
+            self.status_bar.update_state("Idle")
+            self.query_one("#input-line").remove_class("hidden")
+            self.input_box.focus()
 
 
 def main():
