@@ -4,6 +4,8 @@ from typing import Optional
 
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright, BrowserContext, Page
+import shutil
+import glob
 
 
 # Global state to maintain browser session
@@ -23,7 +25,13 @@ class BrowserSession:
         self._pending_requests: dict[str, dict] = {}  # url -> request dict
 
     async def ensure_active(self):
-        """Ensure browser context and page are active using persistent context for anti-detection."""
+        """Ensure browser context and page are active using persistent context for anti-detection.
+        
+        Includes automatic cleanup and retry logic for Chromium startup failures:
+        - Corrupted lock files (SingletonLock, SingletonCookie, SingletonSocket)
+        - GPU shader cache corruption (GrShaderCache, GraphiteDawnCache, ShaderCache)
+        - Falls back to full profile reset on persistent failures
+        """
         async with self._lock:
             if not self.playwright:
                 self.playwright = await async_playwright().start()
@@ -31,9 +39,7 @@ class BrowserSession:
             if not self.context:
                 # Use persistent context to save cookies/session and avoid detection
                 user_data_dir = os.path.expanduser("~/.qoze/browser_data")
-                if not os.path.exists(user_data_dir):
-                    os.makedirs(user_data_dir, exist_ok=True)
-
+                
                 # Enhanced stealth args to evade detection
                 args = [
                     "--disable-blink-features=AutomationControlled",
@@ -45,15 +51,83 @@ class BrowserSession:
                     "--no-zygote",
                 ]
 
-                # Launch persistent context
-                self.context = await self.playwright.chromium.launch_persistent_context(
-                    user_data_dir=user_data_dir,
-                    headless=False,
-                    args=args,
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    viewport=None,
-                    java_script_enabled=True,
-                )
+                # Try launching with progressive cleanup on failure
+                max_retries = 3
+                last_error = None
+                for attempt in range(max_retries):
+                    try:
+                        # Ensure directory exists (fresh or existing)
+                        if not os.path.exists(user_data_dir):
+                            os.makedirs(user_data_dir, exist_ok=True)
+                        
+                        # Launch persistent context
+                        self.context = await self.playwright.chromium.launch_persistent_context(
+                            user_data_dir=user_data_dir,
+                            headless=False,
+                            args=args,
+                            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                            viewport=None,
+                            java_script_enabled=True,
+                        )
+                        break  # Success
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries - 1:
+                            # Progressive cleanup strategy:
+                            #   Attempt 0: try as-is → fail
+                            #   Attempt 1: clean locks + GPU caches → retry
+                            #   Attempt 2: full reset (remove user_data_dir) → retry fresh
+                            if attempt == 0:
+                                # Level 1: Clean lock files and singleton symlinks
+                                for lock_name in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+                                    lock_path = os.path.join(user_data_dir, lock_name)
+                                    try:
+                                        if os.path.islink(lock_path):
+                                            os.unlink(lock_path)
+                                        elif os.path.exists(lock_path):
+                                            if os.path.isfile(lock_path):
+                                                os.unlink(lock_path)
+                                            elif os.path.isdir(lock_path):
+                                                shutil.rmtree(lock_path)
+                                    except OSError:
+                                        pass
+                                # Also remove any socket files
+                                for sock in glob.glob(os.path.join(user_data_dir, "SS*")):
+                                    try:
+                                        os.unlink(sock)
+                                    except OSError:
+                                        pass
+                            elif attempt == 1:
+                                # Level 2: Also clean GPU/shader caches (common macOS SIGTRAP cause)
+                                for cache_dir in ["GrShaderCache", "GraphiteDawnCache", "ShaderCache", "BrowserMetrics"]:
+                                    cache_path = os.path.join(user_data_dir, cache_dir)
+                                    try:
+                                        if os.path.exists(cache_path):
+                                            shutil.rmtree(cache_path)
+                                    except OSError:
+                                        pass
+
+                if not self.context and attempt == max_retries - 1:
+                    # Last resort: full profile reset
+                    try:
+                        if os.path.exists(user_data_dir):
+                            shutil.rmtree(user_data_dir)
+                        os.makedirs(user_data_dir, exist_ok=True)
+                        self.context = await self.playwright.chromium.launch_persistent_context(
+                            user_data_dir=user_data_dir,
+                            headless=False,
+                            args=args,
+                            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                            viewport=None,
+                            java_script_enabled=True,
+                        )
+                    except Exception as final_error:
+                        raise RuntimeError(
+                            f"Failed to launch browser after full profile reset. "
+                            f"Error: {final_error}. "
+                            f"Please check: 1) Playwright browsers installed (playwright install chromium) "
+                            f"2) macOS permissions for browser automation"
+                        ) from final_error
 
             if not self.page:
                 pages = self.context.pages
