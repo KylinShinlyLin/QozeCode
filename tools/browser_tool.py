@@ -64,6 +64,7 @@ class BrowserSession:
                         self.context = await self.playwright.chromium.launch_persistent_context(
                             user_data_dir=user_data_dir,
                             headless=False,
+                            channel="chrome",
                             args=args,
                             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                             viewport=None,
@@ -116,6 +117,7 @@ class BrowserSession:
                         self.context = await self.playwright.chromium.launch_persistent_context(
                             user_data_dir=user_data_dir,
                             headless=False,
+                            channel="chrome",
                             args=args,
                             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                             viewport=None,
