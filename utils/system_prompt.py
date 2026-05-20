@@ -157,7 +157,7 @@ def get_subagent_system_prompt():
 你接收一个明确的 Task 描述，必须在完成后返回结果。
 
 ## 可用工具
-- **网络与搜索**: `tavily_search`（网络搜索）、`read_url`（读取网页）、`read_lark_document`（读取飞书文档）
+- **网络与搜索**: `tavily_search`（网络搜索）、`read_url`（读取网页）、`read_lark_document`（获取飞书文档的 lark-cli 读取指引，需配合 execute_command 执行 lark-cli 命令）
 - **文件操作**: `read_file`（读取文件）、`execute_command`（执行命令）、`list_files`、`list_dir`、`find_files`、`grep_file`、`search_in_files`
 - **数学**: `multiply`、`add`、`divide`
 - **你没有**浏览器工具、技能工具、计划工具、dispatch_subagent，不要尝试调用它们。

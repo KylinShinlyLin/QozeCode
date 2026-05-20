@@ -64,9 +64,10 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     # 定义选项 - 简洁对齐
     # 保持原有显示格式，但逻辑中我们会根据字符串反推
     choices = [
+        "gemini-3.5-flash   (think)     vertex-ai",
         "gemini-3.1-pro     (think)     vertex-ai",
-        "gemini-3-flash     (think)     vertex-ai",
-        "kimi-k2.5                      MoonShot",
+        # "gemini-3-flash     (think)     vertex-ai",
+        # "kimi-k2.5                      MoonShot",
         "kimi-for-coding                MoonShot",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash              DeepSeek",
@@ -131,6 +132,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         #     model_type = ModelType.GEMINI_3_PRO
         if "gemini-3.1-pro" in selected:
             model_type = ModelType.GEMINI_3_1_PRO
+        elif "gemini-3.5-flash" in selected:
+            model_type = ModelType.GEMINI_3_5_FLASH
         elif "gemini-3-flash" in selected:
             model_type = ModelType.GEMINI_3_FLASH
         elif "claude-haiku-4-5" in selected:

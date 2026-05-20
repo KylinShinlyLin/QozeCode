@@ -393,7 +393,7 @@ _ASYNC_TOOL_NAMES = {
     "browser_send_keys", "browser_hotkey", "browser_focus",
     "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate",
     "browser_console_messages", "browser_console_get", "browser_network_requests",
-    "browser_network_get", "dispatch_subagent", "read_lark_document",
+    "browser_network_get", "dispatch_subagent",
 }
 
 async def tool_node(state: dict):

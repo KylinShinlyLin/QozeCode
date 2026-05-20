@@ -73,6 +73,7 @@ class MessageStreamHandler:
         self._expecting_new_message = False
         self._accumulated_ai_message = None
         self._pending_update = False
+        self._need_new_bot_widget = False
 
     def reset(self):
         """重置状态"""
@@ -88,6 +89,7 @@ class MessageStreamHandler:
         self._expecting_new_message = False
         self._accumulated_ai_message = None
         self._pending_update = False
+        self._need_new_bot_widget = False
 
     async def process_stream(self, stream):
         """处理流式输出"""
@@ -349,7 +351,15 @@ class MessageStreamHandler:
         if self.on_tool_completed:
             self.on_tool_completed(tc_id, display_name, is_error)
 
+        # Gemini fix: non-OpenAI models don't trigger finish_reason == 'tool_calls',
+        # so the bot widget is never finalized/cleared. Do it here.
+        if self.current_bot_message:
+            _log(f'Early finalize via tool_result: content_len={len(self._accumulated_content)}')
+            self.current_bot_message.finalize()
+            self.current_bot_message = None
+
         self._expecting_new_message = True
+        self._need_new_bot_widget = True
         self._accumulated_ai_message = None
 
     async def _display_pending_tool_calls(self):
@@ -443,7 +453,7 @@ class MessageStreamHandler:
         """
         # --- 处理 content：创建/更新 BotMessageWidget（优先，保证顺序）---
         if content:
-            if self.current_bot_message is None or self._expecting_new_message:
+            if self.current_bot_message is None or self._expecting_new_message or self._need_new_bot_widget:
                 # 新一轮回复开始
                 # thinking widget 由 _handle_ai_content 和 finish_reason 分支独立管理，
                 # 此处不再 finalize，避免误杀同一轮尚在流式输出的 thinking widget
@@ -454,9 +464,13 @@ class MessageStreamHandler:
                     content="",
                     is_streaming=True
                 )
+                # Finalize old bot widget if starting a new round (Gemini fix)
+                if self.current_bot_message and self._need_new_bot_widget:
+                    self.current_bot_message.finalize()
                 self.current_bot_message = BotMessageWidget(msg)
                 self.on_bot_created(self.current_bot_message)
                 self._expecting_new_message = False
+                self._need_new_bot_widget = False
                 self._last_update_time = time.time()
                 _log("Created new BotMessageWidget")
 
