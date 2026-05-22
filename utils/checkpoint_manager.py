@@ -175,10 +175,26 @@ class CheckpointManager:
         """独立调用 LLM 生成 checkpoint 摘要 (无流式、无工具)"""
         try:
             response = await llm.ainvoke([HumanMessage(content=prompt)])
-            return response.content if hasattr(response, "content") else str(response)
+            raw = response.content if hasattr(response, "content") else str(response)
+            # 防御：部分模型 (如 deepseek-v4-pro) 的 content 可能是 list[dict]，需转为纯文本
+            content = self._extract_text_content_str(raw)
+            return content
         except Exception as e:
             logger.error(f"Checkpoint LLM summarization failed: {e}")
             raise RuntimeError(f"Checkpoint 摘要生成失败: {e}") from e
+
+    @staticmethod
+    def _extract_text_content_str(content) -> str:
+        """从任意 content (str | list) 中提取纯文本字符串"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            parts = []
+            for p in content:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    parts.append(p.get("text", ""))
+            return " ".join(parts)
+        return str(content) if content else ""
 
     def save(self, content: str) -> str:
         """保存 checkpoint 到 .qoze/memory/ 目录，返回文件路径"""
