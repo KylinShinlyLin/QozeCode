@@ -54,10 +54,12 @@ from tools.skill_tools import activate_skill, list_available_skills, deactivate_
 from tools.lark_tools import read_lark_document
 from tools.plan_tools import update_plan_progress
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
+from tools.code_tools import analyze_project, find_symbols, trace_imports
 # from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
 from utils.directory_tree import get_directory_tree
-from utils.system_prompt import get_static_system_prompt, get_dynamic_context
+from utils.git_context import get_git_context
+from utils.system_prompt import get_static_system_prompt, get_dynamic_context, load_memory_context
 
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息和警告
@@ -107,7 +109,7 @@ def load_qoze_rules(current_dir):
 
 
 def get_context_info(system_info="", system_release="", system_version="", machine_type="", processor="",
-                     shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True):
+                     shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True, git_context=""):
     """
     获取上下文信息（分离静态和动态内容以优化 Prompt Caching）
 
@@ -142,6 +144,9 @@ def get_context_info(system_info="", system_release="", system_version="", machi
     if plan_mgr.has_valid_plan():
         plan_prompt = plan_mgr.load_plan_context()
 
+    # 新增：加载会话记忆 (checkpoint 恢复)
+    memory_prompt = load_memory_context(os.path.join(current_dir, ".qoze", "memory"))
+
     # 构建动态上下文（放在 User Message 中，避免影响 System Prompt 缓存）
     dynamic_context = get_dynamic_context(
         system_info=system_info,
@@ -157,7 +162,9 @@ def get_context_info(system_info="", system_release="", system_version="", machi
         active_skills_content=active_skills_content,
         plan_prompt=plan_prompt,
         model_name=model_name,
-        model_supports_vision=model_supports_vision
+        model_supports_vision=model_supports_vision,
+        memory_prompt=memory_prompt,
+        git_context=git_context,
     )
 
     return static_prompt, dynamic_context
@@ -165,7 +172,7 @@ def get_context_info(system_info="", system_release="", system_version="", machi
 
 # 保留向后兼容的函数名
 def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
-                               shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True):
+                               shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True, git_context=""):
     """【向后兼容】获取完整的系统提示词"""
     static, dynamic = get_context_info(system_info, system_release, system_version, machine_type,
                                        processor, shell, current_dir, directory_tree,
@@ -218,6 +225,9 @@ base_tools = [
     read_lark_document,
     update_plan_progress,
     dispatch_subagent,
+    analyze_project,
+    find_symbols,
+    trace_imports,
 ]
 
 # 初始时不加载浏览器工具
@@ -258,6 +268,9 @@ async def llm_call(state: dict):
         # Run directory tree generation in a thread to avoid blocking
         directory_tree = await asyncio.to_thread(get_directory_tree, current_dir)
 
+        # 提取 Git 上下文
+        git_ctx = await asyncio.to_thread(get_git_context, current_dir)
+
     except Exception:
         print("获取设备信息异常")
 
@@ -272,7 +285,8 @@ async def llm_call(state: dict):
         current_dir=current_dir,
         directory_tree=directory_tree,
         model_name=current_model_type.value if current_model_type else "未知",
-        model_supports_vision=supports_vision(current_model_type) if current_model_type else True
+        model_supports_vision=supports_vision(current_model_type) if current_model_type else True,
+        git_context=git_ctx,
     )
 
     # 构造消息：SystemMessage 放静态内容（可被缓存），UserMessage 放动态上下文

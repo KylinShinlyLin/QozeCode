@@ -5,7 +5,66 @@
 优化后的版本：分离静态和动态内容以提升 Prompt Caching 命中率
 """
 import os
+import glob
 
+
+def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, max_total_chars: int = 8000) -> str:
+    """
+    加载 .qoze/memory/ 目录下的 checkpoint 文件，注入到动态上下文中。
+
+    当用户清理会话后重新开始，这些 checkpoint 文件帮助 Agent 快速恢复之前的任务上下文。
+
+    Args:
+        memory_dir: checkpoint 文件目录
+        max_files: 最多加载的文件数
+        max_total_chars: 总字符数上限，防止 token 超限
+
+    Returns:
+        str: 格式化的 memory 上下文，如果无文件则返回空字符串
+    """
+    import os
+    import glob
+
+    if not os.path.isdir(memory_dir):
+        return ""
+
+    files = sorted(
+        glob.glob(os.path.join(memory_dir, "checkpoint-*.md")),
+        key=os.path.getmtime,
+        reverse=True
+    )
+    if not files:
+        return ""
+
+    memory_text = "## 🧠 会话记忆 (Checkpoint 恢复)\n"
+    memory_text += "以下是从之前会话保存的 checkpoint 摘要，请基于这些记忆继续之前的工作。\n\n"
+
+    total_chars = 0
+    loaded = 0
+    for f in files[:max_files]:
+        try:
+            with open(f, 'r', encoding='utf-8') as fh:
+                file_content = fh.read()
+        except Exception:
+            continue
+
+        fname = os.path.basename(f)
+        # 截断过长文件
+        if total_chars + len(file_content) > max_total_chars:
+            remaining = max_total_chars - total_chars
+            if remaining > 500:
+                file_content = file_content[:remaining] + "\n\n[... 内容过长，已截断 ...]"
+            else:
+                break
+
+        memory_text += f"---\n### 📄 {fname}\n\n{file_content}\n\n"
+        total_chars += len(file_content)
+        loaded += 1
+
+    if loaded == 0:
+        return ""
+
+    return memory_text
 
 def get_static_system_prompt():
     """
@@ -50,6 +109,34 @@ def get_static_system_prompt():
     - **项目检索**：推荐使用命令行（如 `grep -rn` 或 `rg`）进行全局搜索，速度最快。如果为了寻找某段逻辑，直接用 `grep -nC 5 "keyword" file` 连带上下文一起看，直接省去后续的 `read_file` 步骤！
     - **读取文件**：优先小范围（`start_line`/`end_line` 区间）读取，避免一次性读取过大文件。
     - **Maven依赖排查与JAR解析**：排查 Java 项目第三方依赖问题时，应主动前往 Maven 本地仓库（通常为 `~/.m2/repository`）定位对应的 `.jar` 文件。遇到需要排查 `.jar` 包代码或 `.class` 文件时，请勿直接读取或解压，必须使用系统命令：先用 `jar tf <jar_file> | grep <keyword>` 快速列出并检索类名；再用 `javap -c -p -classpath <jar_file> <class_name>` 解析查看对应的类方法、字段签名和字节码细节，实现全链路高效排查。
+
+
+
+## 项目感知 (Project Awareness)
+
+当进入一个新项目时，你应该：
+1. 优先使用  工具获取项目类型、模块结构和关键入口文件
+2. 使用  搜索特定类/函数/接口定义位置
+3. 使用  理解 Python 模块间的依赖关系
+4. 在理解项目结构后，再执行具体修改任务
+5. 不要简单地用  逐个探索目录——先分析，再定位
+
+Git 上下文由系统自动注入（参见动态上下文中的"Git 仓库状态"），你无需主动执行 On branch main
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   README.md
+	modified:   qoze_code_agent.py
+	modified:   utils/checkpoint_manager.py
+	modified:   utils/system_prompt.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	tools/code_tools.py
+	utils/git_context.py
+
+no changes added to commit (use "git add" and/or "git commit -a")。
+如需详细 diff 或文件历史，再使用  执行对应的 git 命令。
 
 
 ## Subagent (子代理) 并行调度系统
@@ -216,7 +303,7 @@ def get_subagent_system_prompt():
 def get_dynamic_context(system_info, system_release, system_version, machine_type,
                         processor, shell, current_dir, directory_tree, rules_prompt="",
                         available_skills=None, active_skills_content="", plan_prompt="",
-                        model_name="", model_supports_vision=True):
+                        model_name="", model_supports_vision=True, memory_prompt="", git_context=""):
     """
     获取动态上下文信息（每次请求可能变化的部分）
     
@@ -253,6 +340,10 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
 
 ## 当前项目目录
 {directory_tree}
+
+    # 添加 Git 上下文（自动提取，无需 Agent 执行 git status）
+    if git_context:
+        context += f"\n{git_context}\n"
 """
 
     # 添加自定义规则
@@ -271,6 +362,10 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     # 添加执行计划
     if plan_prompt:
         context += f"\n{plan_prompt}\n"
+
+    # 添加会话记忆 (checkpoint 恢复)
+    if memory_prompt:
+        context += f"\n{memory_prompt}\n"
 
     # 添加模型视觉支持信息
     if model_name:
