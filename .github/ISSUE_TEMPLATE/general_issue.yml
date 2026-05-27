@@ -1,0 +1,65 @@
+name: 📝 General Issue
+Description: 通用问题 / 其他议题（非 Bug 也非功能请求）
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这是一个通用 Issue 模板。如果你不确定该用哪个模板，或议题不属于 Bug/Feature 范畴，请使用此模板。
+        
+        > 💡 **提示：** 如果是 Bug 报告或功能请求，建议关闭此页选择对应的专用模板，能让我们更高效处理。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概述
+      description: 一句话描述此 Issue 的主题
+      placeholder: 例如：关于子代理并发数量配置的建议...
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 详细描述
+      description: 详细说明背景、现象或需求
+      placeholder: |
+        请尽可能详细地描述你的问题或想法...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 相关环境 / 上下文
+      description: 如有必要，请提供环境信息
+      placeholder: |
+        - OS: 
+        - Python 版本: 
+        - 使用的模型: 
+        - QozeCode 版本: 
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 如有错误日志或截图，请粘贴
+      placeholder: |
+        ```
+        （粘贴日志）
+        ```
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 issue，确认没有重复议题
+          required: true
+        - label: 我已阅读 README 和项目文档
+          required: false
