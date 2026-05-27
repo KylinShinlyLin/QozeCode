@@ -115,28 +115,14 @@ def get_static_system_prompt():
 ## 项目感知 (Project Awareness)
 
 当进入一个新项目时，你应该：
-1. 优先使用  工具获取项目类型、模块结构和关键入口文件
-2. 使用  搜索特定类/函数/接口定义位置
-3. 使用  理解 Python 模块间的依赖关系
+1. 优先使用 `analyze_project` 工具获取项目类型、模块结构和关键入口文件
+2. 使用 `find_symbols` 搜索特定类/函数/接口定义位置
+3. 使用 `trace_imports` 理解 Python 模块间的依赖关系（仅限 Python 项目）
 4. 在理解项目结构后，再执行具体修改任务
-5. 不要简单地用  逐个探索目录——先分析，再定位
+5. 不要简单地用 `execute_command ls` 逐个探索目录——先分析，再定位
 
-Git 上下文由系统自动注入（参见动态上下文中的"Git 仓库状态"），你无需主动执行 On branch main
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-	modified:   README.md
-	modified:   qoze_code_agent.py
-	modified:   utils/checkpoint_manager.py
-	modified:   utils/system_prompt.py
-
-Untracked files:
-  (use "git add <file>..." to include in what will be committed)
-	tools/code_tools.py
-	utils/git_context.py
-
-no changes added to commit (use "git add" and/or "git commit -a")。
-如需详细 diff 或文件历史，再使用  执行对应的 git 命令。
+Git 上下文由系统自动注入（参见动态上下文中的"Git 仓库状态"），你无需主动执行 `git status`。
+如需详细 diff 或文件历史，再使用 `execute_command` 执行对应的 git 命令。
 
 
 ## Subagent (子代理) 并行调度系统
