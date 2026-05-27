@@ -4,9 +4,9 @@
 blank_issues_enabled: true
 
 contact_links:
-  - name: ❓ 提问与讨论
-    url: https://github.com/KylinShinlyLin/QozeCode/discussions
-    about: 如果你有问题、使用困惑或想发起讨论，请前往 Discussions 区
+#  - name: ❓ 提问与讨论
+#    url: https://github.com/KylinShinlyLin/QozeCode/discussions
+#    about: 如果你有问题、使用困惑或想发起讨论，请前往 Discussions 区
 
   - name: 📖 项目文档
     url: https://github.com/KylinShinlyLin/QozeCode/blob/main/README.md
