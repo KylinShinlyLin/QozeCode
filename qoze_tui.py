@@ -12,13 +12,6 @@ import time
 from tui_components import tui_constants
 
 try:
-    from utils.iterm_driver import ITermDriver
-
-    _HAS_ITERM_DRIVER = True
-except ImportError:
-    _HAS_ITERM_DRIVER = False
-
-try:
     from utils.audio_transcriber import AudioTranscriber
     from utils.meeting_note_recorder import MeetingNoteRecorder
 
@@ -119,16 +112,6 @@ class Qoze(App):
         Binding("ctrl+n", "toggle_meeting_note", "Meeting Note", priority=True),
     ]
 
-    def get_driver_class(self) -> type[Driver]:
-        """获取驱动类, iTerm2 环境使用自定义驱动以支持中文输入法 (IME)。
-
-        iTerm2 对 Kitty Keyboard Protocol 的支持存在 bug,
-        会打断 macOS 输入法的组合输入过程, 导致中文等 CJK 输入法无法正常工作。
-        通过使用自定义 ITermDriver 跳过该协议, 使输入法恢复正常。
-        """
-        if _HAS_ITERM_DRIVER and ITermDriver.is_iterm():  # type: ignore[union-attr]
-            return ITermDriver
-        return super().get_driver_class()
 
     def __init__(self, provider, model_type):
         super().__init__()
