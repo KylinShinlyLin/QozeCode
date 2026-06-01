@@ -53,3 +53,7 @@ base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 [jina]
 api_key=
+
+[Xiaomi]
+api_key=
+base_url=https://api.xiaomimimo.com/v1

@@ -71,6 +71,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "kimi-for-coding    (think)     MoonShot",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
+        "mimo-v2.5-pro      (think)     小米",
         "qwen3.6-plus       (think)     Alibaba Cloud",
         "glm-5                          智普",
         "glm-5v-turbo                   智普",
@@ -122,6 +123,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             provider = ModelProvider.MOONSHOT
         elif "智普" in selected:
             provider = ModelProvider.ZHIPU
+        elif "小米" in selected:
+            provider = ModelProvider.XIAOMI
         elif "Alibaba Cloud" in selected:
             provider = ModelProvider.ALIBABA_CLOUD
         elif "qwen3.6-plus" in selected:
@@ -158,6 +161,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.DEEPSEEK_REASONER
         elif "deepseek-v4-flash" in selected:
             model_type = ModelType.DEEPSEEK_CHAT
+        elif "mimo-v2.5-pro" in selected:
+            model_type = ModelType.MIMO_V2_5_PRO
         elif "kimi-2.5" in selected:
             model_type = ModelType.KIMI_2_5
         elif "glm-4.6" in selected:

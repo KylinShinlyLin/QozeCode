@@ -43,4 +43,8 @@ api_key=
 
 [jina]
 api_key=
+
+[Xiaomi]
+api_key=
+base_url=https://api.xiaomimimo.com/v1
 """

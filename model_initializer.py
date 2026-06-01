@@ -324,5 +324,19 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             print("❌ 缺少 langchain_openai 依赖")
             raise
 
+    elif provider == ModelProvider.XIAOMI:
+        try:
+            from langchain_openai import ChatOpenAI
+            creds = ensure_model_credentials(model_type.value)
+            llm = ChatOpenAI(
+                model=model_type.value,
+                api_key=creds["api_key"],
+                base_url=creds.get("base_url") or "https://api.xiaomimimo.com/v1"
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
+            raise
+
     else:
         raise ValueError(f"不支持的模型厂商: {provider}")

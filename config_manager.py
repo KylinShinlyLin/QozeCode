@@ -197,6 +197,11 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         section = "KimiCode"
         required_keys = ["api_key"]
 
+    # 11. Xiaomi (MiMo)
+    elif model_identifier in ("mimo-v2.5-pro", "Xiaomi"):
+        section = "Xiaomi"
+        required_keys = ["api_key"]
+
     else:
         # 尝试直接作为 section name
         section = str(model_identifier)
@@ -216,6 +221,8 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
     if section == "Kimi":
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
     if section == "KimiCode":
+        creds["base_url"] = cfg.get(section, "base_url", fallback=None)
+    if section == "Xiaomi":
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
 
     return creds

@@ -12,6 +12,7 @@ class ModelProvider(Enum):
     DEEPSEEK = "DeepSeek"
     OPENAI = "OpenAI"
     ZHIPU = "ZHIPU"
+    XIAOMI = "小米"
 
 
 class ModelType(Enum):
@@ -38,6 +39,7 @@ class ModelType(Enum):
     GLM_4_6 = "glm-4.6"
     GLM_5 = "glm-5"
     GLM_5V_TURBO = "glm-5v-turbo"
+    MIMO_V2_5_PRO = "mimo-v2.5-pro"
 
 
 # 模型视觉（图片输入）支持映射表
@@ -60,6 +62,7 @@ MODEL_VISION_SUPPORT = {
     ModelType.GLM_4_6: False,             # GLM-4.6 纯文本模型
     ModelType.GLM_5: False,               # GLM-5 纯文本模型
     ModelType.GLM_5V_TURBO: True,         # GLM-5V-Turbo 多模态模型 (V=Vision)
+    ModelType.MIMO_V2_5_PRO: False,       # 小米 MiMo 纯文本模型
 }
 
 
@@ -89,4 +92,5 @@ MODEL_PROVIDER_MAP = {
     ModelType.DEEPSEEK_REASONER: ModelProvider.DEEPSEEK,
     ModelType.DEEPSEEK_CHAT: ModelProvider.DEEPSEEK,
     ModelType.GLM_4_6: ModelProvider.ZHIPU,
+    ModelType.MIMO_V2_5_PRO: ModelProvider.XIAOMI,
 }
