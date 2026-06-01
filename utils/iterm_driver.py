@@ -7,12 +7,8 @@
 但 iTerm2 对该协议的支持存在 bug, 会打断 macOS IME 的组合输入过程，
 导致中文等 CJK 输入法无法正常工作。
 
-解决方案: 在 iTerm2 环境中跳过 Kitty Keyboard Protocol 的启用/禁用，
-让终端回退到基础按键处理模式，与 macOS Terminal.app 行为一致。
-
-参考:
-- https://github.com/anthropics/claude-code/issues/38694
-- https://github.com/anthropics/claude-code/issues/51175
+解决方案: 在 iTerm2 环境中跳过 Kitty Keyboard Protocol 的启用，
+但保留退出时的禁用 (清理可能遗留的协议状态)。
 """
 
 import os
@@ -22,11 +18,9 @@ from textual.drivers.linux_driver import LinuxDriver
 class ITermDriver(LinuxDriver):
     """针对 iTerm2 优化的 LinuxDriver, 禁用 Kitty Keyboard Protocol。
 
-    通过重写 write 方法拦截并静默丢弃 Kitty Keyboard Protocol 的
-    启用 (`\x1b[>1u`) 和禁用 (`\x1b[<u`) 序列, 使终端回退到基础
-    按键处理模式, 恢复 IME 的正常工作。
-
-    仅影响 iTerm2 环境, 其他终端仍使用标准 LinuxDriver 行为。
+    仅拦截 Kitty 协议的 **启用** 序列 (`\x1b[>1u`),
+    保留 **禁用** 序列 (`\x1b[<u`) 透传, 确保退出时能清理
+    终端状态, 避免整个 iTerm2 被污染。
     """
 
     @staticmethod
@@ -38,14 +32,11 @@ class ITermDriver(LinuxDriver):
         )
 
     def write(self, data: str) -> None:
-        """写入数据到终端, 过滤 Kitty Keyboard Protocol 序列。
+        """写入数据到终端, 仅过滤 Kitty Keyboard Protocol 的启用序列。
 
-        在 iTerm2 环境下, 拦截并静默丢弃 Kitty Keyboard Protocol
-        的启用/禁用序列, 其余数据正常透传。
+        重要: 不禁用序列 `\x1b[<u` 必须透传, 否则退出应用后
+        iTerm2 会残留 Kitty 协议状态, 导致整个终端输出乱码。
         """
-        # 仅在 iTerm2 环境下过滤, 其他终端不干预
-        if ITermDriver.is_iterm():
-            # 拦截 Kitty Keyboard Protocol 的启用 (\x1b[>1u) 和禁用 (\x1b[<u)
-            if data in ("\x1b[>1u", "\x1b[<u"):
-                return
+        if ITermDriver.is_iterm() and data == "\x1b[>1u":
+            return  # 静默丢弃 Kitty 协议启用, IME 恢复正常
         super().write(data)
