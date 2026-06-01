@@ -119,8 +119,7 @@ class Qoze(App):
         Binding("ctrl+n", "toggle_meeting_note", "Meeting Note", priority=True),
     ]
 
-    @classmethod
-    def get_driver_class(cls) -> type[Driver]:
+    def get_driver_class(self) -> type[Driver]:
         """获取驱动类, iTerm2 环境使用自定义驱动以支持中文输入法 (IME)。
 
         iTerm2 对 Kitty Keyboard Protocol 的支持存在 bug,
