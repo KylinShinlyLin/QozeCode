@@ -6,6 +6,7 @@
 """
 import os
 import glob
+import shutil
 
 
 def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, max_total_chars: int = 8000) -> str:
@@ -359,5 +360,9 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
             context += f"\n## 🖼️ 视觉模态: 当前模型 {model_name} **支持**图片输入，.qoze/image/ 目录下的图片会自动加载到上下文。\n"
         else:
             context += f"\n## 🖼️ 视觉模态: 当前模型 {model_name} **不支持**图片输入，.qoze/image/ 目录下的图片将不会被加载。如果需要处理图片，请切换到支持多模态的模型（如 GPT-5、Gemini、GLM-5V-Turbo、Qwen3 等）。\n"
+
+    # 检测 lark-cli 是否安装，若已安装则提示 Agent 可以使用飞书工具
+    if shutil.which("lark-cli"):
+        context += "\n## 🔧 环境工具: 当前电脑已安装 `lark-cli`（飞书命令行工具），你可以使用 lark-cli 来操作飞书文档、云空间、日历等飞书资源。\n"
 
     return context

@@ -99,6 +99,9 @@ except ImportError as e:
     print(f"Critical Error: Could not import TUI components: {e}")
     sys.exit(1)
 
+def fuzzy_match(query: str, target: str) -> bool:
+    """模糊匹配：query 作为连续子串出现在 target 中。"""
+    return query.lower() in target.lower()
 
 class Qoze(App):
     CSS = tui_constants.CSS
@@ -111,8 +114,6 @@ class Qoze(App):
         Binding("ctrl+e", "stop_recording", "Stop", priority=True),
         Binding("ctrl+n", "toggle_meeting_note", "Meeting Note", priority=True),
     ]
-
-
     def __init__(self, provider, model_type):
         super().__init__()
         self.model_type = model_type
@@ -715,14 +716,14 @@ class Qoze(App):
                 cmds = get_dynamic_commands()
             except:
                 cmds = [("/quit", "Quit"), ("/clear", "Clear"), ("/skills", "Skills")]
-            filtered = [Option(f"{c} - {d}", id=c[1:]) for c, d in cmds if c.startswith(value)]
+            filtered = [Option(f"{c} - {d}", id=c[1:]) for c, d in cmds if fuzzy_match(value[1:], c)]
             show_suggestions = bool(filtered)
         elif value.lower().startswith("skills"):
             try:
                 cmds = get_skills_commands(value)
             except:
                 cmds = []
-            filtered = [Option(f"{c} - {d}", id=c) for c, d in cmds if c.startswith(value.lower())]
+            filtered = [Option(f"{c} - {d}", id=c) for c, d in cmds if fuzzy_match(value.lower(), c.lower())]
             show_suggestions = bool(filtered)
 
         if show_suggestions:
@@ -1017,8 +1018,6 @@ class Qoze(App):
             self.status_bar.update_state("Idle")
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
-
-
 def main():
     import shared_console
 
@@ -1036,7 +1035,5 @@ def main():
     os.system("cls" if os.name == "nt" else "clear")
 
     Qoze(provider=provider, model_type=model_type).run()
-
-
 if __name__ == "__main__":
     main()
