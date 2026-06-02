@@ -131,14 +131,12 @@ def _get_subagent_tools():
         grep_file, search_in_files,
     )
     from tools.search_tool import tavily_search, read_url
-    from tools.lark_tools import read_lark_document
     from tools.math_tools import multiply, add, divide
 
     _subagent_tools_cache = [
         execute_command,
         read_file, list_files, list_dir, find_files, grep_file, search_in_files,
         tavily_search, read_url,
-        read_lark_document,
         multiply, add, divide,
     ]
     return _subagent_tools_cache
@@ -393,10 +391,10 @@ def reset_subagent_cache():
 # ============================================================
 
 async def _stream_subagent(
-    subagent,
-    messages: list,
-    agent_id: str,
-    label: str,
+        subagent,
+        messages: list,
+        agent_id: str,
+        label: str,
 ) -> str:
     """
     使用 astream_events 执行 subagent，每轮 LLM 结束时回调完整 AIMessage content。
@@ -430,9 +428,9 @@ async def _stream_subagent(
 
     try:
         async for event in subagent.astream_events(
-            {"messages": messages, "llm_calls": 0},
-            config=config,
-            version="v2",
+                {"messages": messages, "llm_calls": 0},
+                config=config,
+                version="v2",
         ):
             kind = event["event"]
 
