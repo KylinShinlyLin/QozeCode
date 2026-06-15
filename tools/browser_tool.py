@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -49,6 +50,7 @@ class BrowserSession:
                     "--disable-dev-shm-usage",
                     "--no-first-run",
                     "--no-zygote",
+                    "--start-maximized",
                 ]
 
                 # Try launching with progressive cleanup on failure
@@ -67,7 +69,8 @@ class BrowserSession:
                             channel="chrome",
                             args=args,
                             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                            viewport=None,
+                            viewport={"width": 1440, "height": 900},
+                            no_viewport=False,
                             java_script_enabled=True,
                         )
                         break  # Success
@@ -137,8 +140,10 @@ class BrowserSession:
                     self.page = pages[0]
                 else:
                     self.page = await self.context.new_page()
-                # 启动 console 和 network 事件收集
-                _start_collecting(self, self.page)
+
+            # 确保所有已有页面都绑定了事件收集器（修复持久化会话恢复时丢失监听的问题）
+            for p in self.context.pages:
+                _start_collecting(self, p)
 
     async def close(self):
         """Close all browser resources."""
@@ -216,6 +221,31 @@ async def _wait_for_stable_dom(timeout: int = 3000, stable_for: int = 200):
 BrowserSession._wait_for_stable_dom = staticmethod(_wait_for_stable_dom)
 
 
+async def _wait_for_page_ready(timeout: int = 5000, min_content_length: int = 500):
+    """等待页面就绪：检测 document.readyState 和最小内容长度。
+
+    解决 Google Flights 等 SPA 页面在 domcontentloaded 后仍需异步加载数据的问题。
+    配合 _wait_for_stable_dom 使用效果更佳。
+
+    Args:
+        timeout: 最大等待时间 (ms)
+        min_content_length: 页面 HTML 最短长度阈值
+    """
+    if not _session.page:
+        return
+    import asyncio as _asyncio
+    deadline = _asyncio.get_event_loop().time() + timeout / 1000.0
+    while _asyncio.get_event_loop().time() < deadline:
+        try:
+            ready_state = await _session.page.evaluate("document.readyState")
+            html_len = await _session.page.evaluate("document.body ? document.body.innerHTML.length : 0")
+            if ready_state == "complete" and html_len >= min_content_length:
+                return
+        except Exception:
+            pass
+        await _asyncio.sleep(0.3)
+
+
 def _start_collecting(session, page):
     """开始收集 console 消息和网络请求事件（每个页面只启动一次）"""
     page_id = id(page)
@@ -255,19 +285,30 @@ def _start_collecting(session, page):
         session._pending_requests[request.url + "|" + request.method] = req_dict
 
     def _on_response(response):
-        key = response.url + "|" + response.request.method if response.request else response.url
-        req_dict = session._pending_requests.pop(key, None)
+        # 修复 key 匹配：始终使用 url + method 组合，因为 _on_request 也这样用
+        req = response.request
+        if req:
+            key = response.url + "|" + req.method
+        else:
+            # 无 request 对象时，尝试匹配所有 pending 中 URL 相同的请求
+            key = None
+            for k in list(session._pending_requests.keys()):
+                if k.startswith(response.url + "|"):
+                    key = k
+                    break
+        req_dict = session._pending_requests.pop(key, None) if key else None
         if req_dict:
             req_dict["status"] = response.status
             req_dict["status_text"] = response.status_text
             req_dict["response_headers"] = dict(response.headers) if response.headers else {}
             try:
-                # 使用 Content-Length header 获取响应体大小
-                # response.body() 是协程，不能在此同步上下文中调用
                 cl = response.headers.get("content-length")
                 req_dict["response_body_size"] = int(cl) if cl else None
+                # 也尝试获取实际响应体（异步，通过标记记录）
+                req_dict["has_body"] = response.headers.get("content-type", "").startswith("application/json") or                                        response.headers.get("content-type", "").startswith("text/")
             except Exception:
                 req_dict["response_body_size"] = None
+                req_dict["has_body"] = False
 
     page.on("console", _on_console)
     page.on("pageerror", _on_page_error)
@@ -318,7 +359,7 @@ async def browser_navigate(url: str) -> str:
 
         # Add random delay to simulate human behavior
         import random
-        await asyncio.sleep(random.uniform(1.0, 3.0))
+        await asyncio.sleep(random.uniform(0.3, 0.8))
 
         # Randomize mouse movement to simulate human (basic)
         try:
@@ -329,6 +370,13 @@ async def browser_navigate(url: str) -> str:
         # 新导航时清空之前的 console 和 network 数据（必须在 goto 之前）
         _clear_collected_data(_session)
         await _session.page.goto(url, wait_until="domcontentloaded")
+        # 等待网络空闲（对 Google Flights 等 SPA 页面至关重要）
+        try:
+            await _session.page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:
+            pass  # 8秒内未完全空闲也继续，不阻塞
+        # 额外等待确保动态内容渲染完成
+        await _wait_for_page_ready()
         title = await _session.page.title()
         return f"Successfully navigated to: {url}\nPage Title: {title}"
     except Exception as e:
@@ -339,9 +387,12 @@ async def browser_navigate(url: str) -> str:
 async def browser_click(selector: str) -> str:
     """Click an element on the current page identified by a CSS selector.
 
-    Uses Playwright's Locator API which provides built-in auto-waiting:
-    waits for element to be visible, stable, enabled, and not covered by other elements.
-    Also waits for DOM to stabilize after the click. Falls back to force click if needed.
+    Uses a three-layer fallback strategy for maximum reliability:
+    Layer 1: Playwright Locator.click() — native event, auto-scrolls into view
+    Layer 2: JS MouseEvent dispatchEvent() — handles React/Vue synthetic events
+    Layer 3: Force click — bypasses all actionability checks as last resort
+
+    Also waits for DOM to stabilize after the click.
 
     Args:
         selector: The CSS selector for the element to click (e.g., 'button.submit', '#login-btn').
@@ -353,36 +404,77 @@ async def browser_click(selector: str) -> str:
         if not _session.page:
             return "Error: No active page. Use browser_navigate first."
 
-        # Use Locator API which has built-in auto-waiting and retry
-        locator = _session.page.locator(selector)
+        # 先等待页面稳定，提高点击成功率
+        await _wait_for_page_ready(timeout=3000, min_content_length=500)
 
-        # Human-like delay before click
-        import random
-        await asyncio.sleep(random.uniform(0.3, 0.8))
+        layer1_err = ""
+        layer2_err = ""
+        layer3_err = ""
 
-        # Try hover first for better human simulation
+        # === Layer 1: 标准 Locator click（带 scroll_into_view） ===
         try:
-            await locator.hover(timeout=3000)
-            await asyncio.sleep(random.uniform(0.1, 0.3))
-        except Exception:
-            pass  # Hover is optional
+            locator = _session.page.locator(selector).first
+            # 先等待元素可见（解决动态渲染页面元素尚未出现的问题）
+            await locator.wait_for(state="visible", timeout=3000)
+            # 先确保元素在视口内
+            await locator.scroll_into_view_if_needed(timeout=2000)
+            # 使用较短的超时，快速判断是否可点击
+            await locator.click(timeout=3000)
+            await _wait_for_stable_dom(timeout=1500, stable_for=150)
+            return f"Clicked element: {selector}"
+        except Exception as e1:
+            layer1_err = str(e1)[:100]
 
-        # Click using Locator API (auto-waits for actionability:
-        # visible, stable, enabled, not covered)
-        await locator.click(timeout=5000)
-
-        # Wait for DOM to stabilize after click
-        await _wait_for_stable_dom()
-
-        return f"Clicked element: {selector}"
-    except Exception as e:
-        # Fallback: try force click (bypasses actionability checks)
+        # === Layer 2: JS dispatchEvent（解决 React/Vue 合成事件） ===
         try:
-            await _session.page.locator(selector).click(force=True, timeout=3000)
-            await _wait_for_stable_dom()
+            result = await _session.page.evaluate("""
+                (sel) => {
+                    const el = document.querySelector(sel);
+                    if (!el) return 'NOT_FOUND';
+                    el.scrollIntoView({behavior: 'instant', block: 'center'});
+                    // 同时触发多种事件，覆盖不同框架的事件监听方式
+                    ['mousedown', 'mouseup', 'click'].forEach(type => {
+                        el.dispatchEvent(new MouseEvent(type, {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            button: 0
+                        }));
+                    });
+                    // 对 form submit 按钮，也尝试 submit
+                    if (el.tagName === 'BUTTON' || (el.tagName === 'INPUT' &&
+                        ['submit', 'button'].includes(el.type))) {
+                        el.click();
+                    }
+                    return 'OK';
+                }
+            """, selector)
+            if result == 'NOT_FOUND':
+                layer2_err = f"Element not found by JS: {selector}"
+            else:
+                await _wait_for_stable_dom(timeout=1000, stable_for=150)
+                return f"Clicked element (JS): {selector}"
+        except Exception as e2:
+            if 'NOT_FOUND' in str(e2):
+                layer2_err = str(e2)[:100]
+            else:
+                layer2_err = str(e2)[:100]
+
+        # === Layer 3: Force click（最终兜底） ===
+        try:
+            await _session.page.locator(selector).first.click(force=True, timeout=2000)
+            await _wait_for_stable_dom(timeout=1000, stable_for=150)
             return f"Clicked element (force): {selector}"
-        except Exception:
-            pass
+        except Exception as e3:
+            layer3_err = str(e3)[:100]
+
+        return (
+            f"Error: all click strategies failed for '{selector}'\\n"
+            f"  Layer1 (native): {layer1_err or 'no error captured'}\\n"
+            f"  Layer2 (JS dispatch): {layer2_err or 'no error captured'}\\n"
+            f"  Layer3 (force): {layer3_err or 'no error captured'}"
+        )
+    except Exception as e:
         return f"Error clicking {selector}: {str(e)}"
 
 
@@ -404,14 +496,16 @@ async def browser_type(selector: str, text: str) -> str:
         if not _session.page:
             return "Error: No active page. Use browser_navigate first."
 
-        locator = _session.page.locator(selector)
+        locator = _session.page.locator(selector).first
 
-        # Human-like delay
-        import random
-        await asyncio.sleep(random.uniform(0.3, 0.6))
+        # 确保元素在视口内
+        try:
+            await locator.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
 
-        # Click to focus first
-        await locator.click(timeout=5000)
+        # Click to focus first (reduced timeout)
+        await locator.click(timeout=2000)
 
         # Clear and fill using Locator API
         await locator.fill(text, timeout=5000)
@@ -434,7 +528,17 @@ async def browser_read_page() -> str:
         if not _session.page:
             return "Error: No active page. Use browser_navigate first."
 
+        # 先确保页面就绪（解决首次读取时 SPA 内容未加载的问题）
+        await _wait_for_page_ready(timeout=3000, min_content_length=500)
+        await _session._wait_for_stable_dom(timeout=2000, stable_for=300)
+
         html_content = await _session.page.content()
+
+        # 短内容重试：页面可能还在加载中
+        if len(html_content) < 800:
+            import asyncio as _asyncio
+            await _asyncio.sleep(1.5)
+            html_content = await _session.page.content()
 
         # Convert HTML to Markdown (懒加载 html2text)
         markdown_content = _html_to_markdown(html_content)
@@ -583,6 +687,9 @@ async def browser_switch_tab(index: int) -> str:
         await target_page.bring_to_front()
         _session.page = target_page
 
+        # 确保目标页面绑定了事件收集器
+        _start_collecting(_session, target_page)
+
         title = await target_page.title()
         url = target_page.url
         return f"Switched to tab {index}.\nTitle: {title}\nURL: {url}"
@@ -711,17 +818,17 @@ async def browser_send_keys(selector: str, keys: str) -> str:
         if not _session.page:
             return "Error: No active page. Use browser_navigate first."
 
-        # Wait for element to be visible
-        element = await _session.page.wait_for_selector(selector, state="visible", timeout=5000)
+        # Wait for element to be visible (reduced timeout)
+        element = await _session.page.wait_for_selector(selector, state="visible", timeout=3000)
         if not element:
             return f"Error: Element not found: {selector}"
 
-        # Focus the element
+        # Scroll into view and focus
+        try:
+            await element.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
         await element.focus()
-
-        # Human-like delay
-        import random
-        await asyncio.sleep(random.uniform(0.2, 0.4))
 
         # Parse keys: split by {KeyName} pattern, handling both text and special keys
         # Use page.keyboard for proper key handling

@@ -327,9 +327,56 @@ async def llm_call(state: dict):
                 cleaned.append(msg)
         return cleaned
 
+    # 修复不完整的 tool_calls：当 checkpoint 恢复不完整状态时，
+    # 可能存在 assistant 的 tool_calls 但没有对应的 ToolMessage 响应
+    def _repair_incomplete_tool_calls(msgs):
+        from langchain_core.messages import AIMessage
+
+        # 收集所有 AIMessage 中声明的 tool_call_id
+        all_tool_call_ids = set()
+        for msg in msgs:
+            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    all_tool_call_ids.add(tc["id"])
+
+        if not all_tool_call_ids:
+            return msgs  # 没有 tool_calls，无需修复
+
+        # 收集所有已响应的 tool_call_id
+        responded_ids = set()
+        for msg in msgs:
+            if isinstance(msg, ToolMessage):
+                responded_ids.add(msg.tool_call_id)
+
+        # 找出未响应的 tool_call_id
+        missing_ids = all_tool_call_ids - responded_ids
+        if not missing_ids:
+            return msgs  # 所有 tool_calls 都有响应
+
+        # 找到最后一个带有未响应 tool_calls 的 AIMessage，
+        # 在其后插入占位 ToolMessage
+        repaired = []
+        for msg in msgs:
+            repaired.append(msg)
+            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                # 检查这个 AIMessage 的 tool_calls 是否有缺失
+                msg_missing = [tc for tc in msg.tool_calls if tc["id"] in missing_ids]
+                if msg_missing:
+                    for tc in msg_missing:
+                        placeholder = ToolMessage(
+                            content=f"⚠️ [会话恢复] 工具 '{tc['name']}' 在上次对话中被中断，本次调用已跳过。",
+                            tool_call_id=tc["id"],
+                            name=tc["name"]
+                        )
+                        repaired.append(placeholder)
+        return repaired
+
     # 如果当前模型不支持视觉，清理所有消息中的图片
     if current_model_type and not supports_vision(current_model_type):
         messages = _strip_images(messages)
+
+    # 修复不完整的 tool_calls：填补缺失的 ToolMessage
+    messages = _repair_incomplete_tool_calls(messages)
 
     try:
         response = await llm_with_tools.ainvoke(messages)
@@ -364,6 +411,19 @@ async def llm_call(state: dict):
                 f"原始错误: {err_detail}"
             )
         elif "BadRequestError" in type(e).__name__ or "400" in err_detail:
+            # 如果是 tool_calls 响应缺失导致，尝试自动修复并重试
+            if "tool_calls" in err_detail and "tool_call_id" in err_detail:
+                try:
+                    repaired = _repair_incomplete_tool_calls(messages)
+                    if repaired != messages:
+                        response = await llm_with_tools.ainvoke(repaired)
+                        return {
+                            "messages": [response],
+                            "llm_calls": state.get('llm_calls', 0) + 1,
+                            "ask_user_question": None
+                        }
+                except Exception:
+                    pass  # 修复重试失败，继续显示错误
             friendly_msg = (
                 f"❌ **API 请求失败 (400)**\n\n"
                 f"{err_detail}"

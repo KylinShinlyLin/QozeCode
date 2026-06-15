@@ -91,7 +91,7 @@ class ToolResultWidget(Static):
         # 替换 run: 为 command:
         display_text = display_text.replace("run:", "command:", 1)
         # 转义 Rich markup 特殊字符，避免用户内容中的方括号被误解析
-        display_text = display_text.replace("[", "\[").replace("]", "\]")
+        display_text = display_text.replace("[", "\\[").replace("]", "\\]")
 
         elapsed_str = f" in {elapsed_time:.2f}s" if elapsed_time > 0 else ""
 
@@ -308,7 +308,7 @@ class MessageList(ScrollableContainer):
 
         # 移除工具状态面板中的条目
         if self._tool_status_panel:
-            panel_elapsed = self._tool_status_panel.remove_tool(tool_id)
+            panel_elapsed = self._tool_status_panel.remove_tool(tool_id, display_name)
             if panel_elapsed > 0:
                 elapsed = panel_elapsed
 

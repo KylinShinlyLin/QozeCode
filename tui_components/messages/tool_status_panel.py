@@ -95,12 +95,45 @@ class ToolStatusPanel(Vertical):
         # 不再显示 "运行中..." header
         yield from ()
 
+    MAX_VISIBLE_TOOLS = 6  # 最多同时显示的工具数
+
+    @staticmethod
+    def _extract_tool_name(display_text: str) -> str:
+        """从 display_text 中提取稳定工具名用于去重
+        例如: "command: date +%Y" → "command", "read_file: utils" → "read_file"
+        """
+        colon_idx = display_text.find(":")
+        if colon_idx > 0:
+            return display_text[:colon_idx].strip()
+        return display_text.strip()
+
     def add_tool(self, tool_id: str, display_text: str) -> RunningToolItem:
-        """添加或更新运行中的工具"""
-        # 如果已存在，更新显示文本
+        """添加或更新运行中的工具
+        使用工具名（而非 tool_id）做去重键，解决流式过程中 tool_id 变化导致重复条目的问题
+        """
+        tool_name = self._extract_tool_name(display_text)
+
+        # 同 tool_id 直接更新（最快路径）
         if tool_id in self._running_tools:
             self._running_tools[tool_id].display_text = display_text
             return self._running_tools[tool_id]
+
+        # 查找同名工具（流式过程中不同 tool_id 但同一工具）
+        for tid, item in list(self._running_tools.items()):
+            if self._extract_tool_name(item.display_text) == tool_name:
+                # 更新 display_text 并重映射 key
+                item.display_text = display_text
+                del self._running_tools[tid]
+                self._running_tools[tool_id] = item
+                self.refresh()
+                return item
+
+        # 限制最大显示数量，移除最旧的条目
+        while len(self._running_tools) >= self.MAX_VISIBLE_TOOLS:
+            oldest_id = next(iter(self._running_tools))
+            oldest_item = self._running_tools[oldest_id]
+            oldest_item.remove()
+            del self._running_tools[oldest_id]
 
         # 显示面板
         self.add_class("visible")
@@ -114,14 +147,26 @@ class ToolStatusPanel(Vertical):
         self.refresh()
         return item
 
-    def remove_tool(self, tool_id: str) -> float:
-        """移除运行中的工具"""
+    def remove_tool(self, tool_id: str, display_name: str = "") -> float:
+        """移除运行中的工具
+        Args:
+            tool_id: 工具唯一 ID
+            display_name: 可选，当精确 ID 匹配失败时用于模糊匹配
+        """
         elapsed = 0.0
         if tool_id in self._running_tools:
             item = self._running_tools[tool_id]
             elapsed = item.get_elapsed_time()
             item.remove()
             del self._running_tools[tool_id]
+        elif display_name and self._running_tools:
+            # 精确 ID 不匹配时，尝试通过显示名称匹配（流式 ID 不一致的兜底）
+            for tid, item in list(self._running_tools.items()):
+                if item.display_text == display_name:
+                    elapsed = item.get_elapsed_time()
+                    item.remove()
+                    del self._running_tools[tid]
+                    break
 
         # 如果没有运行中的工具，隐藏面板
         if not self._running_tools:

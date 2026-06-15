@@ -301,6 +301,8 @@ class MessageStreamHandler:
                                 self.on_tool_started(tool_call_id, new_display)
             else:
                 # 新 tool_call，注册
+                # 注意：不做按 tool_name 去重，因为并行调用同一工具是合法场景
+                # UI 层 (tool_status_panel.py) 通过 _extract_tool_name 自行处理去重
                 self._active_tools[tool_call_id] = {
                     "name": tool_name,
                     "args": tool_args,
@@ -333,10 +335,12 @@ class MessageStreamHandler:
         await self._display_pending_tool_calls()
 
         tool_info = self._active_tools.pop(tc_id, None)
+        matched_id = tc_id  # 记录实际匹配到的 tool_id
 
         if not tool_info and self._active_tools:
             _id, _info = list(self._active_tools.items())[-1]
             tool_info = _info
+            matched_id = _id  # 使用回退匹配到的 ID
             self._active_tools.pop(_id)
             _log(f"Using last active tool: {_id}")
 
@@ -346,10 +350,10 @@ class MessageStreamHandler:
 
         is_error = self._is_error(message_chunk)
         display_name = tool_info.get("display_name", "command: unknown")
-        _log(f"Tool completed: display_name='{display_name}', is_error={is_error}")
+        _log(f"Tool completed: display_name='{display_name}', is_error={is_error}, matched_id={matched_id}")
 
         if self.on_tool_completed:
-            self.on_tool_completed(tc_id, display_name, is_error)
+            self.on_tool_completed(matched_id, display_name, is_error)
 
         # Gemini fix: non-OpenAI models don't trigger finish_reason == 'tool_calls',
         # so the bot widget is never finalized/cleared. Do it here.
