@@ -4,8 +4,8 @@ import os
 from datetime import datetime
 from textual.app import ComposeResult
 from textual.widgets import Static
+from textual.containers import Vertical
 from .auto_copy_widgets import AutoCopyStatic
-from textual.reactive import reactive
 
 from .types import UserMessage
 
@@ -83,6 +83,10 @@ class UserMessageWidget(Static):
 
     长内容自动截断展示，避免 TUI 布局爆炸。
     完整内容始终保留在 message.content 中供 Agent 使用。
+
+    注意：内容使用普通属性 _content_buffer 而非 Textual reactive，
+    在 super().__init__() 之前完成设置，避免 reactive 初始化时序
+    在某些终端上导致中文渲染为 Unicode codepoint 占位符的问题。
     """
 
     DEFAULT_CSS = """
@@ -95,31 +99,49 @@ UserMessageWidget {
     margin: 1 0 1 0;
 }
 
-UserMessageWidget > Static {
+UserMessageWidget Vertical {
+    width: 100%;
+    height: auto;
+    margin: 0;
+    padding: 0;
+}
+
+UserMessageWidget Static {
     color: #c0caf5;
-    /* text-style removed */
+    width: 100%;
+    height: auto;
+    margin: 0;
+    padding: 0;
 }
 """
 
-    content: reactive[str] = reactive("")
-
     def __init__(self, message: UserMessage, **kwargs):
-        display = _truncate_content(message.content)
+        self.message = message
+        # 关键修复：在 super().__init__() 之前完成所有属性设置，
+        # 避免 Textual 内部 reactive/初始化时序导致渲染问题
+        self._content_buffer = _truncate_content(message.content)
+        self._mounted = False
         _log(f"__init__: "
              f"full_len={len(message.content) if message.content else 0}, "
-             f"display_len={len(display)}, "
-             f"truncated={display != message.content}")
+             f"display_len={len(self._content_buffer)}, "
+             f"truncated={self._content_buffer != message.content}")
         super().__init__(**kwargs)
-        self.message = message
-        self.content = display
 
     def compose(self) -> ComposeResult:
-        _log(f"compose: content preview='{self.content[:30] if self.content else 'empty'}...'")
-        yield AutoCopyStatic(self.content)
+        _log(f"compose: content preview='{self._content_buffer[:30] if self._content_buffer else 'empty'}...'")
+        with Vertical():
+            yield AutoCopyStatic(self._content_buffer, id="user-content")
 
-    def watch_content(self, new_content: str):
+    def on_mount(self) -> None:
+        self._mounted = True
+        _log(f"on_mount: content_len={len(self._content_buffer)}")
+        if self._content_buffer:
+            self._update_content_display()
+
+    def _update_content_display(self):
+        """将 _content_buffer 同步到子 Static 组件"""
         try:
-            static = self.query_one(Static)
-            static.update(new_content)
-        except Exception:
-            pass
+            content_static = self.query_one("#user-content", Static)
+            content_static.update(self._content_buffer if self._content_buffer else " ")
+        except Exception as e:
+            _log(f"_update_content_display: ERROR - {e}")

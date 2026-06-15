@@ -278,7 +278,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
         try:
             from langchain_qwq import ChatQwen
             creds = ensure_model_credentials(model_type.value)
-            
+
             # 根据模型类型选择具体模型
             if model_type == ModelType.QWEN_3_6_PLUS:
                 model_name = "qwen3.6-plus"
@@ -288,7 +288,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
                 model_name = "qwen3-max-2026-01-23"
                 enable_thinking = True
                 thinking_budget = 2048
-            
+
             llm = ChatQwen(
                 model=model_name,
                 api_key=creds["api_key"],
