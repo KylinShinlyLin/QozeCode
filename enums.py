@@ -37,7 +37,7 @@ class ModelType(Enum):
     DEEPSEEK_REASONER = "deepseek-v4-pro"
     DEEPSEEK_CHAT = "deepseek-v4-flash"
     GLM_4_6 = "glm-4.6"
-    GLM_5 = "glm-5"
+    GLM_5_2 = "glm-5.2"
     GLM_5V_TURBO = "glm-5v-turbo"
     MIMO_V2_5_PRO = "mimo-v2.5-pro"
 
@@ -60,7 +60,7 @@ MODEL_VISION_SUPPORT = {
     ModelType.DEEPSEEK_REASONER: False,   # DeepSeek 不支持图片输入
     ModelType.DEEPSEEK_CHAT: False,       # DeepSeek 不支持图片输入
     ModelType.GLM_4_6: False,             # GLM-4.6 纯文本模型
-    ModelType.GLM_5: False,               # GLM-5 纯文本模型
+    ModelType.GLM_5_2: False,               # GLM-5 纯文本模型
     ModelType.GLM_5V_TURBO: True,         # GLM-5V-Turbo 多模态模型 (V=Vision)
     ModelType.MIMO_V2_5_PRO: False,       # 小米 MiMo 纯文本模型
 }

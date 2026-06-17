@@ -407,7 +407,7 @@ async def llm_call(state: dict):
                 "当前模型不支持图片输入。DeepSeek 的 API 不接受 `image_url` 类型的多模态消息。\n\n"
                 "**解决方案**：\n"
                 "- 移除 `.qoze/image/` 目录中的图片文件后重试\n"
-                "- 或者使用支持多模态的模型（如 GPT-4o、GLM-5、Claude 等）\n\n"
+                "- 或者使用支持多模态的模型（如 GPT-4o、GLM-5.2、Claude 等）\n\n"
                 f"原始错误: {err_detail}"
             )
         elif "BadRequestError" in type(e).__name__ or "400" in err_detail:

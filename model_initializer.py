@@ -10,7 +10,7 @@ import os
 def patch_langchain_openai():
     """
     Patch langchain_openai to support reasoning_content in stream response
-    This allows models like DeepSeek-R1 (via OpenAI API), GLM-5, etc., to return their reasoning process.
+    This allows models like DeepSeek-R1 (via OpenAI API), GLM-5.2, etc., to return their reasoning process.
     """
     try:
         from langchain_openai.chat_models import base as chat_models_base

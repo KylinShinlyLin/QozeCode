@@ -64,16 +64,16 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     # 定义选项 - 简洁对齐
     # 保持原有显示格式，但逻辑中我们会根据字符串反推
     choices = [
-        "gemini-3.5-flash   (think)     vertex-ai",
-        "gemini-3.1-pro     (think)     vertex-ai",
         # "gemini-3-flash     (think)     vertex-ai",
         # "kimi-k2.5                      MoonShot",
-        "kimi-for-coding    (think)     MoonShot",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
+        "kimi-for-coding    (think)     MoonShot",
+        "glm-5.2                        智普",
         "mimo-v2.5-pro      (think)     小米",
+        "gemini-3.5-flash   (think)     vertex-ai",
+        "gemini-3.1-pro     (think)     vertex-ai",
         "qwen3.6-plus       (think)     Alibaba Cloud",
-        "glm-5                          智普",
         "glm-5v-turbo                   智普",
         "gpt-5.4                        LiteLLM",
         # "gpt-5.2                        LiteLLM",
@@ -173,8 +173,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.QWEN_3_6_PLUS
         elif "glm-5v-turbo" in selected:
             model_type = ModelType.GLM_5V_TURBO
-        elif "glm-5" in selected:
-            model_type = ModelType.GLM_5
+        elif "glm-5.2" in selected:
+            model_type = ModelType.GLM_5_2
 
         if provider and model_type:
             return provider, model_type
