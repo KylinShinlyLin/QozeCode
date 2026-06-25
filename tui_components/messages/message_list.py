@@ -17,7 +17,12 @@ from .stream_handler import MessageStreamHandler
 # 日志文件路径
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
+_LOG_ENABLED = os.environ.get("QOZE_DEBUG", "") != ""
+
+
 def _log(msg):
+    if not _LOG_ENABLED:
+        return
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     log_line = f"[{timestamp}] [MSG_LIST] {msg}\n"
     try:
@@ -146,8 +151,7 @@ class MessageList(ScrollableContainer):
         self._tool_status_panel = tool_status_panel
         self._pending_tools: dict = {}
         self._tool_placeholders: dict = {}
-        self._last_scroll_time = 0
-        self._scroll_interval = 0.2
+        self._auto_scroll = True  # 是否自动跟随流式滚动
         _log(f"init: tool_status_panel={tool_status_panel is not None}")
 
         self._stream_handler = MessageStreamHandler(
@@ -248,6 +252,7 @@ class MessageList(ScrollableContainer):
                 content=user_message,
                 is_command=is_command
             )
+        self._auto_scroll = True  # 用户发送消息时恢复自动跟随
         widget = UserMessageWidget(user_message)
         self._add_widget(widget)
 
@@ -257,29 +262,47 @@ class MessageList(ScrollableContainer):
         self._add_widget(widget)
 
     def _add_widget(self, widget):
-        """挂载组件并滚动到底部"""
+        """挂载组件，仅在 auto_scroll 时滚动到底部"""
         self.mount(widget)
-        # 滚动到底部
-        self._safe_scroll_to_bottom()
+        if self._auto_scroll:
+            self.call_after_refresh(self.scroll_end, animate=False)
 
     def _update_widget(self, widget):
         """刷新组件（不自动滚动，保持用户阅读位置）"""
         try:
-            widget.refresh(layout=True)
+            widget.refresh()
         except Exception:
             pass
 
     def _safe_scroll_to_bottom(self):
-        """节流滚动到底部"""
-        now = time.time()
-        if now - self._last_scroll_time < self._scroll_interval:
+        """流式期间自动滚动（仅当 auto_scroll 为 True）"""
+        if not self._auto_scroll:
             return
-        self._last_scroll_time = now
         try:
-            if hasattr(self, 'scroll_end'):
-                self.call_after_refresh(self.scroll_end, animate=False)
+            self.call_after_refresh(self.scroll_end, animate=False)
         except Exception:
             pass
+
+    def user_scrolled_up(self):
+        """用户手动向上滚动，停止自动跟随"""
+        self._auto_scroll = False
+
+    def check_scroll_bottom_and_resume(self):
+        """检查是否已滚回底部，如果是则恢复自动跟随"""
+        try:
+            if self.scroll_y >= self.max_scroll_y - 3:
+                self._auto_scroll = True
+        except Exception:
+            pass
+
+    def on_key(self, event):
+        """键盘滚动也能控制 auto_scroll"""
+        if event.key in ("up", "pageup"):
+            self._auto_scroll = False
+        elif event.key in ("down", "pagedown"):
+            self.call_after_refresh(self.check_scroll_bottom_and_resume)
+        elif event.key == "end":
+            self._auto_scroll = True
 
     def _on_tool_started(self, tool_id: str, display_name: str):
         """工具开始执行回调"""

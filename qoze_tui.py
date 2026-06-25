@@ -798,11 +798,13 @@ class Qoze(App):
             lines = self._get_scroll_lines(5)
             if lines != 0:
                 self.message_list.scroll_relative(y=lines, animate=False)
+            self.call_after_refresh(self.message_list.check_scroll_bottom_and_resume)
             event.stop()
             event.prevent_default()
 
     def on_mouse_scroll_up(self, event):
         if self.message_list.styles.display != "none":
+            self.message_list.user_scrolled_up()
             if not self._should_process_scroll():
                 event.stop()
                 event.prevent_default()
