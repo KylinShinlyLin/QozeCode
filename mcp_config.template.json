@@ -1,0 +1,37 @@
+{
+  "servers": {
+    "postgres": {
+      "description": "PostgreSQL 数据库查询，支持只读 SQL",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:password@localhost:5432/dbname"],
+      "enabled": true
+    },
+    "github": {
+      "description": "GitHub API：管理 Issue、PR、仓库",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here"
+      },
+      "enabled": true
+    },
+    "weather": {
+      "description": "天气查询 HTTP 服务",
+      "transport": "http",
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      },
+      "enabled": false
+    }
+  },
+  "active_servers": [],
+  "settings": {
+    "connection_timeout": 30,
+    "tool_execution_timeout": 60,
+    "auto_retry": true,
+    "max_retries": 2
+  }
+}

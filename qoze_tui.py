@@ -510,7 +510,14 @@ class Qoze(App):
         try:
             llm = model_initializer.initialize_llm(self.provider, self.model_type)
             qoze_code_agent.llm = llm
-            qoze_code_agent.llm_with_tools = llm.bind_tools(qoze_code_agent.tools)
+
+            # ─── 初始化 MCP 管理器并加载工具 ────────────────────
+            qoze_code_agent._ensure_mcp_manager()
+            await qoze_code_agent.load_mcp_tools()
+            # 重建完整工具列表（base_tools + MCP tools）
+            all_tools = list(qoze_code_agent.tools_by_name.values())
+            qoze_code_agent.llm_with_tools = llm.bind_tools(all_tools)
+
             qoze_code_agent.current_model_type = self.model_type
             from tools.subagent_tool import reset_subagent_cache
             reset_subagent_cache()
@@ -596,6 +603,77 @@ class Qoze(App):
                 style = "bold green"
             icon = "✗" if "disable" in user_input.lower() else ("✓" if success else "✗")
             self.message_list.mount(Static(Text(f"Skills: {icon} {message}", style=style)))
+            return
+
+        # ---- mcp 命令 (本地处理，不经过 LLM) ----
+        if user_input.lower().startswith('mcp'):
+            parts = user_input.lower().split()
+            subcmd = parts[1] if len(parts) > 1 else 'help'
+
+            mcp_mgr = getattr(qoze_code_agent, 'mcp_manager', None)
+            if mcp_mgr is None:
+                # 自动初始化 MCP 管理器
+                qoze_code_agent._ensure_mcp_manager()
+                mcp_mgr = qoze_code_agent.mcp_manager
+                if mcp_mgr is None:
+                    self.message_list.mount(Static(Text('MCP 系统初始化失败', style='bold red')))
+                    return
+
+            if subcmd in ('help', '?'):
+                help_text = (
+                    'MCP (Model Context Protocol) 命令:\n'
+                    '  /mcp          显示此帮助\n'
+                    '  /mcp list     列出所有已配置的 MCP 服务及状态\n'
+                    '  /mcp status   显示 MCP 连接状态\n\n'
+                    'MCP 服务配置存放在 ~/.qoze/mcp_config.json\n'
+                    '使用 mcp_config.template.json 作为参考模板'
+                )
+                self.message_list.mount(Static(Text(help_text, style='bold cyan')))
+                return
+
+            if subcmd == 'list':
+                servers = mcp_mgr.list_servers()
+                if not servers:
+                    self.message_list.mount(Static(Text(
+                        '当前没有配置任何 MCP 服务。\n'
+                        '参考 mcp_config.template.json 配置 ~/.qoze/mcp_config.json 添加 MCP 服务。',
+                        style='dim yellow'
+                    )))
+                    return
+
+                lines = ['📋 MCP 服务列表:']
+                for name, desc in servers.items():
+                    status = mcp_mgr.get_server_status(name)
+                    if status:
+                        active_str = '🟢 已激活' if status['active'] else '⚪ 未激活'
+                        disabled_str = ' [已禁用]' if not status['enabled'] else ''
+                        lines.append(f'  • **{name}** ({active_str}){disabled_str}: {desc}')
+                        if status['active'] and status['tools']:
+                            tools_str = ', '.join(f'`{t}`' for t in status['tools'])
+                            lines.append(f'    工具 ({status["tool_count"]}): {tools_str}')
+
+                self.message_list.mount(Static(Text('\n'.join(lines), style='bold cyan')))
+                return
+
+            if subcmd == 'status':
+                servers = mcp_mgr.list_servers()
+                active_servers = mcp_mgr._active_servers
+                lines = ['🔌 MCP 连接状态:',
+                         f'  已配置服务: {len(servers)} 个',
+                         f'  已激活服务: {len(active_servers)} 个']
+                if active_servers:
+                    lines.append(f'  激活列表: {", ".join(active_servers)}')
+                is_connected = mcp_mgr._client_wrapper.is_connected if hasattr(mcp_mgr, '_client_wrapper') else False
+                conn_str = '已连接' if is_connected else '未连接'
+                lines.append(f'  客户端连接: {conn_str}')
+                self.message_list.mount(Static(Text('\n'.join(lines), style='bold cyan')))
+                return
+
+            # 未知的子命令，显示帮助
+            self.message_list.mount(Static(Text(
+                f'未知的 MCP 命令: {user_input}\n输入 /mcp 查看帮助',
+                style='bold red'
+            )))
             return
 
         is_init_command = user_input.lower() in ["init"]

@@ -18,6 +18,7 @@ limitations under the License.
 
 import warnings
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+
 warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -52,10 +53,12 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
     browser_console_messages, browser_console_get, browser_network_requests, browser_network_get
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.plan_tools import update_plan_progress
+from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mcp_server, set_mcp_manager
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 from tools.code_tools import analyze_project, find_symbols, trace_imports
 # from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
+from qoze_mcp.mcp_manager import MCPManager
 from utils.directory_tree import get_directory_tree
 from utils.git_context import get_git_context
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context, load_memory_context
@@ -69,6 +72,7 @@ RESET = "\033[0m"
 
 # 全局技能管理器
 skill_manager = None
+mcp_manager = None
 
 
 def load_qoze_rules(current_dir):
@@ -108,7 +112,8 @@ def load_qoze_rules(current_dir):
 
 
 def get_context_info(system_info="", system_release="", system_version="", machine_type="", processor="",
-                     shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True, git_context=""):
+                     shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True,
+                     git_context=""):
     """
     获取上下文信息（分离静态和动态内容以优化 Prompt Caching）
 
@@ -125,6 +130,11 @@ def get_context_info(system_info="", system_release="", system_version="", machi
     global skill_manager
     if skill_manager is None:
         skill_manager = SkillManager()
+
+    global mcp_manager
+    if mcp_manager is None:
+        mcp_manager = MCPManager()
+        set_mcp_manager(mcp_manager)
 
     # 获取静态 System Prompt（可被 OpenAI Prompt Caching 缓存）
     static_prompt = get_static_system_prompt()
@@ -171,7 +181,8 @@ def get_context_info(system_info="", system_release="", system_version="", machi
 
 # 保留向后兼容的函数名
 def get_enhanced_system_prompt(system_info="", system_release="", system_version="", machine_type="", processor="",
-                               shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True, git_context=""):
+                               shell="", current_dir="", directory_tree="", model_name="", model_supports_vision=True,
+                               git_context=""):
     """【向后兼容】获取完整的系统提示词"""
     static, dynamic = get_context_info(system_info, system_release, system_version, machine_type,
                                        processor, shell, current_dir, directory_tree,
@@ -222,6 +233,9 @@ base_tools = [
     browser_network_requests,
     browser_network_get,
     update_plan_progress,
+    list_mcp_servers,
+    activate_mcp_server,
+    deactivate_mcp_server,
     dispatch_subagent,
     analyze_project,
     find_symbols,
@@ -235,6 +249,44 @@ plan_mode = False
 conversation_state = {"llm_calls": 0, "last_image_count": 0, "sent_images": {}}
 
 tools_by_name = {tool.name: tool for tool in tools}
+
+
+# ─── MCP 工具加载函数 ─────────────────────────────────────────────
+
+def _ensure_mcp_manager():
+    """确保 MCP 管理器已初始化（用于启动时提前初始化，而非懒加载）"""
+    global mcp_manager
+    if mcp_manager is None:
+        mcp_manager = MCPManager()
+        set_mcp_manager(mcp_manager)
+
+
+async def load_mcp_tools():
+    """加载已激活的 MCP 服务工具，注入到 tools_by_name 和 _ASYNC_TOOL_NAMES"""
+    global mcp_manager
+    if mcp_manager is None:
+        return
+    mcp_tools = await mcp_manager.get_active_tools()
+    for tool_obj in mcp_tools:
+        if tool_obj.name not in tools_by_name:
+            tools_by_name[tool_obj.name] = tool_obj
+            _ASYNC_TOOL_NAMES.add(tool_obj.name)
+
+
+async def reload_all_mcp_tools():
+    """完全重载 MCP 工具（用于热加载配置）"""
+    global mcp_manager
+    if mcp_manager is None:
+        return
+    # 先清除旧的 MCP 工具
+    for name in list(tools_by_name.keys()):
+        if name in ["list_mcp_servers", "activate_mcp_server", "deactivate_mcp_server"]:
+            continue
+        # 简单策略：重载时清除所有动态工具，重新加载
+    mcp_tools, _ = await mcp_manager.reload_config()
+    for tool_obj in mcp_tools:
+        tools_by_name[tool_obj.name] = tool_obj
+        _ASYNC_TOOL_NAMES.add(tool_obj.name)
 
 
 # Step 1: Define state
@@ -441,10 +493,10 @@ async def llm_call(state: dict):
 
         # 打印到 stderr 方便排查
         import sys as _sys
-        print(f"\n{'='*60}", file=_sys.stderr)
+        print(f"\n{'=' * 60}", file=_sys.stderr)
         print(f"[LLM_CALL ERROR] {type(e).__name__}: {err_detail}", file=_sys.stderr)
         tb_module.print_exc(file=_sys.stderr)
-        print(f"{'='*60}\n", file=_sys.stderr)
+        print(f"{'=' * 60}\n", file=_sys.stderr)
 
         from langchain_core.messages import AIMessage
         error_response = AIMessage(content=friendly_msg)
@@ -467,6 +519,7 @@ _ASYNC_TOOL_NAMES = {
     "browser_console_messages", "browser_console_get", "browser_network_requests",
     "browser_network_get", "dispatch_subagent",
 }
+
 
 async def tool_node(state: dict):
     """并发执行工具调用 —— 所有独立工具调用并行执行"""
@@ -506,7 +559,6 @@ async def tool_node(state: dict):
         result = await asyncio.gather(*[_execute_one(tc) for tc in tool_calls])
 
     return {"messages": result, "ask_user_question": None}
-
 
 
 # Step 4: Define logic to determine whether to end
@@ -713,7 +765,7 @@ def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
 
 
 def create_message_with_images(text_content: str, image_folder: str = ".qoze/image",
-                                   supports_vision: bool = True) -> HumanMessage:
+                               supports_vision: bool = True) -> HumanMessage:
     """创建包含文本和图片的消息
 
     Args:
