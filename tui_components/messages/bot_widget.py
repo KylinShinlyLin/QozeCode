@@ -12,7 +12,6 @@ from .types import BotMessage
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
-
 _LOG_ENABLED = os.environ.get("QOZE_DEBUG", "") != ""
 
 
@@ -121,9 +120,12 @@ class BotMessageWidget(Static):
             self._update_content_display()
 
     def append_content(self, text: str):
+        """流式追加内容 — 仅累积到 buffer，不立即更新显示。
+
+        显示更新由 _update_widget() 在 _flush_update 节流周期（0.15s）内统一处理，
+        避免每个 chunk 都触发 Static.update() 导致渲染队列积压。
+        """
         self._content_buffer += text
-        if self._mounted:
-            self._update_content_display()
 
     def finalize(self):
         """流式结束，从 Static 切换到 Markdown 渲染"""

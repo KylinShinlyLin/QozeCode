@@ -215,7 +215,14 @@ class MessageList(ScrollableContainer):
                 text = event.get("content", "")
                 if agent_id in self._subagent_widgets:
                     self._subagent_widgets[agent_id].append_content(text)
-                    self._update_widget(self._subagent_widgets[agent_id])
+                    # 节流 UI 更新：避免每个 subagent chunk 都触发 refresh(layout=True)
+                    now = time.time()
+                    if not hasattr(self, '_subagent_last_ui_update'):
+                        self._subagent_last_ui_update = {}
+                    last = self._subagent_last_ui_update.get(agent_id, 0)
+                    if now - last >= 0.15:
+                        self._subagent_last_ui_update[agent_id] = now
+                        self._update_widget(self._subagent_widgets[agent_id])
 
             elif etype == "subagent_tool":
                 tool_name = event.get("tool_name", "")
@@ -223,7 +230,13 @@ class MessageList(ScrollableContainer):
                 status = event.get("status", "")
                 if agent_id in self._subagent_widgets:
                     self._subagent_widgets[agent_id].append_tool(tool_name, tool_args, status)
-                    self._update_widget(self._subagent_widgets[agent_id])
+                    now = time.time()
+                    if not hasattr(self, '_subagent_last_ui_update'):
+                        self._subagent_last_ui_update = {}
+                    last = self._subagent_last_ui_update.get(agent_id, 0)
+                    if now - last >= 0.15:
+                        self._subagent_last_ui_update[agent_id] = now
+                        self._update_widget(self._subagent_widgets[agent_id])
 
             elif etype == "subagent_done":
                 if agent_id in self._subagent_widgets:
@@ -268,8 +281,11 @@ class MessageList(ScrollableContainer):
             self.call_after_refresh(self.scroll_end, animate=False)
 
     def _update_widget(self, widget):
-        """刷新组件（重新计算布局，确保新增内容可见）"""
+        """刷新组件（更新内容显示 + 重新计算布局）"""
         try:
+            # 先更新内容显示（将 buffer 写入 Static），再刷新布局
+            if hasattr(widget, '_update_content_display'):
+                widget._update_content_display()
             widget.refresh(layout=True)
         except Exception:
             pass

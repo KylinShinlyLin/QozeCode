@@ -222,21 +222,20 @@ class SubagentWidget(Static):
             self._update_content_display()
 
     def append_content(self, text: str):
-        """流式追加内容（逐 token），折叠时静默累积"""
+        """流式追加内容 — 仅累积到 buffer，不立即更新显示。
+
+        显示更新由 _update_widget() 在调用方节流后统一处理。
+        """
         self._content_buffer += text
-        if self._mounted:
-            self._update_content_display()
 
     def append_tool(self, tool_name: str, tool_args: str, status: str):
-        """追加工具调用信息到内容区"""
+        """追加工具调用信息到内容区 — 仅累积，不立即更新显示"""
         if status == "start":
             args = f"({tool_args})" if tool_args else ""
             line = f"\n🔧 {tool_name}{args}\n"
         else:
             line = ""
         self._content_buffer += line
-        if self._mounted:
-            self._update_content_display()
 
     # ---------- 完成 ----------
 
