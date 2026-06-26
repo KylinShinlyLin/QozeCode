@@ -7,6 +7,7 @@
 import os
 import glob
 import shutil
+import subprocess
 
 
 def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, max_total_chars: int = 8000) -> str:
@@ -66,6 +67,7 @@ def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, ma
         return ""
 
     return memory_text
+
 
 def get_static_system_prompt():
     """
@@ -364,5 +366,18 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     # 检测 lark-cli 是否安装，若已安装则提示 Agent 可以使用飞书工具
     if shutil.which("lark-cli"):
         context += "\n## 🔧 环境工具: 当前电脑已安装 `lark-cli`（飞书命令行工具），你可以使用 lark-cli 来操作飞书文档、云空间、日历等飞书资源。\n"
+
+    # 检测 ffmpeg 是否安装，若已安装则提示 Agent 可以使用
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        try:
+            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=5)
+            version_line = result.stderr.split('\n')[0] if result.stderr else (
+                result.stdout.split('\n')[0] if result.stdout else "unknown version")
+        except Exception:
+            version_line = "unknown version"
+        context += f"\n## 🎬 环境工具: 当前电脑已安装 `ffmpeg`（{version_line.strip()}），你可以使用 ffmpeg 来处理音视频文件。\n"
+    else:
+        context += "\n## 🎬 环境工具: 当前电脑**未安装** `ffmpeg`。如需处理音视频文件，请先安装 ffmpeg（`brew install ffmpeg`）。\n"
 
     return context
