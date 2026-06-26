@@ -133,7 +133,7 @@ class ThinkingWidget(Static):
             else:
                 content.remove_class("hidden")
 
-            self.refresh()
+            self.refresh(layout=True)
         except Exception:
             pass
 

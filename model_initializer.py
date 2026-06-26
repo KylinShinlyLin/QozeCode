@@ -262,6 +262,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
                 "base_url": creds['base_url'],
                 "api_key": creds["api_key"],
                 "model": model_type.value,
+                "streaming": True,
                 "extra_body": {
                     "thinking": {
                         "type": "enabled"

@@ -169,7 +169,7 @@ class MessageList(ScrollableContainer):
 
         # --- Subagent 流式回调 ---
         self._subagent_widgets: dict = {}  # agent_id -> SubagentWidget
-        self._subagent_labels: dict = {}   # agent_id -> str (显示标签)
+        self._subagent_labels: dict = {}  # agent_id -> str (显示标签)
         self._register_subagent_callback()
 
     def _register_subagent_callback(self):
@@ -268,9 +268,9 @@ class MessageList(ScrollableContainer):
             self.call_after_refresh(self.scroll_end, animate=False)
 
     def _update_widget(self, widget):
-        """刷新组件（不自动滚动，保持用户阅读位置）"""
+        """刷新组件（重新计算布局，确保新增内容可见）"""
         try:
-            widget.refresh()
+            widget.refresh(layout=True)
         except Exception:
             pass
 
