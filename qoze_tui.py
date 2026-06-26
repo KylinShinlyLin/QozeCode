@@ -11,15 +11,7 @@ import time
 
 from tui_components import tui_constants
 
-try:
-    from utils.audio_transcriber import AudioTranscriber
-    from utils.meeting_note_recorder import MeetingNoteRecorder
-
-    AUDIO_TRANSCRIBER_IMPORT_ERROR = None
-except ImportError as e:
-    AudioTranscriber = None
-    MeetingNoteRecorder = None
-    AUDIO_TRANSCRIBER_IMPORT_ERROR = str(e)
+from utils.audio_manager import AudioManager
 
 from rich.console import Group
 from rich.panel import Panel
@@ -99,9 +91,11 @@ except ImportError as e:
     print(f"Critical Error: Could not import TUI components: {e}")
     sys.exit(1)
 
+
 def fuzzy_match(query: str, target: str) -> bool:
     """模糊匹配：query 作为连续子串出现在 target 中。"""
     return query.lower() in target.lower()
+
 
 class Qoze(App):
     CSS = tui_constants.CSS
@@ -114,6 +108,7 @@ class Qoze(App):
         Binding("ctrl+e", "stop_recording", "Stop", priority=True),
         Binding("ctrl+n", "toggle_meeting_note", "Meeting Note", priority=True),
     ]
+
     def __init__(self, provider, model_type):
         super().__init__()
         self.model_type = model_type
@@ -124,22 +119,10 @@ class Qoze(App):
         self.thread_id = "default_session"
         self.processing_worker = None
 
-        self.audio_transcriber = None
-        self.audio_queue = queue.Queue()
-        self.audio_mode = False
-        self.audio_original_text = ""
-        self.audio_check_timer = None
+        self.audio_manager = AudioManager()
         self.total_tokens = 0
         self._stream_base_tokens = 0
         self._processing_suggestion = False
-
-        # Meeting note recorder state
-        self.meeting_note_recorder = None
-        self.meeting_note_queue = queue.Queue()
-        self.meeting_note_mode = False
-        self.meeting_note_check_timer = None
-        self.meeting_note_start_time = None
-        self._last_mn_text = ""  # last transcribed text for flicker-free display
 
         from plan.plan_manager import PlanManager
         self.plan_mode = False
@@ -199,6 +182,18 @@ class Qoze(App):
 
         self.run_worker(self.init_agent_worker(), exclusive=True)
 
+        # ---- AudioManager callbacks ----
+        am = self.audio_manager
+        am.on_voice_wave = lambda w: self._on_audio_wave(w)
+        am.on_voice_text = lambda t: self._on_audio_text(t)
+        am.on_voice_error = lambda e: self.message_list.mount(Static(f"Audio Error: {e}"))
+        am.on_meeting_wave = lambda w, t: self._on_meeting_wave(w, t)
+        am.on_meeting_elapsed = lambda m, s: self._on_meeting_elapsed(m, s)
+        am.on_meeting_error = lambda e: self.message_list.mount(Static(f"📝 Meeting Note Error: {e}"))
+        am.on_meeting_started = lambda p: self.message_list.mount(Static(f"📝 Meeting note started → {p}"))
+        am.on_meeting_stopped = lambda: self._on_meeting_stopped_ui()
+        self._audio_poll_timer = self.set_interval(0.1, self._audio_poll)
+
     def add_tokens(self, new_tokens: int):
         """流结束时的回调——使用精确计算替代估算值"""
         self.update_token_count()
@@ -250,246 +245,105 @@ class Qoze(App):
         if self.welcome_panel:
             self.welcome_panel.remove_class("hidden")
 
-    def check_audio_queue(self):
-        if not self.audio_mode:
-            return
-        updates = False
-        text_content = None
-        wave_content = None
-        while not self.audio_queue.empty():
-            msg = self.audio_queue.get()
-            if msg["type"] == "text":
-                text_content = msg["data"]
-                updates = True
-            elif msg["type"] == "wave":
-                wave_content = msg["data"]
-                updates = True
-            elif msg["type"] == "error":
-                self.message_list.mount(Static(f"Audio Error: {msg['data']}"))
-
-        if text_content is not None:
-            combined_text = self.audio_original_text
-            if combined_text:
-                combined_text += " " + text_content
-            else:
-                combined_text = text_content
-
-            if self.multiline_mode:
-                self.multi_line_input.text = combined_text
-                self.multi_line_input.cursor_location = (len(self.multi_line_input.document.lines) - 1,
-                                                         len(self.multi_line_input.document.lines[-1]))
-            else:
-                self.input_box.value = combined_text
-
-        if wave_content is not None:
-            audio_status = self.query_one("#audio-status", Label)
-            audio_status.update(Text(f"🎙️ {wave_content}", style="cyan"))
-
-    def start_audio(self, original_text=""):
-        if AudioTranscriber is None:
-            self.message_list.mount(Static("Audio Transcriber not available. Dependencies may be missing."))
-            return
-
-        import config_manager
-        soniox_key = config_manager.get_soniox_key()
-        if not soniox_key:
-            self.message_list.mount(Static("🔴 未检测到 Soniox API Key。请在 qoze.conf 的 [soniox] 节点下添加 api_key"))
-            return
-
-        self.audio_mode = True
-        self.audio_original_text = original_text
-        self.audio_transcriber = AudioTranscriber(api_key=soniox_key, event_queue=self.audio_queue)
-        self.audio_transcriber.start()
-
-        audio_status = self.query_one("#audio-status", Label)
-        audio_status.remove_class("hidden")
-        audio_status.update(Text("🎙️ Initializing Mic...", style="cyan"))
-
-        self.status_bar.update_state("Recording... Esc 停止语音输入")
-
-        if self.audio_check_timer:
-            self.audio_check_timer.stop()
-        self.audio_check_timer = self.set_interval(0.1, self.check_audio_queue)
-
-    def stop_audio(self):
-        if not self.audio_mode:
-            return
-        self.audio_mode = False
-        if self.audio_transcriber:
-            self.audio_transcriber.stop()
-            self.audio_transcriber = None
-
-        audio_status = self.query_one("#audio-status", Label)
-        audio_status.add_class("hidden")
-        audio_status.update("")
-
-        if self.audio_check_timer:
-            self.audio_check_timer.stop()
-            self.audio_check_timer = None
-
-        self.status_bar.update_state("Idle")
-        self.check_audio_queue()
-
     # ------------------------------------------------------------------
     # Meeting Note Recorder (Ctrl+N toggle) - independent of AI agent
     # ------------------------------------------------------------------
 
     def action_toggle_meeting_note(self):
         """Toggle meeting note recording on / off."""
-        if self.meeting_note_mode:
-            self.stop_meeting_note()
+        err = self.audio_manager.toggle_meeting()
+        if err:
+            self.message_list.mount(Static(err))
+
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Audio helpers (delegated to AudioManager)
+    # ------------------------------------------------------------------
+
+    def _audio_poll(self):
+        self.audio_manager.poll()
+
+    def stop_audio(self):
+        final_text = self.audio_manager.stop_voice()
+        audio_status = self.query_one("#audio-status", Label)
+        audio_status.add_class("hidden")
+        audio_status.update("")
+        self.status_bar.update_state("Idle")
+        if final_text and self.multiline_mode:
+            self.multi_line_input.text = final_text
+            self.multi_line_input.cursor_location = (
+                len(self.multi_line_input.document.lines) - 1,
+                len(self.multi_line_input.document.lines[-1]),
+            )
+        elif final_text:
+            self.input_box.value = final_text
+
+    def _on_audio_wave(self, wave_str: str):
+        audio_status = self.query_one("#audio-status", Label)
+        audio_status.update(Text(f"🎤️ {wave_str}", style="cyan"))
+
+    def _on_audio_text(self, text_str: str):
+        if self.multiline_mode:
+            self.multi_line_input.text = text_str
+            self.multi_line_input.cursor_location = (
+                len(self.multi_line_input.document.lines) - 1,
+                len(self.multi_line_input.document.lines[-1]),
+            )
         else:
-            self.start_meeting_note()
+            self.input_box.value = text_str
 
-    def start_meeting_note(self):
-        """Begin recording meeting audio + real-time transcription."""
-        if MeetingNoteRecorder is None:
-            self.message_list.mount(Static(
-                "Meeting Note Recorder not available. Dependencies may be missing."))
-            return
-
-        # Prevent dual mic access: stop voice input if active
-        if self.audio_mode:
-            self.stop_audio()
-
-        import config_manager
-        soniox_key = config_manager.get_soniox_key()
-        if not soniox_key:
-            self.message_list.mount(Static(
-                "🔴 未检测到 Soniox API Key。请在 qoze.conf 的 [soniox] 节点下添加 api_key"))
-            return
-
-        # Build output paths: .qoze/note/YYYY-MM-DD/HH-MM-SS.{wav,txt}
-        from datetime import datetime
-        now = datetime.now()
-        date_str = now.strftime("%Y-%m-%d")
-        time_str = now.strftime("%H-%M-%S")
-        note_dir = os.path.join(".qoze", "note", date_str)
-        os.makedirs(note_dir, exist_ok=True)
-
-        audio_path = os.path.join(note_dir, f"{time_str}.wav")
-        text_path = os.path.join(note_dir, f"{time_str}.txt")
-
-        self.meeting_note_mode = True
-        self.meeting_note_start_time = time.time()
-        self.meeting_note_recorder = MeetingNoteRecorder(
-            api_key=soniox_key,
-            event_queue=self.meeting_note_queue,
-            audio_path=audio_path,
-            text_path=text_path,
-        )
-        self.meeting_note_recorder.start()
-
-        self.message_list.mount(Static(
-            f"📝 Meeting note started → {note_dir}/{time_str}"))
-
-        # Show meeting note wave bar label
+    def _on_meeting_wave(self, wave_str: str, latest_text):
         mn_status = self.query_one("#meeting-note-status", Label)
-        mn_status.remove_class("hidden")
-        mn_status.update(Text("📝 Initializing Mic...", style="bold #FF8C00"))
+        if wave_str:
+            display = f"📝 {wave_str}"
+            if latest_text:
+                display += f"  |  {latest_text[-60:]}"
+        else:
+            display = f"📝 {latest_text[-80:]}" if latest_text else "📝 ..."
+        mn_status.update(Text(display, style="bold #FF8C00"))
 
+    def _on_meeting_elapsed(self, mins: int, secs: int):
         self.status_bar.update_state(
-            "📝 Meeting Note | 00:00  Ctrl+N 停止", style="bold yellow")
+            f"📝 Meeting Note | {mins:02d}:{secs:02d}  Ctrl+N 停止",
+            style="bold yellow",
+        )
 
-        if self.meeting_note_check_timer:
-            self.meeting_note_check_timer.stop()
-        self.meeting_note_check_timer = self.set_interval(
-            0.1, self.check_meeting_note_queue)
-
-    def stop_meeting_note(self):
-        """Stop recording, flush files, display summary."""
-        if not self.meeting_note_mode:
-            return
-
-        self.meeting_note_mode = False
-        if self.meeting_note_recorder:
-            self.meeting_note_recorder.stop()
-            self.meeting_note_recorder = None
-
-        if self.meeting_note_check_timer:
-            self.meeting_note_check_timer.stop()
-            self.meeting_note_check_timer = None
-
-        self.meeting_note_start_time = None
-        self._last_mn_text = ""
-        # Hide meeting note wave bar
+    def _on_meeting_stopped_ui(self):
         mn_status = self.query_one("#meeting-note-status", Label)
         mn_status.add_class("hidden")
         mn_status.update("")
         self.status_bar.update_state("Idle")
 
-    def check_meeting_note_queue(self):
-        """Poll the meeting note event queue for wave/text display + timer."""
-        if not self.meeting_note_mode:
-            return
-
-        wave_content = None
-        text_content = None
-        has_error = None
-
-        # Drain ALL pending events in one go
-        while not self.meeting_note_queue.empty():
-            msg = self.meeting_note_queue.get()
-            if msg["type"] == "error":
-                has_error = msg["data"]
-                break
-            elif msg["type"] == "wave":
-                wave_content = msg["data"]
-            elif msg["type"] == "text":
-                text_content = msg["data"]
-
-        if has_error is not None:
-            self.stop_meeting_note()
-            self.message_list.mount(Static(
-                f'📝 Meeting Note Error: {has_error}'))
-            return
-
-        # Persist latest transcription so it never flickers
-        if text_content is not None:
-            self._last_mn_text = text_content
-
-        # Only touch DOM if we have new data
-        if wave_content is not None or text_content is not None:
-            mn_status = self.query_one("#meeting-note-status", Label)
-            if wave_content is not None:
-                display = f"📝 {wave_content}"
-                if self._last_mn_text:
-                    display += f"  |  {self._last_mn_text[-60:]}"
-                mn_status.update(Text(display, style="bold #FF8C00"))
-            else:
-                mn_status.update(Text(f"📝 {text_content[-80:]}", style="bold #FF8C00"))
-
-        # Update elapsed time in status bar
-        if self.meeting_note_start_time:
-            elapsed = int(time.time() - self.meeting_note_start_time)
-            mins = elapsed // 60
-            secs = elapsed % 60
-            self.status_bar.update_state(
-                f"📝 Meeting Note | {mins:02d}:{secs:02d}  Ctrl+N 停止", style="bold yellow")
-
-    # ------------------------------------------------------------------
     # Voice Input (Ctrl+Q / Ctrl+E) - feeds transcribed text into input
     # ------------------------------------------------------------------
 
     def action_start_recording(self):
-        if self.meeting_note_mode:
+        if self.audio_manager.meeting_active:
             return  # meeting note is active, block voice input
-        if self.audio_mode:
+        if self.audio_manager.voice_active:
             return
         if self.multiline_mode:
             current_text = self.multi_line_input.text
         else:
             current_text = self.input_box.value
-        self.start_audio(current_text)
+        err = self.audio_manager.start_voice(current_text)
+        if err:
+            self.message_list.mount(Static(err))
+        else:
+            audio_status = self.query_one("#audio-status", Label)
+            audio_status.remove_class("hidden")
+            audio_status.update(Text("🎤️ Initializing Mic...", style="cyan"))
+            self.status_bar.update_state("Recording... Esc 停止语音输入")
 
     def action_stop_recording(self):
-        if self.audio_mode:
+        if self.audio_manager.voice_active:
             self.stop_audio()
 
     def action_cancel_action(self):
-        if self.meeting_note_mode:
-            self.stop_meeting_note()
-        elif self.audio_mode:
+        if self.audio_manager.meeting_active:
+            self.audio_manager.stop_meeting()
+            self._on_meeting_stopped_ui()
+        elif self.audio_manager.voice_active:
             self.stop_audio()
         elif self.multiline_mode:
             self.action_cancel_multiline()
@@ -530,7 +384,14 @@ class Qoze(App):
             user_input = user_input[1:]
 
         if user_input.lower() == "audio":
-            self.start_audio()
+            err = self.audio_manager.start_voice()
+            if err:
+                self.message_list.mount(Static(err))
+            else:
+                audio_status = self.query_one("#audio-status", Label)
+                audio_status.remove_class("hidden")
+                audio_status.update(Text("🎤️ Initializing Mic...", style="cyan"))
+                self.status_bar.update_state("Recording... Esc 停止语音输入")
             return
 
         if user_input.lower() in ["quit", "exit", "q"]:
@@ -693,7 +554,7 @@ class Qoze(App):
             self._processing_suggestion = False
             return
 
-        if self.audio_mode:
+        if self.audio_manager.voice_active:
             self.stop_audio()
             user_input = event.value
             self.input_box.value = ""
@@ -741,7 +602,14 @@ class Qoze(App):
             self.input_box.value = ""
             self.input_box.focus()
             if cmd == "audio":
-                self.start_audio()
+                err = self.audio_manager.start_voice()
+                if err:
+                    self.message_list.mount(Static(err))
+                else:
+                    audio_status = self.query_one("#audio-status", Label)
+                    audio_status.remove_class("hidden")
+                    audio_status.update(Text("🎤️ Initializing Mic...", style="cyan"))
+                    self.status_bar.update_state("Recording... Esc 停止语音输入")
             else:
                 self.processing_worker = self.run_worker(self.process_user_input(cmd), exclusive=True)
 
@@ -763,7 +631,14 @@ class Qoze(App):
                     self.input_box.value = ""
                     self.input_box.focus()
                     if cmd == "audio":
-                        self.start_audio()
+                        err = self.audio_manager.start_voice()
+                        if err:
+                            self.message_list.mount(Static(err))
+                        else:
+                            audio_status = self.query_one("#audio-status", Label)
+                            audio_status.remove_class("hidden")
+                            audio_status.update(Text("🎤️ Initializing Mic...", style="cyan"))
+                            self.status_bar.update_state("Recording... Esc 停止语音输入")
                     else:
                         self.processing_worker = self.run_worker(self.process_user_input(cmd), exclusive=True)
                 event.stop()
@@ -819,7 +694,7 @@ class Qoze(App):
         if not self.multiline_mode:
             return
 
-        if self.audio_mode:
+        if self.audio_manager.voice_active:
             self.stop_audio()
             return
 
@@ -833,7 +708,14 @@ class Qoze(App):
                 original_text = original_text[:-5]
 
             self.multi_line_input.text = original_text
-            self.start_audio(original_text)
+            err = self.audio_manager.start_voice(original_text)
+            if err:
+                self.message_list.mount(Static(err))
+            else:
+                audio_status = self.query_one("#audio-status", Label)
+                audio_status.remove_class("hidden")
+                audio_status.update(Text("🎤️ Initializing Mic...", style="cyan"))
+                self.status_bar.update_state("Recording... Esc 停止语音输入")
             return
 
         self.multiline_mode = False
@@ -1020,6 +902,8 @@ class Qoze(App):
             self.status_bar.update_state("Idle")
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
+
+
 def main():
     import shared_console
 
@@ -1037,5 +921,7 @@ def main():
     os.system("cls" if os.name == "nt" else "clear")
 
     Qoze(provider=provider, model_type=model_type).run()
+
+
 if __name__ == "__main__":
     main()
