@@ -3,6 +3,7 @@ from datetime import datetime
 from rich.text import Text
 from textual.widgets import Static
 
+
 class TopBar(Static):
     def on_mount(self):
         self.set_interval(1, self.update_clock)
