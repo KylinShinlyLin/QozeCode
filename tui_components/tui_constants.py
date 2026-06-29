@@ -111,16 +111,69 @@ CSS = """
     #command-suggestions > .option-list--option:hover { background: #414868; }
 
     /* --- Markdown Styles --- */
-    MarkdownH1 { color: #7aa2f7; text-style: bold; }
-    MarkdownH2 { color: #7dcfff; text-style: bold; }
-    MarkdownH3 { color: #2ac3de; text-style: bold; }
-    MarkdownH4 { color: #c0caf5; text-style: bold; }
-    MarkdownH5 { color: #c0caf5; text-style: bold; }
-    MarkdownH6 { color: #a9b1d6; text-style: bold; }
-    MarkdownCode { color: #7dcfff; background: #3a3a3a; }
-    Markdown > BlockQuote { color: #565f89; border-left: solid #565f89; }
-    MarkdownHorizontalRule { color: #a9b1d6; }
-    MarkdownTable { color: #a9b1d6; }
+    Markdown { color: #c0caf5; }
+
+    MarkdownH1 { color: #7aa2f7; text-style: bold; margin: 1 0 0 0; }
+    MarkdownH2 { color: #7dcfff; text-style: bold; margin: 1 0 0 0; }
+    MarkdownH3 { color: #2ac3de; text-style: bold; margin: 1 0 0 0; }
+    MarkdownH4 { color: #c0caf5; text-style: bold; margin: 0; }
+    MarkdownH5 { color: #c0caf5; text-style: bold; margin: 0; }
+    MarkdownH6 { color: #a9b1d6; text-style: bold; margin: 0; }
+
+    /* 内联代码 */
+    MarkdownCode { color: #7dcfff; background: #2f334d; }
+
+    /* 代码块 (fenced code blocks) */
+    MarkdownFence {
+        color: #c0caf5;
+        background: #1a1b26;
+        margin: 1 0;
+        padding: 0 1;
+    }
+    MarkdownFence > MarkdownFenceStartLine,
+    MarkdownFence > MarkdownFenceEndLine {
+        color: #565f89;
+        background: #2f334d;
+        padding: 1;
+    }
+    MarkdownFence > MarkdownCode {
+        color: #c0caf5;
+        background: #1a1b26;
+    }
+
+    /* 引用块 */
+    Markdown > BlockQuote {
+        color: #565f89;
+        border-left: solid #565f89;
+        margin: 0;
+        padding: 0 1;
+    }
+
+    /* 列表 */
+    Markdown > BulletList, Markdown > OrderedList {
+        color: #c0caf5;
+        margin: 0;
+        padding: 0 2;
+    }
+
+    /* 分隔线 */
+    MarkdownHorizontalRule { color: #414868; margin: 1 0; }
+
+    /* 表格 */
+    MarkdownTable {
+        color: #c0caf5;
+        margin: 1 0;
+    }
+    MarkdownTableContent {
+        keyline: thin #565f89;
+    }
+    MarkdownTableContent .header {
+        color: #7aa2f7;
+        text-style: bold;
+    }
+    MarkdownTableContent .cell {
+        color: #a9b1d6;
+    }
     MarkdownTable > MarkdownH1 { color: #7aa2f7; text-style: bold; }
     MarkdownTable > MarkdownH2 { color: #7dcfff; text-style: bold; }
     MarkdownTable > MarkdownH3 { color: #2ac3de; text-style: bold; }

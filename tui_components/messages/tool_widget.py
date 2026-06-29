@@ -71,13 +71,13 @@ class ToolMessageWidget(Static):
         """渲染当前状态的文本"""
         if self.status == ToolStatus.RUNNING:
             frame = SPINNER_FRAMES[self.spinner_frame % len(SPINNER_FRAMES)]
-            return f"[#7aa2f7]{frame} {self.display_text} {self.elapsed_str}[/]"
+            return f"{frame} {self.display_text} {self.elapsed_str}"
         elif self.status == ToolStatus.SUCCESS:
             elapsed = f" in {self._elapsed_time:.2f}s" if self._elapsed_time > 0 else ""
-            return f"[#9ece6a]✓ {self.display_text}{elapsed}[/]"
+            return f"✓ {self.display_text}{elapsed}"
         elif self.status == ToolStatus.ERROR:
             elapsed = f" in {self._elapsed_time:.2f}s" if self._elapsed_time > 0 else ""
-            return f"[#f7768e]✗ {self.display_text}{elapsed}[/]"
+            return f"✗ {self.display_text}{elapsed}"
         else:
             return f"⏳ {self.display_text}"
     

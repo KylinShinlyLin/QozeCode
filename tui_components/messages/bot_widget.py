@@ -59,7 +59,6 @@ class BotMessageWidget(Static):
     BotMessageWidget Markdown {
         margin: 0;
         padding: 0;
-        color: white;
     }
 
     BotMessageWidget .hidden {
