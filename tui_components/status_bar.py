@@ -42,7 +42,7 @@ class StatusBar(Static):
             token_str = str(count)
 
         # 构建状态栏，逐段精确控制样式
-        shortcuts = "输入 line | Ctrl+Q:语音输入 | Ctrl+C:终止 | Ctrl+D:提交"
+        shortcuts = "输入 line | Ctrl+N:录音笔记 | Ctrl+Q:语音输入 | Ctrl+C:终止 | Ctrl+D:提交"
         mode_tag = "[PLAN] " if self.plan_mode else ""
 
         if self.state_desc == "Idle":

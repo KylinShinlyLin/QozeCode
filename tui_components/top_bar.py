@@ -15,8 +15,8 @@ class TopBar(Static):
         spacer_width = max(0, total_width - len(" QozeCode  v0.3.8 ") - len(right_label))
 
         content = Text()
-        content.append(" QozeCode ", style="bold white on #d75f00")
-        content.append(" v0.3.8 ", style="bold white on #005faf")
+        content.append(" QozeCode ", style="bold #ffffff on #d75f00")
+        content.append(" v0.3.8 ", style="bold #ffffff on #2563eb")
         content.append(" " * spacer_width)
-        content.append(right_label, style="bold white on #333333")
+        content.append(right_label, style="bold #c0caf5 on #333333")
         self.update(content)

@@ -64,7 +64,7 @@ CSS = """
         height: auto;
         max-height: 30%;
         padding: 0 2;
-        border-top: solid #414868;
+        border-top: heavy #414868;
         display: none;
         overflow-y: auto;
         scrollbar-visibility: hidden;
@@ -78,9 +78,9 @@ CSS = """
         padding: 0 1;
     }
 
-    #sidebar { width: 1fr; height: 100%; padding: 1 2; color: #565f89; border-left: solid #2f334d; }
+    #sidebar { width: 1fr; height: 100%; padding: 1 2; color: #a9b1d6; border-left: heavy #2f334d; }
     #bottom-container { height: auto; dock: bottom; }
-    #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: solid #414868; }
+    #input-line { height: 3; width: 100%; align-vertical: middle; padding: 0 1; border-top: heavy #414868; }
     .prompt-symbol { color: #bb9af7; text-style: bold; width: 2; content-align: center middle; }
 
     Input { width: 1fr; border: none; color: #c0caf5; padding: 0; }
@@ -116,7 +116,11 @@ CSS = """
     MarkdownH6 { color: #a9b1d6; text-style: bold; }
     MarkdownCode { color: #7dcfff; background: #3a3a3a; }
     Markdown > BlockQuote { color: #565f89; border-left: solid #565f89; }
-    MarkdownHorizontalRule { color: #414868; }
+    MarkdownHorizontalRule { color: #a9b1d6; }
+    MarkdownTable { color: #a9b1d6; }
+    MarkdownTable > MarkdownH1 { color: #7aa2f7; text-style: bold; }
+    MarkdownTable > MarkdownH2 { color: #7dcfff; text-style: bold; }
+    MarkdownTable > MarkdownH3 { color: #2ac3de; text-style: bold; }
     /* ----------------------- */
         """
 

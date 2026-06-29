@@ -178,7 +178,7 @@ class Qoze(App):
     def _get_tips_text(self) -> str:
         """获取 Tips 文本"""
         return f"""模型: {self.model_name or '未知'}  •  目录: {os.getcwd()}
-💡 clear → 清空会话  •  quit/exit → 退出  •  line → 多行模式  •  Ctrl+Q → 语音输入"""
+💡 clear → 清空会话  •  quit/exit → 退出  •  line → 多行模式  •  Ctrl+Q → 语音输入  •  Ctrl+N → 录音笔记"""
 
     def on_mount(self):
         self.message_list = self.query_one("#message-list", MessageList)
@@ -265,9 +265,16 @@ class Qoze(App):
 
     def action_toggle_meeting_note(self):
         """Toggle meeting note recording on / off."""
+        was_active = self.audio_manager.meeting_active
         err = self.audio_manager.toggle_meeting()
         if err:
             self.message_list.mount(Static(err))
+        elif not was_active:
+            # 刚刚启动 — 显示声纹标签 + 状态栏
+            mn_status = self.query_one("#meeting-note-status", Label)
+            mn_status.remove_class("hidden")
+            mn_status.update(Text("📝 Initializing Mic...", style="bold #FF8C00"))
+            self.status_bar.update_state("📝 Recording Meeting Note...  Ctrl+N 停止", style="bold yellow")
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------

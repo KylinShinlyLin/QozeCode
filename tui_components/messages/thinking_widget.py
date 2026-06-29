@@ -62,7 +62,7 @@ class ThinkingWidget(Static):
         self._mounted = False
         self._is_finalized = False
         self._last_update_time = 0
-        self._update_interval = 0.15  # 节流间隔（秒）
+        self._update_interval = 0.01  # 节流间隔（秒）
 
     def compose(self) -> ComposeResult:
         with Vertical():
