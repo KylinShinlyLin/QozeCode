@@ -349,7 +349,6 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     if active_skills_content:
         context += f"\n## 🔥 Currently Active Skills:\n{active_skills_content}\n"
 
-
     # 添加会话记忆 (checkpoint 恢复)
     if memory_prompt:
         context += f"\n{memory_prompt}\n"
