@@ -23,6 +23,8 @@ from textual.driver import Driver
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, TextArea, OptionList, Markdown, Static
+from textual._text_area_theme import TextAreaTheme
+from rich.style import Style
 from textual.widgets.option_list import Option
 
 # Import Enums
@@ -184,6 +186,17 @@ class Qoze(App):
         self.welcome_tips = self.query_one("#welcome-tips", Static)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
+        # 修复 TextArea 光标颜色（TextArea 光标由语法主题 cursor_style 控制，不走普通 CSS）
+        try:
+            cursor_theme = TextAreaTheme(
+                name="qoze-cursor",
+                cursor_style=Style(color="#1a1b26", bgcolor="#c0c4cc"),
+                syntax_styles={},
+            )
+            self.multi_line_input.register_theme(cursor_theme)
+            self.multi_line_input.theme = "qoze-cursor"
+        except Exception:
+            pass
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
         self.sidebar = self.query_one("#sidebar", Sidebar)
@@ -233,6 +246,7 @@ class Qoze(App):
                 token_count = qoze_code_agent.estimate_token_count(messages)
                 self.total_tokens = token_count
                 self.status_bar.update_token_count(token_count)
+            else:
                 self.total_tokens = 0
                 self.status_bar.update_token_count(0)
         except Exception as e:
@@ -448,6 +462,7 @@ class Qoze(App):
                 style = "bold red"
             elif "disable" in user_input.lower():
                 style = "bold red"
+            else:
                 style = "bold green"
             icon = "✗" if "disable" in user_input.lower() else ("✓" if success else "✗")
             self.message_list.mount(Static(Text(f"Skills: {icon} {message}", style=style)))
@@ -469,6 +484,7 @@ class Qoze(App):
             is_cmd = user_input.startswith("/") or user_input.lower() in ["init", "clear"]
             if is_init_command:
                 self.message_list.add_user_message("/init", is_command=True)
+            else:
                 self.message_list.add_user_message(display_input, is_command=is_cmd)
 
             image_folder = ".qoze/image"

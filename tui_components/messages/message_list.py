@@ -218,7 +218,7 @@ class MessageList(ScrollableContainer):
                     if not hasattr(self, '_subagent_last_ui_update'):
                         self._subagent_last_ui_update = {}
                     last = self._subagent_last_ui_update.get(agent_id, 0)
-                    if now - last >= 0.15:
+                    if now - last >= 0.05:
                         self._subagent_last_ui_update[agent_id] = now
                         self._update_widget(self._subagent_widgets[agent_id])
 
@@ -232,7 +232,7 @@ class MessageList(ScrollableContainer):
                     if not hasattr(self, '_subagent_last_ui_update'):
                         self._subagent_last_ui_update = {}
                     last = self._subagent_last_ui_update.get(agent_id, 0)
-                    if now - last >= 0.15:
+                    if now - last >= 0.05:
                         self._subagent_last_ui_update[agent_id] = now
                         self._update_widget(self._subagent_widgets[agent_id])
 

@@ -85,8 +85,11 @@ CSS = """
 
     Input { width: 1fr; border: none; color: #c0caf5; padding: 0; }
     Input:focus { border: none; }
+    Input > .input--cursor { background: #c0c4cc; color: #1a1b26; }
+    Input > .input--placeholder { color: #787c99; }
 
     TextArea { height: 10; width: 100%; border: round #808080; color: #c0caf5; padding: 1; }
+    TextArea:dark .text-area--cursor { background: #c0c4cc; color: #1a1b26; }
 
     .hidden { display: none; }
 
