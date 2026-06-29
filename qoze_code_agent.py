@@ -52,7 +52,6 @@ from tools.browser_tool import browser_navigate, browser_click, browser_type, br
     browser_snapshot, browser_wait_for, browser_handle_dialog, browser_evaluate, \
     browser_console_messages, browser_console_get, browser_network_requests, browser_network_get
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
-from tools.plan_tools import update_plan_progress
 from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mcp_server, set_mcp_manager
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 from tools.code_tools import analyze_project, find_symbols, trace_imports
@@ -225,7 +224,6 @@ base_tools = [
     browser_console_get,
     browser_network_requests,
     browser_network_get,
-    update_plan_progress,
     list_mcp_servers,
     activate_mcp_server,
     deactivate_mcp_server,
@@ -512,8 +510,8 @@ _ASYNC_TOOL_NAMES = {
     "browser_console_messages", "browser_console_get", "browser_network_requests",
     "browser_network_get", "dispatch_subagent",
     "transcribe_audio",
+    "list_mcp_servers", "activate_mcp_server", "deactivate_mcp_server",
 }
-
 
 
 async def tool_node(state: dict):

@@ -4,25 +4,23 @@
       "description": "PostgreSQL 数据库查询，支持只读 SQL",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:password@localhost:5432/dbname"],
-      "enabled": true
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://user:password@localhost:5432/dbname"
+      ],
+      "enabled": false
     },
     "github": {
       "description": "GitHub API：管理 Issue、PR、仓库",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here"
-      },
-      "enabled": true
-    },
-    "weather": {
-      "description": "天气查询 HTTP 服务",
-      "transport": "http",
-      "url": "http://localhost:8000/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN"
       },
       "enabled": false
     }
