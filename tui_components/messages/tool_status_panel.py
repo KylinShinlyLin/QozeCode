@@ -39,8 +39,8 @@ class RunningToolItem(Static):
         elapsed_str = f"{m:02d}:{s:02d}"
         # 限制显示文本前60个字符
         text = self.display_text
-        if len(text) > 60:
-            text = text[:57] + "..."
+        if len(text) > 50:
+            text = text[:47] + "..."
         frame = SPINNER_FRAMES[int(elapsed * 10) % len(SPINNER_FRAMES)]
         return f"{frame} {text} {elapsed_str}"
 
@@ -76,7 +76,6 @@ class ToolStatusPanel(Vertical):
         width: 100%;
         height: auto;
         max-height: 20;
-        background: #1a1b26;
         border-top: solid #414868;
         padding: 0 2;
         display: none;

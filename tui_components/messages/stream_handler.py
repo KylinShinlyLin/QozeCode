@@ -21,7 +21,12 @@ from .thinking_widget import ThinkingWidget
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
 
+_LOG_ENABLED = os.environ.get("QOZE_DEBUG", "") != ""
+
+
 def _log(msg):
+    if not _LOG_ENABLED:
+        return
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     log_line = f"[{timestamp}] [STREAM] {msg}\n"
     try:
@@ -38,7 +43,7 @@ class MessageStreamHandler:
     thinking 内容通过独立的 ThinkingWidget 展示，与 BotMessageWidget 分离。
     """
 
-    UPDATE_INTERVAL = 0.15
+    UPDATE_INTERVAL = 0.05
     TOKEN_UPDATE_INTERVAL = 1.2  # token 计算最小间隔（秒），避免过于频繁影响渲染
 
     def __init__(self,

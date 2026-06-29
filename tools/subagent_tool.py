@@ -108,7 +108,7 @@ def _load_directory_tree() -> str:
 
 
 # ============================================================
-# Subagent 可用工具 —— 除 browser / skill / plan / subagent 之外的全部工具
+# Subagent 可用工具 —— 除 browser / skill / subagent 之外的全部工具
 # ============================================================
 
 _subagent_tools_cache = None
@@ -120,7 +120,7 @@ _SUBAGENT_ASYNC_TOOLS = {
 
 
 def _get_subagent_tools():
-    """获取 subagent 可用的完整工具列表（排除 browser、skill、plan、subagent 工具，带缓存）"""
+    """获取 subagent 可用的完整工具列表（排除 browser、skill、subagent 工具，带缓存）"""
     global _subagent_tools_cache
     if _subagent_tools_cache is not None:
         return _subagent_tools_cache
@@ -224,7 +224,7 @@ def _build_subagent(model_with_tools):
 
     无 checkpointer（无状态 subagent），每次调用独立执行。
     system_prompt 在运行时动态注入。
-    model_with_tools 只绑定了 subagent 专属工具（不含 browser/skill/plan）。
+    model_with_tools 只绑定了 subagent 专属工具（不含 browser/skill）。
     """
 
     # --------------------------------------------------

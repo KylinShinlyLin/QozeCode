@@ -48,13 +48,7 @@ class Sidebar(Static):
         self.model_name = model_name
         self.provider = provider
         self.model_type = model_type
-        self.plan_mode = False
         super().__init__(*args, **kwargs)
-
-    def update_plan_mode(self, enabled: bool):
-        self.plan_mode = enabled
-        # 触发异步刷新
-        asyncio.create_task(self.update_info())
 
     async def on_mount(self):
         # Initial update
@@ -70,22 +64,17 @@ class Sidebar(Static):
 
         text = Text()
         text.append("\n项目信息\n", style="bold #7aa2f7 underline")
-        text.append(f"Repo: ", style="dim white")
+        text.append(f"Repo: ", style="#a9b1d6")
         text.append(f"{repo_url.split('/')[-1].replace('.git', '')}\n", style="bold cyan")
         if branch:
-            text.append(f"Branch: ", style="dim white")
+            text.append(f"Branch: ", style="#a9b1d6")
             text.append(f"{branch}\n", style="bold cyan")
 
-        text.append(f"模型: ", style="dim white")
+        text.append(f"模型: ", style="#a9b1d6")
         text.append(f"{self.model_name}\n", style="bold cyan")
-        text.append(f"模型厂商: ", style="dim white")
+        text.append(f"模型厂商: ", style="#a9b1d6")
         text.append(f"{self.provider.value}\n", style="bold cyan")
-        text.append(f"计划模式: ", style="dim white")
-        if self.plan_mode:
-            text.append(f"[PLAN] 开启\n", style="bold yellow")
-        else:
-            text.append(f"关闭\n", style="dim green")
-        text.append(f"当前目录: ", style="dim white")
+        text.append(f"当前目录: ", style="#a9b1d6")
         text.append(f"\n{os.getcwd()}\n\n", style="bold cyan")
 
         # 实时检测图片数量
@@ -109,7 +98,7 @@ class Sidebar(Static):
                             new_count += 1
                 except:
                     new_count = img_count
-            text.append("图片上下文: ", style="dim white")
+            text.append("图片上下文: ", style="#a9b1d6")
             if new_count > 0:
                 text.append(f"{img_count} 张 ({new_count} 新)\n", style="bold yellow")
             else:
@@ -129,12 +118,11 @@ class Sidebar(Static):
                     style = "green"
                 elif 'D' in status:
                     icon = "-"
-                    style = "dim white"
+                    style = "#a9b1d6"
                 else:
                     icon = "•"
-                    style = "white"
+                    style = "#c0caf5"
                 text.append(f"{icon} {filename[:20]}\n", style=style)
-        else:
             text.append("", style="dim green")
 
         self.update(text)

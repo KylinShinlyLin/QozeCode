@@ -1,3 +1,4 @@
+import asyncio
 import html2text
 import httpx
 from langchain_core.tools import tool
@@ -117,13 +118,13 @@ async def read_url(url: str) -> str:
         jina_key = config_manager.get_jina_key()
         if jina_key:
             jina_headers["Authorization"] = f"Bearer {jina_key}"
-        response = await client.get(api_url, headers=jina_headers, follow_redirects=True, timeout=15)
+        response = await client.get(api_url, headers=jina_headers, follow_redirects=True, timeout=10)
         if response.status_code == 200:
             return response.text
         raise RuntimeError(f"Jina Reader API 返回错误: {response.status_code}")
 
     async def _fetch_with_direct(client: httpx.AsyncClient) -> str:
-        response = await client.get(url, headers=headers, follow_redirects=True)
+        response = await client.get(url, headers=headers, follow_redirects=True, timeout=10)
         response.raise_for_status()
         html = response.text
         h = html2text.HTML2Text()
@@ -145,12 +146,12 @@ async def read_url(url: str) -> str:
 
             async with httpx.AsyncClient(timeout=15.0, proxy=proxy_url) as client:
                 try:
-                    markdown_content = await _fetch_with_jina(client)
+                    markdown_content = await asyncio.wait_for(_fetch_with_jina(client), timeout=15)
                     source_info = "通过 Jina Reader API 解析"
                 except Exception as jina_err:
                     # Fallback: 直接请求目标 URL 并用 html2text 转换
                     try:
-                        markdown_content = await _fetch_with_direct(client)
+                        markdown_content = await asyncio.wait_for(_fetch_with_direct(client), timeout=15)
                         source_info = f"直接抓取（Jina 失败: {jina_err}）"
                     except Exception as direct_err:
                         error_msg = f"❌ 网页解析失败: Jina 错误: {jina_err}; 直接抓取错误: {direct_err}"

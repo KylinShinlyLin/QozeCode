@@ -56,6 +56,7 @@ from tools.plan_tools import update_plan_progress
 from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mcp_server, set_mcp_manager
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 from tools.code_tools import analyze_project, find_symbols, trace_imports
+from tools.asr_tool import transcribe_audio
 # from tools.common_tools import ask_for_user
 from skills.skill_manager import SkillManager
 from qoze_mcp.mcp_manager import MCPManager
@@ -146,13 +147,6 @@ def get_context_info(system_info="", system_release="", system_version="", machi
     available_skills = skill_manager.get_available_skills()
     active_skills_content = skill_manager.get_active_skills_content()
 
-    # 新增：加载 plan 上下文
-    plan_prompt = ""
-    from plan.plan_manager import PlanManager
-    plan_mgr = PlanManager(current_dir)
-    if plan_mgr.has_valid_plan():
-        plan_prompt = plan_mgr.load_plan_context()
-
     # 新增：加载会话记忆 (checkpoint 恢复)
     memory_prompt = load_memory_context(os.path.join(current_dir, ".qoze", "memory"))
 
@@ -169,7 +163,6 @@ def get_context_info(system_info="", system_release="", system_version="", machi
         rules_prompt=rules_prompt,
         available_skills=available_skills,
         active_skills_content=active_skills_content,
-        plan_prompt=plan_prompt,
         model_name=model_name,
         model_supports_vision=model_supports_vision,
         memory_prompt=memory_prompt,
@@ -236,6 +229,7 @@ base_tools = [
     list_mcp_servers,
     activate_mcp_server,
     deactivate_mcp_server,
+    transcribe_audio,
     dispatch_subagent,
     analyze_project,
     find_symbols,
@@ -245,7 +239,6 @@ base_tools = [
 # 初始时不加载浏览器工具
 tools = base_tools
 browser_loaded = False
-plan_mode = False
 conversation_state = {"llm_calls": 0, "last_image_count": 0, "sent_images": {}}
 
 tools_by_name = {tool.name: tool for tool in tools}
@@ -518,7 +511,9 @@ _ASYNC_TOOL_NAMES = {
     "browser_snapshot", "browser_wait_for", "browser_handle_dialog", "browser_evaluate",
     "browser_console_messages", "browser_console_get", "browser_network_requests",
     "browser_network_get", "dispatch_subagent",
+    "transcribe_audio",
 }
+
 
 
 async def tool_node(state: dict):

@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Static
 from textual.reactive import reactive
+import time
 
 from .auto_copy_widgets import AutoCopyStatic
 
@@ -60,6 +61,8 @@ class ThinkingWidget(Static):
         self._collapsed = True
         self._mounted = False
         self._is_finalized = False
+        self._last_update_time = 0
+        self._update_interval = 0.01  # 节流间隔（秒）
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -82,10 +85,13 @@ class ThinkingWidget(Static):
     # ---------- 公共接口 ----------
 
     def append_thinking(self, text: str):
-        """流式追加思考内容，自动更新字符计数"""
+        """流式追加思考内容，自动更新字符计数（节流 0.15s）"""
         self._thinking_buffer += text
         if self._mounted:
-            self._update_display()
+            now = time.time()
+            if now - self._last_update_time >= self._update_interval:
+                self._last_update_time = now
+                self._update_display()
 
     def finalize(self):
         """流式结束标记，箭头变为 ✓ 表示完成"""

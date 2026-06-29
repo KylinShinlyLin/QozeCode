@@ -48,7 +48,6 @@ class SubagentWidget(Static):
         width: 100%;
         height: auto;
         min-height: 1;
-        background: #1a1b26;
         border-left: thick #e0af68;
         padding: 0 2 0 2;
         margin: 1 0 0 0;
@@ -60,11 +59,13 @@ class SubagentWidget(Static):
     }
 
     SubagentWidget .subagent-header {
-        height: auto;
+        height: 1;
         color: #e0af68;
         text-style: bold;
         margin: 0;
         padding: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     SubagentWidget .subagent-content {
@@ -96,7 +97,7 @@ class SubagentWidget(Static):
         self._content_buffer = ""
         self._mounted = False
         self._is_done = False
-        self._collapsed = True   # 默认收起，与 ThinkingWidget 一致
+        self._collapsed = True  # 默认收起，与 ThinkingWidget 一致
         self._spinner_frame = 0
         self._timer = None
 
@@ -120,14 +121,25 @@ class SubagentWidget(Static):
 
     # ---------- Spinner / Header ----------
 
+    # 头部标签最大显示字符数（不含前缀 "✓ ▸ Subagent · "）
+    _MAX_LABEL_CHARS = 60
+
     def _render_header(self) -> str:
-        """渲染头部文本，包含折叠箭头"""
+        """渲染头部文本，包含折叠箭头。
+        
+        label 可能来自 subagent 的 task 描述，包含换行符。
+        此处清洗：去换行、去首尾空白、超长截断加省略号。
+        """
+        # 清洗 label：换行→空格，合并连续空白，去首尾
+        clean = " ".join(self.label.split())
+        if len(clean) > self._MAX_LABEL_CHARS:
+            clean = clean[:self._MAX_LABEL_CHARS] + "…"
         arrow = "▾" if not self._collapsed else "▸"
         if self._is_done:
-            return f"✓ {arrow} Subagent · {self.label}"
+            return f"✓ {arrow} Subagent · {clean}"
         else:
             frame = SPINNER_FRAMES[self._spinner_frame % len(SPINNER_FRAMES)]
-            return f"{frame} {arrow} Subagent · {self.label}"
+            return f"{frame} {arrow} Subagent · {clean}"
 
     def _update_header(self):
         try:
@@ -209,21 +221,20 @@ class SubagentWidget(Static):
             self._update_content_display()
 
     def append_content(self, text: str):
-        """流式追加内容（逐 token），折叠时静默累积"""
+        """流式追加内容 — 仅累积到 buffer，不立即更新显示。
+
+        显示更新由 _update_widget() 在调用方节流后统一处理。
+        """
         self._content_buffer += text
-        if self._mounted:
-            self._update_content_display()
 
     def append_tool(self, tool_name: str, tool_args: str, status: str):
-        """追加工具调用信息到内容区"""
+        """追加工具调用信息到内容区 — 仅累积，不立即更新显示"""
         if status == "start":
             args = f"({tool_args})" if tool_args else ""
             line = f"\n🔧 {tool_name}{args}\n"
         else:
             line = ""
         self._content_buffer += line
-        if self._mounted:
-            self._update_content_display()
 
     # ---------- 完成 ----------
 

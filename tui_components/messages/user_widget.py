@@ -93,7 +93,7 @@ class UserMessageWidget(Static):
 UserMessageWidget {
     width: 100%;
     height: auto;
-    background: #252526;  /* RGB(45, 45, 48) */
+    background: #252526;
     border-left: thick #007ACC;
     padding: 1 2;
     margin: 1 0 1 0;
