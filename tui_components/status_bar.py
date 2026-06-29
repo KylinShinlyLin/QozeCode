@@ -10,15 +10,10 @@ class StatusBar(Static):
         self.state_desc = "Idle"
         self.state_style = None
         self.token_count = 0
-        self.plan_mode = False
 
     def update_state(self, state, style=None):
         self.state_desc = state
         self.state_style = style
-        self.refresh()
-
-    def update_plan_mode(self, enabled: bool):
-        self.plan_mode = enabled
         self.refresh()
 
     def update_token_count(self, count):
@@ -43,19 +38,18 @@ class StatusBar(Static):
 
         # 构建状态栏，逐段精确控制样式
         shortcuts = "输入 line | Ctrl+N:录音笔记 | Ctrl+Q:语音输入 | Ctrl+C:终止 | Ctrl+D:提交"
-        mode_tag = "[PLAN] " if self.plan_mode else ""
 
         if self.state_desc == "Idle":
-            left = f" {mode_tag}{shortcuts}"
+            left = f" {shortcuts}"
             result = Text(left, style="dim")
 
         elif self.state_style:
-            result = Text(f" {mode_tag}", style="dim")
+            result = Text(f" ", style="dim")
             result.append(f"{self.state_desc} | ", style=self.state_style)
             result.append(shortcuts, style="dim")
 
         else:
-            left = f" {mode_tag}{self.state_desc} | {shortcuts}"
+            left = f" {self.state_desc} | {shortcuts}"
             result = Text(left, style="dim")
 
         result.append(" " * 5)

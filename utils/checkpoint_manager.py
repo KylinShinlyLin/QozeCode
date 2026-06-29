@@ -116,7 +116,6 @@ class CheckpointManager:
         model_name: str,
         token_count: int,
         active_skills: list[str],
-        plan_status: str,
         conversation_rounds: int,
     ) -> str:
         """构造给 LLM 的 checkpoint 摘要 prompt（详细版，可恢复上下文）"""
@@ -155,7 +154,6 @@ class CheckpointManager:
 - **正在做什么**: 当前任务的目标和范围（2-5 句话）
 - **做到了哪一步**: 具体进度，已完成的部分和当前卡点
 - **下一步计划**: 接下来要做什么（列出 1-3 个具体步骤）
-- **关联计划**: 如果在执行某个 plan，标注当前是第几个任务、进度如何
 - **阻塞项**: 是否有等待用户决策或外部条件的问题
 
 ---
@@ -237,7 +235,6 @@ class CheckpointManager:
 - 模型: {model_name}
 - 当前 token 用量: 约 {token_count}
 - 激活技能: {skills_text}
-- 计划状态: {plan_status}
 - 对话轮次: {conversation_rounds} 轮
 
 ---
