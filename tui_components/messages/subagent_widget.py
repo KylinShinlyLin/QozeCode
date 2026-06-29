@@ -48,7 +48,6 @@ class SubagentWidget(Static):
         width: 100%;
         height: auto;
         min-height: 1;
-        background: #1a1b26;
         border-left: thick #e0af68;
         padding: 0 2 0 2;
         margin: 1 0 0 0;

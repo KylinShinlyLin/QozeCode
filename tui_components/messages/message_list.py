@@ -43,7 +43,6 @@ class ErrorMessageWidget(Static):
         margin: 1 0;
         padding: 1 2;
         color: #f7768e;
-        background: #1a1a2e;
         border: solid #f7768e;
         content-align: left top;
     }
@@ -137,7 +136,6 @@ class MessageList(ScrollableContainer):
     MessageList {
         width: 100%;
         height: 1fr;
-        background: #13131c;
         padding: 1 2;
         border: none;
         overflow-y: auto;

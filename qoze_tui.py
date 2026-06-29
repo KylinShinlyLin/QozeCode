@@ -72,6 +72,20 @@ except ImportError:
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
 os.environ['GLOG_minloglevel'] = '2'
 
+# 移除 App 和 Screen 的默认背景色，让 TUI 跟随终端原生背景（透明）
+from textual.app import App as _TextualApp
+from textual.screen import Screen
+
+# 按行过滤，移除 background: $background 行（保留 selection 等）
+_TextualApp.DEFAULT_CSS = "\n".join(
+    l for l in _TextualApp.DEFAULT_CSS.split("\n")
+    if not (l.strip().startswith("background: $background;"))
+)
+Screen.DEFAULT_CSS = "\n".join(
+    l for l in Screen.DEFAULT_CSS.split("\n")
+    if not (l.strip().startswith("background: $background;"))
+)
+
 try:
     import launcher
     import model_initializer
@@ -110,7 +124,7 @@ class Qoze(App):
     ]
 
     def __init__(self, provider, model_type):
-        super().__init__()
+        super().__init__(ansi_color=True)
         self.model_type = model_type
         self.model_name = model_type.value
         self.provider = provider

@@ -76,7 +76,6 @@ class ToolStatusPanel(Vertical):
         width: 100%;
         height: auto;
         max-height: 20;
-        background: #1a1b26;
         border-top: solid #414868;
         padding: 0 2;
         display: none;
