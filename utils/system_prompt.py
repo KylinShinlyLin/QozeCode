@@ -299,6 +299,9 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     这部分内容放在 User Message 中，避免影响 System Prompt 的缓存。
     
     Args:
+        model_name:
+        git_context:
+        memory_prompt:
         system_info: 操作系统信息
         system_release: 系统版本
         system_version: 系统详细版本
