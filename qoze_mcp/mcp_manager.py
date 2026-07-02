@@ -309,20 +309,17 @@ class MCPManager:
             }
             if active_configs:
                 tools = await self._client_wrapper.connect_all(active_configs)
-                # 按服务名分组存储
-                for name in active_configs:
-                    self._loaded_tools[name] = [
-                        t for t in tools
-                        if any(t.name in [tt.name for tt in self._loaded_tools.get(name, [])] or True)
-                    ]
-                # 简化：全部归到第一个服务名下
-                if tools and self._active_servers:
-                    self._loaded_tools[self._active_servers[0]] = tools
+                # 缓存所有获取到的工具
+                self._loaded_tools['_all_connected_tools'] = tools
 
-        # 返回所有工具
+        # 返回所有工具去重
         all_tools = []
+        seen_names = set()
         for tool_list in self._loaded_tools.values():
-            all_tools.extend(tool_list)
+            for t in tool_list:
+                if t.name not in seen_names:
+                    seen_names.add(t.name)
+                    all_tools.append(t)
         return all_tools
 
     async def reload_config(self) -> tuple:
