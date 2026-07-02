@@ -46,11 +46,11 @@ from tools.file_tools import read_file, list_files, search_in_files, list_dir, g
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.qoze'))
 from tools.search_tool import tavily_search, read_url
-from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, \
-    browser_get_html, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs, \
-    browser_press_key, browser_send_keys, browser_hotkey, browser_focus, \
-    browser_snapshot, browser_wait_for, browser_handle_dialog, browser_evaluate, \
-    browser_console_messages, browser_console_get, browser_network_requests, browser_network_get
+# from tools.browser_tool import browser_navigate, browser_click, browser_type, browser_read_page, \
+#     browser_get_html, browser_scroll, browser_open_tab, browser_switch_tab, browser_list_tabs, \
+#     browser_press_key, browser_send_keys, browser_hotkey, browser_focus, \
+#     browser_snapshot, browser_wait_for, browser_handle_dialog, browser_evaluate, \
+#     browser_console_messages, browser_console_get, browser_network_requests, browser_network_get
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
 from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mcp_server, set_mcp_manager
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
@@ -203,27 +203,27 @@ base_tools = [
     # file_stats,
     # grep_file,
     # find_files,
-    browser_navigate,
-    browser_click,
-    browser_type,
-    browser_read_page,
-    browser_get_html,
-    browser_scroll,
-    browser_open_tab,
-    browser_switch_tab,
-    browser_list_tabs,
-    browser_press_key,
-    browser_send_keys,
-    browser_hotkey,
-    browser_focus,
-    browser_snapshot,
-    browser_wait_for,
-    browser_handle_dialog,
-    browser_evaluate,
-    browser_console_messages,
-    browser_console_get,
-    browser_network_requests,
-    browser_network_get,
+    # browser_navigate,
+    # browser_click,
+    # browser_type,
+    # browser_read_page,
+    # browser_get_html,
+    # browser_scroll,
+    # browser_open_tab,
+    # browser_switch_tab,
+    # browser_list_tabs,
+    # browser_press_key,
+    # browser_send_keys,
+    # browser_hotkey,
+    # browser_focus,
+    # browser_snapshot,
+    # browser_wait_for,
+    # browser_handle_dialog,
+    # browser_evaluate,
+    # browser_console_messages,
+    # browser_console_get,
+    # browser_network_requests,
+    # browser_network_get,
     list_mcp_servers,
     activate_mcp_server,
     deactivate_mcp_server,

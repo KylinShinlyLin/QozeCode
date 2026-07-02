@@ -54,10 +54,11 @@ except ImportError:
     skills_tui_handler = None
 
 try:
-    from dynamic_commands_patch import get_dynamic_commands, get_skills_commands
+    from dynamic_commands_patch import get_dynamic_commands, get_skills_commands, get_mcp_commands
 except ImportError:
     get_dynamic_commands = lambda: []
     get_skills_commands = lambda x: []
+    get_mcp_commands = lambda x: []
 
 from utils.constants import init_prompt
 
@@ -491,9 +492,11 @@ class Qoze(App):
             if subcmd in ('help', '?'):
                 help_text = (
                     'MCP (Model Context Protocol) 命令:\n'
-                    '  /mcp          显示此帮助\n'
-                    '  /mcp list     列出所有已配置的 MCP 服务及状态\n'
-                    '  /mcp status   显示 MCP 连接状态\n\n'
+                    '  /mcp                    显示此帮助\n'
+                    '  /mcp list               列出所有已配置的 MCP 服务及状态\n'
+                    '  /mcp status             显示 MCP 连接状态\n'
+                    '  /mcp activate <服务名>   激活指定的 MCP 服务\n'
+                    '  /mcp deactivate <服务名> 反激活指定的 MCP 服务\n\n'
                     'MCP 服务配置存放在 ~/.qoze/mcp_config.json\n'
                     '使用 mcp_config.template.json 作为参考模板'
                 )
@@ -521,6 +524,8 @@ class Qoze(App):
                             tools_str = ', '.join(f'`{t}`' for t in status['tools'])
                             lines.append(f'    工具 ({status["tool_count"]}): {tools_str}')
 
+                lines.append('')
+                lines.append('💡 操作: /mcp activate <服务名> 激活 | /mcp deactivate <服务名> 反激活')
                 self.message_list.mount(Static(Text('\n'.join(lines), style='bold cyan')))
                 return
 
@@ -536,6 +541,82 @@ class Qoze(App):
                 conn_str = '已连接' if is_connected else '未连接'
                 lines.append(f'  客户端连接: {conn_str}')
                 self.message_list.mount(Static(Text('\n'.join(lines), style='bold cyan')))
+                return
+
+            # enable/disable 是 activate/deactivate 的别名
+            if subcmd == 'enable':
+                subcmd = 'activate'
+            elif subcmd == 'disable':
+                subcmd = 'deactivate'
+
+            if subcmd in ('activate', 'deactivate'):
+                target = parts[2] if len(parts) > 2 else None
+
+                # 无参数：列出可选服务
+                if not target:
+                    servers = mcp_mgr.list_servers()
+                    if not servers:
+                        self.message_list.mount(Static(Text(
+                            '当前没有配置任何 MCP 服务。',
+                            style='dim yellow'
+                        )))
+                        return
+
+                    if subcmd == 'activate':
+                        # 列出所有未激活的 enabled 服务
+                        candidates = []
+                        for name in servers:
+                            s = mcp_mgr.get_server_status(name)
+                            if s and not s['active'] and s['enabled']:
+                                candidates.append(f"  /mcp activate {name}  — {s['description'][:60]}")
+                        if candidates:
+                            lines = ['📋 可激活的 MCP 服务:']
+                            lines.extend(candidates)
+                            self.message_list.mount(Static(Text('\n'.join(lines), style='bold cyan')))
+                        else:
+                            self.message_list.mount(Static(Text(
+                                '所有已配置的服务都已激活或禁用。输入 /mcp list 查看详情。',
+                                style='dim yellow'
+                            )))
+                    else:  # deactivate
+                        candidates = []
+                        for name in servers:
+                            s = mcp_mgr.get_server_status(name)
+                            if s and s['active']:
+                                candidates.append(f"  /mcp deactivate {name}  — {s['description'][:60]}")
+                        if candidates:
+                            lines = ['📋 已激活的 MCP 服务（可选择反激活）:']
+                            lines.extend(candidates)
+                            self.message_list.mount(Static(Text('\n'.join(lines), style='bold cyan')))
+                        else:
+                            self.message_list.mount(Static(Text(
+                                '当前没有已激活的 MCP 服务。',
+                                style='dim yellow'
+                            )))
+                    return
+
+                import asyncio
+                if subcmd == 'activate':
+                    from tools.mcp_tools import set_mcp_manager
+                    set_mcp_manager(mcp_mgr)
+
+                    async def do_activate():
+                        from tools.mcp_tools import activate_mcp_server as _activate_fn
+                        result = await _activate_fn.ainvoke({'server_name': target})
+                        self.message_list.mount(Static(Text(
+                            f'🔌 MCP 激活结果: {result[:500]}',
+                            style='bold cyan' if 'ACTIVATED' in result or 'ALREADY' in result else 'bold red'
+                        )))
+                    asyncio.create_task(do_activate())
+                else:
+                    async def do_deactivate():
+                        from tools.mcp_tools import deactivate_mcp_server as _deactivate_fn
+                        result = await _deactivate_fn.ainvoke({'server_name': target})
+                        self.message_list.mount(Static(Text(
+                            f'🔌 MCP 反激活结果: {result[:500]}',
+                            style='bold cyan' if 'DEACTIVATED' in result else 'bold yellow'
+                        )))
+                    asyncio.create_task(do_deactivate())
                 return
 
             # 未知的子命令，显示帮助
@@ -653,6 +734,13 @@ class Qoze(App):
         elif value.lower().startswith("skills"):
             try:
                 cmds = get_skills_commands(value)
+            except:
+                cmds = []
+            filtered = [Option(f"{c} - {d}", id=c) for c, d in cmds if fuzzy_match(value.lower(), c.lower())]
+            show_suggestions = bool(filtered)
+        elif value.lower().startswith("mcp"):
+            try:
+                cmds = get_mcp_commands(value)
             except:
                 cmds = []
             filtered = [Option(f"{c} - {d}", id=c) for c, d in cmds if fuzzy_match(value.lower(), c.lower())]

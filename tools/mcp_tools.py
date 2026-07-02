@@ -85,6 +85,42 @@ async def activate_mcp_server(server_name: str) -> str:
     try:
         mgr = get_mcp_manager()
 
+        # chrome-devtools 特殊处理：先确保独立 Chrome 实例在运行，再激活 MCP
+        if server_name == "chrome-devtools":
+            import subprocess, os
+            chrome_script = os.path.expanduser("~/.qoze/chrome-mcp.sh")
+            # 检测 Chrome 远程调试端口
+            check = subprocess.run(
+                ["curl", "-s", "--max-time", "2", "http://127.0.0.1:9222/json/version"],
+                capture_output=True
+            )
+            if check.returncode != 0:
+                console.print("[yellow]MCP: Chrome 未运行，正在自动启动...[/yellow]")
+                # 尝试通过便捷脚本启动
+                if os.path.exists(chrome_script):
+                    subprocess.run(["bash", chrome_script, "start"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    # fallback: 直接启动 Chrome
+                    subprocess.Popen(
+                        ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                         "--remote-debugging-port=9222",
+                         f"--user-data-dir={__import__('os').path.expanduser('~')}/.qoze/chrome-mcp-profile",
+                         "--no-first-run", "--no-default-browser-check"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                # 等待 Chrome 远程调试端口就绪
+                for _ in range(10):
+                    await __import__('asyncio').sleep(1)
+                    r = subprocess.run(
+                        ["curl", "-s", "--max-time", "2", "http://127.0.0.1:9222/json/version"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                    if r.returncode == 0:
+                        console.print("[green]MCP: Chrome 独立实例已就绪[/green]")
+                        break
+
+        # 统一调用激活（无论 Chrome 是否已在运行）
         tools, msg = await mgr.activate_server(server_name)
 
         if tools:

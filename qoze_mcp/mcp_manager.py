@@ -61,6 +61,7 @@ class MCPManager:
         self._client_wrapper = MCPClientWrapper()
         self._config_file = Path.home() / ".qoze" / "mcp_config.json"
         self._settings: dict = {}
+        self._auto_activated = False  # 是否已经自动激活过
         self._load_config()
 
     # ─── 配置管理 ─────────────────────────────────────────
@@ -125,6 +126,54 @@ class MCPManager:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         except Exception as e:
             console.print(f"[red]MCP: Failed to save config: {e}[/red]")
+
+    # ─── 自动激活 ─────────────────────────────────────────
+
+    async def auto_activate_all(self) -> List[BaseTool]:
+        """自动激活所有 enabled=True 且之前激活过的 MCP 服务。
+
+        在 Agent 首次启动时调用，恢复之前的 MCP 连接状态。
+        如果还没有任何激活过的服务，则自动激活所有 enabled=True 的服务。
+
+        Returns:
+            List[BaseTool]: 所有激活的工具列表
+        """
+        if self._auto_activated:
+            return []
+        self._auto_activated = True
+
+        all_tools = []
+
+        # 确定要激活的服务列表
+        if self._active_servers:
+            # 之前有激活过的，恢复它们
+            targets = [name for name in self._active_servers
+                       if name in self._servers and self._servers[name].enabled]
+        else:
+            # 首次启动，激活所有 enabled 的服务
+            targets = [name for name, s in self._servers.items()
+                       if s.enabled]
+
+        if not targets:
+            console.print("[dim]MCP: No servers to auto-activate[/dim]")
+            return []
+
+        console.print(f"[dim]MCP: Auto-activating {len(targets)} server(s): {', '.join(targets)}...[/dim]")
+
+        for name in targets:
+            try:
+                tools, msg = await self.activate_server(name)
+                if tools:
+                    all_tools.extend(tools)
+                    console.print(f"[green]  ✓ {name}: {len(tools)} tool(s)[/green]")
+                elif "ALREADY_ACTIVE" in msg:
+                    console.print(f"[dim]  {name}: already active[/dim]")
+                else:
+                    console.print(f"[yellow]  ⚠ {name}: {msg}[/yellow]")
+            except Exception as e:
+                console.print(f"[red]  ✗ {name}: {e}[/red]")
+
+        return all_tools
 
     # ─── 服务查询（供 LLM 工具使用）─────────────────────────
 

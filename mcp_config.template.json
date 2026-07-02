@@ -1,34 +1,36 @@
 {
   "servers": {
-    "postgres": {
-      "description": "PostgreSQL 数据库查询，支持只读 SQL",
+    "chrome-devtools": {
+      "description": "Chrome 浏览器自动化：连接到独立运行的 Chrome 实例（端口 9222），支持页面导航、点击、截图、性能分析、网络调试、控制台分析",
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-postgres",
-        "postgresql://user:password@localhost:5432/dbname"
+        "chrome-devtools-mcp@latest",
+        "--browser-url=http://127.0.0.1:9222"
       ],
+      "enabled": true
+    },
+    "postgres": {
+      "description": "PostgreSQL 数据库查询，支持只读 SQL",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:password@localhost:5432/dbname"],
       "enabled": false
     },
     "github": {
       "description": "GitHub API：管理 Issue、PR、仓库",
       "transport": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-github"
-      ],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here"
-      },
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here" },
       "enabled": false
     }
   },
   "active_servers": [],
   "settings": {
-    "connection_timeout": 30,
-    "tool_execution_timeout": 60,
+    "connection_timeout": 60,
+    "tool_execution_timeout": 120,
     "auto_retry": true,
     "max_retries": 2
   }

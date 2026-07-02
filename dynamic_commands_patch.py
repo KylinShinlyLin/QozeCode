@@ -12,6 +12,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from skills.skills_tui_integration import SkillsTUIHandler
 from typing import List, Tuple
+import json
+from pathlib import Path
 
 
 class DynamicCommandsGenerator:
@@ -28,6 +30,8 @@ class DynamicCommandsGenerator:
             ("/mcp", "显示 MCP 系统帮助"),
             ("/mcp list", "列出所有 MCP 服务及状态"),
             ("/mcp status", "显示 MCP 连接状态"),
+            ("/mcp activate", "激活指定的 MCP 服务"),
+            ("/mcp deactivate", "反激活指定的 MCP 服务"),
             ("/skills", "显示技能系统帮助"),
             ("/skills list", "列出所有可用技能"),
             ("/skills status", "显示技能系统状态"),
@@ -68,6 +72,26 @@ class DynamicCommandsGenerator:
                 ("/skills enable", "启用指定技能"),
                 ("/skills disable", "禁用指定技能"),
             ])
+
+        # ─── 动态 MCP 命令（像 skills 一样列出 enable/disable） ───
+        try:
+            mcp_config_file = Path.home() / ".qoze" / "mcp_config.json"
+            if mcp_config_file.exists():
+                with open(mcp_config_file) as f:
+                    mcp_cfg = json.load(f)
+                servers = mcp_cfg.get("servers", {})
+                active = mcp_cfg.get("active_servers", [])
+                for name, info in servers.items():
+                    enabled = info.get("enabled", True)
+                    if not enabled:
+                        continue
+                    desc = info.get("description", name)
+                    if name in active:
+                        commands.append((f"/mcp disable {name}", f"🟢 {desc[:40]}"))
+                    else:
+                        commands.append((f"/mcp enable {name}", f"⚪ {desc[:40]}"))
+        except Exception:
+            pass
 
         return commands
 
@@ -116,6 +140,36 @@ class DynamicCommandsGenerator:
 
         return base_skills_commands
 
+    def get_mcp_commands(self, search_term: str = "") -> List[Tuple[str, str]]:
+        """获取 MCP 相关的命令列表（用于 mcp 开头的输入）"""
+        base_mcp_commands = [
+            ("mcp", "显示 MCP 系统帮助"),
+            ("mcp list", "列出所有 MCP 服务及状态"),
+            ("mcp status", "显示 MCP 连接状态"),
+            ("mcp activate", "激活指定的 MCP 服务（别名: enable）"),
+            ("mcp deactivate", "反激活指定的 MCP 服务（别名: disable）"),
+        ]
+
+        try:
+            mcp_config_file = Path.home() / ".qoze" / "mcp_config.json"
+            if mcp_config_file.exists():
+                with open(mcp_config_file) as f:
+                    mcp_cfg = json.load(f)
+                servers = mcp_cfg.get("servers", {})
+                active = mcp_cfg.get("active_servers", [])
+                for name, info in servers.items():
+                    if not info.get("enabled", True):
+                        continue
+                    desc = info.get("description", name)[:40]
+                    if name in active:
+                        base_mcp_commands.append((f"mcp disable {name}", f"禁用 {desc} 🟢"))
+                    else:
+                        base_mcp_commands.append((f"mcp enable {name}", f"启用 {desc} ⚪"))
+        except Exception:
+            pass
+
+        return base_mcp_commands
+
 
 def get_dynamic_commands():
     """供外部调用的函数"""
@@ -127,6 +181,12 @@ def get_skills_commands(search_term=""):
     """供外部调用的函数 - 获取技能相关命令"""
     generator = DynamicCommandsGenerator()
     return generator.get_skills_commands(search_term)
+
+
+def get_mcp_commands(search_term=""):
+    """供外部调用的函数 - 获取 MCP 相关命令"""
+    generator = DynamicCommandsGenerator()
+    return generator.get_mcp_commands(search_term)
 
 
 if __name__ == "__main__":
