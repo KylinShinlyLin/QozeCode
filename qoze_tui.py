@@ -140,7 +140,6 @@ class Qoze(App):
         self._stream_base_tokens = 0
         self._processing_suggestion = False
 
-
         self._last_scroll_time = 0
         self._scroll_throttle_ms = 50
         self._scroll_accumulator = 0
@@ -851,7 +850,6 @@ class Qoze(App):
                 sm = skills_tui_handler.skill_manager
                 if hasattr(sm, 'active_skills'):
                     active_skills = list(sm.active_skills)
-
 
             rounds = sum(1 for m in filtered if m["role"] == "user")
 
