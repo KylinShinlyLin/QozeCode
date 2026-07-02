@@ -197,6 +197,11 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         section = "KimiCode"
         required_keys = ["api_key"]
 
+    # 11. Azure (DeepSeek)
+    elif model_identifier in ("DeepSeek-V4-Pro", "Azure"):
+        section = "Azure"
+        required_keys = ["api_key"]
+
     # 11. Xiaomi (MiMo)
     elif model_identifier in ("mimo-v2.5-pro", "Xiaomi"):
         section = "Xiaomi"
@@ -222,6 +227,9 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
     if section == "KimiCode":
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
+    if section == "Azure":
+        creds["base_url"] = cfg.get(section, "base_url", fallback=None)
+        creds["model_name"] = cfg.get(section, "model_name", fallback="DeepSeek-V4-Pro")
     if section == "Xiaomi":
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
 

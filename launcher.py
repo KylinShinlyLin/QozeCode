@@ -66,6 +66,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     choices = [
         # "gemini-3-flash     (think)     vertex-ai",
         # "kimi-k2.5                      MoonShot",
+        "DeepSeek-V4-Pro     (think)    Azure",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
         "kimi-for-coding    (think)     MoonShot",
@@ -115,6 +116,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             provider = ModelProvider.LITELLM
         elif "bedrock" in selected:
             provider = ModelProvider.BEDROCK
+        elif "Azure" in selected:
+            provider = ModelProvider.AZURE
         elif "DeepSeek" in selected:
             provider = ModelProvider.DEEPSEEK
         elif "OpenAI" in selected:
@@ -157,6 +160,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.KIMI_FOR_CODING
         elif "kimi-k2.5" in selected:
             model_type = ModelType.KIMI_K2_5
+        elif "DeepSeek-V4-Pro" in selected:
+            model_type = ModelType.DEEPSEEK_V4_PRO_AZURE
         elif "deepseek-v4-pro" in selected:
             model_type = ModelType.DEEPSEEK_REASONER
         elif "deepseek-v4-flash" in selected:

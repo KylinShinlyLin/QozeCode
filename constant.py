@@ -44,6 +44,12 @@ api_key=
 [jina]
 api_key=
 
+[Azure]
+api_key=
+base_url=https://glowise-foundry.openai.azure.com/openai/v1
+model_name=DeepSeek-V4-Pro
+
+
 [Xiaomi]
 api_key=
 base_url=https://api.xiaomimimo.com/v1

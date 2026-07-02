@@ -54,6 +54,12 @@ base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
 [jina]
 api_key=
 
+[Azure]
+api_key=
+base_url=https://glowise-foundry.openai.azure.com/openai/v1
+model_name=DeepSeek-V4-Pro
+
+
 [Xiaomi]
 api_key=
 base_url=https://api.xiaomimimo.com/v1

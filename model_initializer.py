@@ -9,16 +9,17 @@ import os
 
 def patch_langchain_openai():
     """
-    Patch langchain_openai to support reasoning_content in stream response
-    This allows models like DeepSeek-R1 (via OpenAI API), GLM-5.2, etc., to return their reasoning process.
+    Patch langchain_openai to support reasoning_content in both stream and non-stream responses.
+    This allows models like DeepSeek-R1, DeepSeek-V4-Pro, GLM-5.2, etc., to return their reasoning process.
     """
     try:
         from langchain_openai.chat_models import base as chat_models_base
-        from langchain_openai.chat_models.base import AIMessageChunk
+        from langchain_openai.chat_models.base import AIMessageChunk, AIMessage
 
         if hasattr(chat_models_base, "_is_patched_for_reasoning"):
             return
 
+        # --- Patch 1: Streaming path (_convert_delta_to_message_chunk) ---
         original_convert = chat_models_base._convert_delta_to_message_chunk
 
         def patched_convert_delta_to_message_chunk(_dict, default_class):
@@ -28,6 +29,17 @@ def patch_langchain_openai():
             return chunk
 
         chat_models_base._convert_delta_to_message_chunk = patched_convert_delta_to_message_chunk
+
+        # --- Patch 2: Non-streaming path (_convert_dict_to_message) ---
+        original_dict_to_msg = chat_models_base._convert_dict_to_message
+
+        def patched_convert_dict_to_message(_dict):
+            msg = original_dict_to_msg(_dict)
+            if "reasoning_content" in _dict and isinstance(msg, AIMessage):
+                msg.additional_kwargs["reasoning_content"] = _dict["reasoning_content"]
+            return msg
+
+        chat_models_base._convert_dict_to_message = patched_convert_dict_to_message
         chat_models_base._is_patched_for_reasoning = True
     except ImportError:
         pass
@@ -323,6 +335,21 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             return llm
         except ImportError:
             print("❌ 缺少 langchain_openai 依赖")
+            raise
+
+    elif provider == ModelProvider.AZURE:
+        try:
+            from langchain_openai import ChatOpenAI
+            creds = ensure_model_credentials(model_type.value)
+            llm = ChatOpenAI(
+                model=creds.get("model_name", "DeepSeek-V4-Pro"),
+                api_key=creds["api_key"],
+                base_url=creds.get("base_url") or "https://glowise-foundry.openai.azure.com/openai/v1",
+                reasoning_effort="max",
+            )
+            return llm
+        except ImportError:
+            print("❌ 缺少 langchain_openai 依赖，请安装: pip install langchain-openai")
             raise
 
     elif provider == ModelProvider.XIAOMI:
