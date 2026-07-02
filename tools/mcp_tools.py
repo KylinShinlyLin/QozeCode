@@ -4,7 +4,7 @@ QozeCode MCP Tools - LLM 可调用的 MCP 管理工具
 """
 
 from langchain_core.tools import tool
-from shared_console import console
+from shared_console import console, is_tui_mode
 
 
 # 全局 MCP 管理器实例（由 qoze_code_agent.py 注入）
@@ -23,6 +23,12 @@ def get_mcp_manager():
     if _mcp_manager is None:
         raise RuntimeError("MCPManager not initialized")
     return _mcp_manager
+
+
+def _log(msg: str, style: str = "dim"):
+    """仅在非 TUI 模式下输出日志到终端"""
+    if not is_tui_mode():
+        console.print(f"[{style}]{msg}[/{style}]")
 
 
 @tool
@@ -58,14 +64,14 @@ async def list_mcp_servers() -> str:
 
         result = "\n".join(lines)
 
-        # 同时显示在控制台
-        console.print(f"[dim]{result}[/dim]")
+        # 仅在非 TUI 模式下显示到控制台
+        _log(result)
 
         return result
 
     except Exception as e:
         error_msg = f"[MCP_ERROR] 获取 MCP 服务列表失败: {str(e)}"
-        console.print(f"[red]{error_msg}[/red]")
+        _log(error_msg, "red")
         return error_msg
 
 
@@ -92,10 +98,10 @@ async def activate_mcp_server(server_name: str) -> str:
             # 检测 Chrome 远程调试端口
             check = subprocess.run(
                 ["curl", "-s", "--max-time", "2", "http://127.0.0.1:9222/json/version"],
-                capture_output=True
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
             if check.returncode != 0:
-                console.print("[yellow]MCP: Chrome 未运行，正在自动启动...[/yellow]")
+                _log("MCP: Chrome 未运行，正在自动启动...", "yellow")
                 # 尝试通过便捷脚本启动
                 if os.path.exists(chrome_script):
                     subprocess.run(["bash", chrome_script, "start"],
@@ -117,7 +123,7 @@ async def activate_mcp_server(server_name: str) -> str:
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                     )
                     if r.returncode == 0:
-                        console.print("[green]MCP: Chrome 独立实例已就绪[/green]")
+                        _log("MCP: Chrome 独立实例已就绪", "green")
                         break
 
         # 统一调用激活（无论 Chrome 是否已在运行）
@@ -130,13 +136,9 @@ async def activate_mcp_server(server_name: str) -> str:
                 # 冲突检测：内置工具优先
                 if tool_obj.name in tools_by_name:
                     prefixed_name = f"{server_name}__{tool_obj.name}"
-                    console.print(
-                        f"[yellow]MCP: Tool name conflict '{tool_obj.name}' → "
-                        f"'{prefixed_name}'[/yellow]"
-                    )
+                    _log(f"MCP: Tool name conflict '{tool_obj.name}' → '{prefixed_name}'", "yellow")
                     tools_by_name.pop(tool_obj.name, None)
                     _ASYNC_TOOL_NAMES.discard(tool_obj.name)
-                    # 注意：langchain tool name 不可变，这里只处理冲突提示
                 tools_by_name[tool_obj.name] = tool_obj
                 _ASYNC_TOOL_NAMES.add(tool_obj.name)
 
@@ -147,12 +149,12 @@ async def activate_mcp_server(server_name: str) -> str:
                 import qoze_code_agent
                 qoze_code_agent.llm_with_tools = llm.bind_tools(all_tools)
 
-        console.print(f"[green]MCP: {msg}[/green]")
+        _log(f"MCP: {msg}", "green")
         return msg
 
     except Exception as e:
         error_msg = f"[MCP_ERROR] 激活 MCP 服务失败: {str(e)}"
-        console.print(f"[red]{error_msg}[/red]")
+        _log(error_msg, "red")
         return error_msg
 
 
@@ -188,10 +190,10 @@ async def deactivate_mcp_server(server_name: str) -> str:
                 import qoze_code_agent
                 qoze_code_agent.llm_with_tools = llm.bind_tools(all_tools)
 
-        console.print(f"[yellow]MCP: {msg}[/yellow]")
+        _log(f"MCP: {msg}", "yellow")
         return msg
 
     except Exception as e:
         error_msg = f"[MCP_ERROR] 反激活 MCP 服务失败: {str(e)}"
-        console.print(f"[red]{error_msg}[/red]")
+        _log(error_msg, "red")
         return error_msg

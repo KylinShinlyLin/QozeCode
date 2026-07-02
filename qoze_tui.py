@@ -989,15 +989,14 @@ class Qoze(App):
 def main():
     import shared_console
 
+    # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
+    shared_console.set_tui_mode(True)
+
     launcher.ensure_config()
     selection = launcher.get_model_choice()
     if not selection:
         return
     provider, model_type = selection
-
-    # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
-    null_file = open(os.devnull, "w")
-    shared_console.console.file = null_file
 
     # 清屏
     os.system("cls" if os.name == "nt" else "clear")

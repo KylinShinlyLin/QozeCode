@@ -102,12 +102,6 @@ async def read_url(url: str) -> str:
         or an error message if the request fails.
     """
 
-    # 读取代理配置
-    proxy_cfg = config_manager.get_proxy_config()
-    proxy_url = None
-    if proxy_cfg:
-        proxy_url = f"socks5://{proxy_cfg['host']}:{proxy_cfg['port']}"
-
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
     }
@@ -144,7 +138,7 @@ async def read_url(url: str) -> str:
             task = progress.add_task(
                 f"[bold dim cyan]访问页面: {url[:66]}{'...' if len(url) > 66 else ''}[/bold dim cyan]", total=None)
 
-            async with httpx.AsyncClient(timeout=15.0, proxy=proxy_url) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 try:
                     markdown_content = await asyncio.wait_for(_fetch_with_jina(client), timeout=15)
                     source_info = "通过 Jina Reader API 解析"

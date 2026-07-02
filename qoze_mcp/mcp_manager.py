@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 from langchain_core.tools import BaseTool
-from shared_console import console
+from shared_console import console, is_tui_mode
 
 from .mcp_client import MCPClientWrapper
 
@@ -89,12 +89,14 @@ class MCPManager:
             # 更新 client wrapper 设置
             self._client_wrapper = MCPClientWrapper(self._settings)
 
-            console.print(
-                f"[dim]MCP: {len(self._servers)} server(s) configured, "
-                f"{len(self._active_servers)} active[/dim]"
-            )
+            if not is_tui_mode():
+                console.print(
+                    f"[dim]MCP: {len(self._servers)} server(s) configured, "
+                    f"{len(self._active_servers)} active[/dim]"
+                )
         except Exception as e:
-            console.print(f"[yellow]MCP: Failed to load config: {e}[/yellow]")
+            if not is_tui_mode():
+                console.print(f"[yellow]MCP: Failed to load config: {e}[/yellow]")
 
     def _save_config(self) -> None:
         """保存配置到 ~/.qoze/mcp_config.json"""
@@ -125,7 +127,8 @@ class MCPManager:
             with open(self._config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            console.print(f"[red]MCP: Failed to save config: {e}[/red]")
+            if not is_tui_mode():
+                console.print(f"[red]MCP: Failed to save config: {e}[/red]")
 
     # ─── 自动激活 ─────────────────────────────────────────
 
@@ -146,32 +149,36 @@ class MCPManager:
 
         # 确定要激活的服务列表
         if self._active_servers:
-            # 之前有激活过的，恢复它们
             targets = [name for name in self._active_servers
                        if name in self._servers and self._servers[name].enabled]
         else:
-            # 首次启动，激活所有 enabled 的服务
             targets = [name for name, s in self._servers.items()
                        if s.enabled]
 
         if not targets:
-            console.print("[dim]MCP: No servers to auto-activate[/dim]")
+            if not is_tui_mode():
+                console.print("[dim]MCP: No servers to auto-activate[/dim]")
             return []
 
-        console.print(f"[dim]MCP: Auto-activating {len(targets)} server(s): {', '.join(targets)}...[/dim]")
+        if not is_tui_mode():
+            console.print(f"[dim]MCP: Auto-activating {len(targets)} server(s): {', '.join(targets)}...[/dim]")
 
         for name in targets:
             try:
                 tools, msg = await self.activate_server(name)
                 if tools:
                     all_tools.extend(tools)
-                    console.print(f"[green]  ✓ {name}: {len(tools)} tool(s)[/green]")
+                    if not is_tui_mode():
+                        console.print(f"[green]  ✓ {name}: {len(tools)} tool(s)[/green]")
                 elif "ALREADY_ACTIVE" in msg:
-                    console.print(f"[dim]  {name}: already active[/dim]")
+                    if not is_tui_mode():
+                        console.print(f"[dim]  {name}: already active[/dim]")
                 else:
-                    console.print(f"[yellow]  ⚠ {name}: {msg}[/yellow]")
+                    if not is_tui_mode():
+                        console.print(f"[yellow]  ⚠ {name}: {msg}[/yellow]")
             except Exception as e:
-                console.print(f"[red]  ✗ {name}: {e}[/red]")
+                if not is_tui_mode():
+                    console.print(f"[red]  ✗ {name}: {e}[/red]")
 
         return all_tools
 
@@ -216,7 +223,7 @@ class MCPManager:
 
     async def activate_server(self, name: str) -> tuple:
         """激活 MCP 服务：启动连接 + 加载工具
-        
+
         Returns:
             (List[BaseTool], str): 工具列表和状态消息
         """
@@ -244,10 +251,11 @@ class MCPManager:
             self._save_config()
 
             tool_names = [t.name for t in tools]
-            console.print(
-                f"[green]MCP: Activated '{name}' - {len(tools)} tool(s): "
-                f"{', '.join(tool_names)}[/green]"
-            )
+            if not is_tui_mode():
+                console.print(
+                    f"[green]MCP: Activated '{name}' - {len(tools)} tool(s): "
+                    f"{', '.join(tool_names)}[/green]"
+                )
 
             return tools, (
                 f"[MCP_ACTIVATED] 服务 '{name}' 已激活！\n"
@@ -259,7 +267,7 @@ class MCPManager:
 
     async def deactivate_server(self, name: str) -> tuple:
         """反激活 MCP 服务：断开连接 + 卸载工具
-        
+
         Returns:
             (List[BaseTool], str): 被卸载的工具列表和状态消息
         """
@@ -283,7 +291,8 @@ class MCPManager:
                 self._loaded_tools = {}
                 await self._client_wrapper.connect_all(active_configs)
 
-        console.print(f"[yellow]MCP: Deactivated '{name}'[/yellow]")
+        if not is_tui_mode():
+            console.print(f"[yellow]MCP: Deactivated '{name}'[/yellow]")
         return removed_tools, f"[MCP_DEACTIVATED] 服务 '{name}' 已反激活，卸载 {len(removed_tools)} 个工具"
 
     async def get_active_tools(self) -> List[BaseTool]:
@@ -294,60 +303,32 @@ class MCPManager:
         # 如果还没加载过工具，批量连接所有激活服务
         if not self._loaded_tools:
             active_configs = {
-                name: self._servers[name]
-                for name in self._active_servers
-                if name in self._servers and self._servers[name].enabled
+                n: self._servers[n]
+                for n in self._active_servers
+                if n in self._servers
             }
             if active_configs:
-                all_tools = await self._client_wrapper.connect_all(active_configs)
-                # 按服务名分配工具（简单策略：所有工具归第一个服务）
-                # TODO: langchain-mcp-adapters 可能提供按服务分组的 API
-                if active_configs:
-                    first_name = list(active_configs.keys())[0]
-                    self._loaded_tools[first_name] = all_tools
-                return all_tools
+                tools = await self._client_wrapper.connect_all(active_configs)
+                # 按服务名分组存储
+                for name in active_configs:
+                    self._loaded_tools[name] = [
+                        t for t in tools
+                        if any(t.name in [tt.name for tt in self._loaded_tools.get(name, [])] or True)
+                    ]
+                # 简化：全部归到第一个服务名下
+                if tools and self._active_servers:
+                    self._loaded_tools[self._active_servers[0]] = tools
 
+        # 返回所有工具
         all_tools = []
-        for tools in self._loaded_tools.values():
-            all_tools.extend(tools)
+        for tool_list in self._loaded_tools.values():
+            all_tools.extend(tool_list)
         return all_tools
 
     async def reload_config(self) -> tuple:
-        """热加载配置：重新读取 mcp_config.json 并重连
-        
-        Returns:
-            (List[BaseTool], str): 新工具列表和状态消息
-        """
-        # 记录旧状态
-        old_active = set(self._active_servers)
-
-        # 重新加载
+        """热加载配置文件，重新连接所有服务"""
         self._loaded_tools.clear()
-        await self._client_wrapper.disconnect_all()
-        self._servers.clear()
-        self._active_servers = []
+        self._active_servers.clear()
         self._load_config()
-
-        # 重新激活
-        new_active = set(self._active_servers)
-        activated = new_active - old_active
-        deactivated = old_active - new_active
-
-        tools = await self.get_active_tools()
-
-        msg = "[MCP_RELOADED] 配置已重新加载"
-        if activated:
-            msg += f"，新增激活: {', '.join(activated)}"
-        if deactivated:
-            msg += f"，已反激活: {', '.join(deactivated)}"
-        msg += f"，共 {len(tools)} 个工具可用"
-
-        return tools, msg
-
-    @property
-    def has_servers(self) -> bool:
-        return len(self._servers) > 0
-
-    @property
-    def has_active_servers(self) -> bool:
-        return len(self._active_servers) > 0
+        tools = await self.auto_activate_all()
+        return tools, "配置已重载"

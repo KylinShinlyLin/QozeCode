@@ -226,22 +226,12 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
         try:
             # 延迟导入重依赖
             from langchain_openai import ChatOpenAI
-            import httpx
-
-            # 配置代理
-            proxies = {
-                "http://": "socks5://us1-proxy.owll.ai:11800",
-                "https://": "socks5://us1-proxy.owll.ai:11800",
-            }
-            # 使用 httpx.Client
-            http_client = httpx.Client(proxy=proxies["https://"])
 
             # 读取 OpenAI 密钥
             creds = ensure_model_credentials("gpt-5.2")
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
             model_config = {
                 "api_key": creds["api_key"],
-                "http_client": http_client,
                 "model": "gpt-5.2"
             }
 
