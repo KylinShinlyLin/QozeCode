@@ -228,11 +228,11 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             from langchain_openai import ChatOpenAI
 
             # 读取 OpenAI 密钥
-            creds = ensure_model_credentials("gpt-5.2")
+            creds = ensure_model_credentials(model_type.value)
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
             model_config = {
                 "api_key": creds["api_key"],
-                "model": "gpt-5.2"
+                "model": model_type.value
             }
 
             llm = ChatOpenAI(**model_config)

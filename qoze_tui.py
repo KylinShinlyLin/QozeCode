@@ -151,8 +151,7 @@ class Qoze(App):
             with Vertical(id="chat-area"):
                 # 欢迎区域 - 包含 ASCII Art 和 Tips
                 with Vertical(id="welcome-panel"):
-                    yield Static(render_pixel_text("QOZE CODE", start_color="#7aa2f7", end_color="#f093c6", gap=1),
-                                 id="welcome-art")
+                    yield Static(tui_constants.QOZE_CODE_ART.strip("\n"), id="welcome-art")
                     yield Static(self._get_tips_text(), id="welcome-tips")
 
                 yield MessageList(
@@ -989,14 +988,14 @@ class Qoze(App):
 def main():
     import shared_console
 
-    # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
-    shared_console.set_tui_mode(True)
-
     launcher.ensure_config()
     selection = launcher.get_model_choice()
     if not selection:
         return
     provider, model_type = selection
+
+    # 修复 TUI 错乱: 将共享 Console 的输出重定向到空设备
+    shared_console.set_tui_mode(True)
 
     # 清屏
     os.system("cls" if os.name == "nt" else "clear")

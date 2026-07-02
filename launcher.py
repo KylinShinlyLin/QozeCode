@@ -37,17 +37,11 @@ except ImportError as e:
 
 
 def print_banner():
-    """打印像素块艺术字启动横幅"""
-    from tui_components.pixel_logo import render_pixel_text
-
-    art = render_pixel_text(
-        "QOZE CODE",
-        start_color="#7aa2f7",
-        end_color="#f093c6",
-        gap=1,
-    )
+    """打印ASCII艺术风格的启动横幅"""
+    from tui_components.tui_constants import QOZE_CODE_ART
     subtitle = Text("使用 ↑↓ 选择，回车确认", style="dim")
-    content = Align.center(art + Text("\n") + subtitle)
+    colored_art = Text(QOZE_CODE_ART.strip("\n"), style="bold bright_cyan")
+    content = Align.center(colored_art + Text("\n") + subtitle)
     # 使用 Padding 代替 Panel 去掉边框
     console.print(Padding(content, (1, 2)))
     console.print()
@@ -67,16 +61,17 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         # "gemini-3-flash     (think)     vertex-ai",
         # "kimi-k2.5                      MoonShot",
         "DeepSeek-V4-Pro    (think)     Azure",
+        "gpt-5.5                        OpenAI",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
         "kimi-for-coding    (think)     MoonShot",
         "glm-5.2                        智普",
-        "mimo-v2.5-pro      (think)     小米",
+        # "mimo-v2.5-pro      (think)     小米",
         "gemini-3.5-flash   (think)     vertex-ai",
         "gemini-3.1-pro     (think)     vertex-ai",
-        "qwen3.6-plus       (think)     Alibaba Cloud",
+        # "qwen3.6-plus       (think)     Alibaba Cloud",
         "glm-5v-turbo                   智普",
-        "gpt-5.4                        LiteLLM",
+        # "gpt-5.4                        LiteLLM",
         # "gpt-5.2                        LiteLLM",
         # "gpt-5.2-chat-latest            LiteLLM",
         # "Grok 4.1 Fast      (think)     XAI",
@@ -152,6 +147,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GROK_4_1_FAST
         elif "gpt-5.2-codex" in selected:
             model_type = ModelType.GPT_5_2_CODEX
+        elif "gpt-5.5" in selected:
+            model_type = ModelType.GPT_5_5
         elif "gpt-5.4" in selected:
             model_type = ModelType.GPT_5_4
         elif "gpt-5.2" in selected:

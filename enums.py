@@ -23,6 +23,7 @@ class ModelType(Enum):
     GEMINI_3_FLASH = "gemini-3-flash"
     GEMINI_3_5_FLASH = "gemini-3.5-flash"
     GROK_4_1_FAST = "Grok-4.1-Fast"
+    GPT_5_5 = "gpt-5.5"
     GPT_5_4 = "gpt-5.4"
     GPT_5_2 = "gpt-5.2"
     GPT_5_2_CODEX = "gpt-5.2-codex"
@@ -51,6 +52,7 @@ MODEL_VISION_SUPPORT = {
     ModelType.GEMINI_3_FLASH: True,       # Gemini 原生多模态
     ModelType.GEMINI_3_5_FLASH: True,     # Gemini 原生多模态
     ModelType.GROK_4_1_FAST: False,       # Grok API 不支持图片输入
+    ModelType.GPT_5_5: True,              # OpenAI GPT 支持视觉
     ModelType.GPT_5_4: True,              # OpenAI GPT 支持视觉
     ModelType.GPT_5_2: True,              # OpenAI GPT 支持视觉
     ModelType.GPT_5_2_CODEX: True,        # OpenAI GPT 支持视觉
@@ -81,6 +83,7 @@ MODEL_PROVIDER_MAP = {
     # ModelType.CLAUDE_4_5_HAIKU: ModelProvider.LITELLM,
     ModelType.KIMI_K2_5: ModelProvider.MOONSHOT,
     ModelType.KIMI_FOR_CODING: ModelProvider.MOONSHOT,
+    ModelType.GPT_5_5: ModelProvider.OPENAI,
     ModelType.GPT_5_4: ModelProvider.LITELLM,
     ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
     ModelType.GEMINI_3_FLASH: ModelProvider.VERTEX_AI,
