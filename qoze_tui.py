@@ -281,19 +281,19 @@ class Qoze(App):
             self.welcome_panel.remove_class("hidden")
 
     def _show_history_banner(self, stats: dict):
-        """在消息列表顶部显示历史记录恢复提示"""
+        """在消息列表顶部显示历史记录恢复提示（用户发第一条消息时自动消失）"""
         from tui_components.messages.message_list import HistoryBannerWidget
-        banner = HistoryBannerWidget(stats)
-        self.message_list.mount(banner)
+        self._history_banner = HistoryBannerWidget(stats)
+        self.message_list.mount(self._history_banner)
 
-        # 5 秒后自动消失
-        def fade_out():
-            try:
-                banner.add_class('hidden')
-            except Exception:
-                pass
-
-        self.set_timer(5.0, fade_out)
+    def _hide_history_banner(self):
+        """隐藏历史记录提示"""
+        try:
+            if hasattr(self, '_history_banner') and self._history_banner is not None:
+                self._history_banner.add_class('hidden')
+                self._history_banner = None
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Meeting Note Recorder (Ctrl+N toggle) - independent of AI agent
@@ -490,7 +490,10 @@ class Qoze(App):
             from tools.subagent_tool import reset_subagent_cache
             reset_subagent_cache()
             self.message_list.clear_messages()
+            # 清除 SQLite 中的历史 checkpoint 和消息
+            old_thread_id = self.thread_id
             self.thread_id = str(uuid.uuid4())
+            await qoze_code_agent.clear_checkpoints(old_thread_id)
             self.total_tokens = 0
             self.status_bar.update_token_count(0)
             self.show_welcome()
@@ -667,8 +670,9 @@ class Qoze(App):
 
         actual_input = init_prompt if is_init_command else user_input
 
-        # 隐藏欢迎区域，当有用户输入时
+        # 隐藏欢迎区域和加载提示，当有用户输入时
         self.hide_welcome()
+        self._hide_history_banner()
 
         self.request_indicator.start_request()
         self.query_one("#input-line").add_class("hidden")
@@ -1001,7 +1005,9 @@ class Qoze(App):
                 from tools.subagent_tool import reset_subagent_cache
                 reset_subagent_cache()
                 self.message_list.clear_messages()
+                old_thread_id = self.thread_id
                 self.thread_id = str(uuid.uuid4())
+                await qoze_code_agent.clear_checkpoints(old_thread_id)
                 self.total_tokens = 0
                 self.status_bar.update_token_count(0)
                 self.show_welcome()

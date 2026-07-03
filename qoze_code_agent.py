@@ -614,6 +614,9 @@ async def init_agent():
     os.makedirs(_sqlite_db_dir, exist_ok=True)
     _sqlite_db_path = os.path.join(_sqlite_db_dir, 'checkpoints.db')
     _sqlite_conn = await aiosqlite.connect(_sqlite_db_path)
+    # 启用 WAL 模式 + 确保写入可靠性
+    await _sqlite_conn.execute("PRAGMA journal_mode=WAL")
+    await _sqlite_conn.execute("PRAGMA synchronous=NORMAL")
     _memory = AsyncSqliteSaver(_sqlite_conn)
     agent = agent_builder.compile(checkpointer=_memory)
 
@@ -621,6 +624,11 @@ async def shutdown_agent():
     """关闭 agent 的 SQLite 连接，确保进程能正常退出。"""
     global _sqlite_conn, agent
     if _sqlite_conn is not None:
+        # 强制将 WAL 内容写回主数据库，防止数据丢失
+        try:
+            await _sqlite_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
         await _sqlite_conn.close()
         _sqlite_conn = None
     agent = None
@@ -685,6 +693,24 @@ async def get_checkpoint_stats(thread_id: str = "default_session"):
         }
     except Exception:
         return None
+
+
+async def clear_checkpoints(thread_id: str) -> bool:
+    """清除指定 thread 的所有 checkpoint 数据。
+    
+    Args:
+        thread_id: 要清除的 thread ID
+        
+    Returns:
+        bool: True 表示成功清除，False 表示 agent 未初始化或失败
+    """
+    if agent is None or agent.checkpointer is None:
+        return False
+    try:
+        await agent.checkpointer.adelete_thread(thread_id)
+        return True
+    except Exception:
+        return False
 
 
 def get_image_files(folder_path: str) -> List[str]:
