@@ -62,6 +62,47 @@ class ErrorMessageWidget(Static):
         self.update("\n".join(lines))
 
 
+class HistoryBannerWidget(Static):
+    """历史记录恢复提示组件 - 启动时显示已加载的会话历史"""
+
+    DEFAULT_CSS = """
+    HistoryBannerWidget {
+        width: 100%;
+        height: auto;
+        margin: 1 0;
+        padding: 1 2;
+        border-left: thick #7aa2f7;
+        background: #1a1d2e;
+        color: #a9b1d6;
+        content-align: left top;
+    }
+    """
+
+    def __init__(self, stats: dict, **kwargs):
+        kwargs.setdefault("markup", False)
+        super().__init__(**kwargs)
+
+        count = stats['message_count']
+        chars = stats['total_chars']
+        rounds = stats['user_msgs']
+        last_time = stats.get('last_time', '')
+        ckpt_count = stats.get('checkpoint_count', 0)
+
+        if chars >= 1000:
+            token_str = f'{chars / 1000:.1f}K'
+        else:
+            token_str = str(chars)
+
+        lines = [
+            f'📋 已恢复 {count} 条历史消息',
+            f'约 {token_str} chars · {rounds} 轮对话 · {ckpt_count} 个 checkpoint',
+        ]
+        if last_time:
+            lines.append(f'上次会话: {last_time}')
+
+        self.update('\n'.join(lines))
+
+
 class ToolResultWidget(Static):
     """工具执行结果组件 - 参考配色：成功图标green/文本cyan，失败图标red/文本red"""
 

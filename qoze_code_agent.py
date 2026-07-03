@@ -21,7 +21,9 @@ from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
 
 warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 
-from langgraph.checkpoint.memory import MemorySaver
+# from langgraph.checkpoint.memory import MemorySaver  # [回滚] 旧 MemorySaver
+import os
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 import base64
 import operator
@@ -596,8 +598,93 @@ agent_builder.add_conditional_edges(
 )
 
 # Compile the agent
-memory = MemorySaver()
-agent = agent_builder.compile(checkpointer=memory)
+# memory = MemorySaver()  # [回滚] 旧内存方案，重启丢失
+# agent = agent_builder.compile(checkpointer=memory)
+
+agent = None  # 由 init_agent() 异步初始化
+_sqlite_conn = None  # 由 shutdown_agent() 关闭
+
+async def init_agent():
+    """异步初始化 agent（使用 SQLite 持久化 checkpoint）。需要在事件循环启动后调用。"""
+    import aiosqlite
+    global agent, _sqlite_conn
+    if agent is not None:
+        return
+    _sqlite_db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.qoze', 'data')
+    os.makedirs(_sqlite_db_dir, exist_ok=True)
+    _sqlite_db_path = os.path.join(_sqlite_db_dir, 'checkpoints.db')
+    _sqlite_conn = await aiosqlite.connect(_sqlite_db_path)
+    _memory = AsyncSqliteSaver(_sqlite_conn)
+    agent = agent_builder.compile(checkpointer=_memory)
+
+async def shutdown_agent():
+    """关闭 agent 的 SQLite 连接，确保进程能正常退出。"""
+    global _sqlite_conn, agent
+    if _sqlite_conn is not None:
+        await _sqlite_conn.close()
+        _sqlite_conn = None
+    agent = None
+
+
+async def get_checkpoint_stats(thread_id: str = "default_session"):
+    """获取 checkpoint 统计信息（消息数、token 估算、时间等）。
+    
+    Returns:
+        dict | None: {message_count, total_chars, user_msgs, ai_msgs, 
+                       tool_msgs, last_time, checkpoint_count} 或 None
+    """
+    if agent is None:
+        return None
+    
+    try:
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # 统计 checkpoint 数量
+        checkpoint_count = 0
+        async for _ in agent.checkpointer.alist(config):
+            checkpoint_count += 1
+        
+        if checkpoint_count == 0:
+            return None
+        
+        # 获取最新 checkpoint 的消息（用异步 API，AsyncSqliteSaver 禁止同步调用）
+        tup = await agent.checkpointer.aget_tuple(config)
+        if tup is None:
+            return None
+        
+        channel_values = tup.checkpoint.get('channel_values', {})
+        messages = channel_values.get('messages', [])
+        if not messages:
+            return None
+        
+        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+        user_msgs = sum(1 for m in messages if isinstance(m, HumanMessage))
+        ai_msgs = sum(1 for m in messages if isinstance(m, AIMessage))
+        tool_msgs = sum(1 for m in messages if isinstance(m, ToolMessage))
+        total_chars = sum(len(str(m)) for m in messages)
+        
+        # 提取时间戳
+        last_time = None
+        ts = tup.checkpoint.get('ts', '')
+        if ts:
+            try:
+                from datetime import datetime, timezone
+                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                last_time = dt.astimezone().strftime('%m-%d %H:%M')
+            except Exception:
+                pass
+        
+        return {
+            'message_count': len(messages),
+            'total_chars': total_chars,
+            'user_msgs': user_msgs,
+            'ai_msgs': ai_msgs,
+            'tool_msgs': tool_msgs,
+            'last_time': last_time,
+            'checkpoint_count': checkpoint_count,
+        }
+    except Exception:
+        return None
 
 
 def get_image_files(folder_path: str) -> List[str]:

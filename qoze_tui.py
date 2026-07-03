@@ -217,6 +217,18 @@ class Qoze(App):
         am.on_meeting_stopped = lambda: self._on_meeting_stopped_ui()
         self._audio_poll_timer = self.set_interval(0.1, self._audio_poll)
 
+    def _safe_exit(self):
+        """安全退出：先关闭 SQLite 连接再退出，防止进程挂起"""
+
+        async def _cleanup_and_exit():
+            try:
+                await qoze_code_agent.shutdown_agent()
+            except Exception:
+                pass
+            self.exit()
+
+        self.run_worker(_cleanup_and_exit(), exclusive=True)
+
     def add_tokens(self, new_tokens: int):
         """流结束时的回调——使用精确计算替代估算值"""
         self.update_token_count()
@@ -267,6 +279,21 @@ class Qoze(App):
         """显示欢迎区域"""
         if self.welcome_panel:
             self.welcome_panel.remove_class("hidden")
+
+    def _show_history_banner(self, stats: dict):
+        """在消息列表顶部显示历史记录恢复提示"""
+        from tui_components.messages.message_list import HistoryBannerWidget
+        banner = HistoryBannerWidget(stats)
+        self.message_list.mount(banner)
+
+        # 5 秒后自动消失
+        def fade_out():
+            try:
+                banner.add_class('hidden')
+            except Exception:
+                pass
+
+        self.set_timer(5.0, fade_out)
 
     # ------------------------------------------------------------------
     # Meeting Note Recorder (Ctrl+N toggle) - independent of AI agent
@@ -388,12 +415,15 @@ class Qoze(App):
             if self.tool_status_panel:
                 self.tool_status_panel.clear_all()
             return
-        self.exit()
+        self._safe_exit()
 
     async def init_agent_worker(self):
         try:
             llm = model_initializer.initialize_llm(self.provider, self.model_type)
             qoze_code_agent.llm = llm
+
+            # 初始化 SQLite checkpointer（需在事件循环启动后）
+            await qoze_code_agent.init_agent()
 
             # ─── 初始化 MCP 管理器并加载工具 ────────────────────
             qoze_code_agent._ensure_mcp_manager()
@@ -410,6 +440,11 @@ class Qoze(App):
             self.input_box.placeholder = "Type message..."
             self.input_box.focus()
             self.status_bar.update_token_count(0)
+
+            # 检查并显示历史记录恢复提示
+            stats = await qoze_code_agent.get_checkpoint_stats(self.thread_id)
+            if stats and stats['message_count'] > 0:
+                self._show_history_banner(stats)
         except Exception as e:
             logging.exception("Initialization Failed")
             self.message_list.mount(Static(f"Initialization Failed: {e}"))
@@ -431,7 +466,7 @@ class Qoze(App):
             return
 
         if user_input.lower() in ["quit", "exit", "q"]:
-            self.exit()
+            self._safe_exit()
             return
 
         # ---- checkpoint 命令 (独立 LLM 调用，不经过 Agent StateGraph) ----
@@ -606,6 +641,7 @@ class Qoze(App):
                             f'🔌 MCP 激活结果: {result[:500]}',
                             style='bold cyan' if 'ACTIVATED' in result or 'ALREADY' in result else 'bold red'
                         )))
+
                     asyncio.create_task(do_activate())
                 else:
                     async def do_deactivate():
@@ -615,6 +651,7 @@ class Qoze(App):
                             f'🔌 MCP 反激活结果: {result[:500]}',
                             style='bold cyan' if 'DEACTIVATED' in result else 'bold yellow'
                         )))
+
                     asyncio.create_task(do_deactivate())
                 return
 
