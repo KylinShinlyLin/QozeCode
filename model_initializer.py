@@ -235,6 +235,11 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
                 "model": model_type.value
             }
 
+            # gpt-5.6-terra / gpt-5.6-luna 不支持在 /v1/chat/completions 
+            # 同时使用 function tools 和 reasoning_effort，必须设为 none
+            if model_type in (ModelType.GPT_5_6_TERRA, ModelType.GPT_5_6_LUNA):
+                model_config["reasoning_effort"] = "none"
+
             llm = ChatOpenAI(**model_config)
             return llm
         except ImportError:

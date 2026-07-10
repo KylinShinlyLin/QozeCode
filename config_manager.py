@@ -136,7 +136,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
     # 我们将其映射到对应的 Config Section
 
     # 1. OpenAI
-    if model_identifier in ("gpt-5.5", "gpt-5.2", "gpt-5.1", "gpt-5-codex", "OpenAI"):
+    if model_identifier in ("gpt-5.5", "gpt-5.2", "gpt-5.1", "gpt-5-codex", "gpt-5.6-terra", "gpt-5.6-luna", "OpenAI"):
         section = "OpenAI"
         required_keys = ["api_key"]
 
@@ -234,5 +234,3 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         creds["base_url"] = cfg.get(section, "base_url", fallback=None)
 
     return creds
-
-

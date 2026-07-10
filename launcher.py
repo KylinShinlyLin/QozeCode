@@ -60,7 +60,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     choices = [
         # "gemini-3-flash     (think)     vertex-ai",
         # "kimi-k2.5                      MoonShot",
-        "DeepSeek-V4-Pro    (think)     Azure",
+        "gpt-5.6-terra                  OpenAI",
+        "gpt-5.6-luna                   OpenAI",
         "gpt-5.5                        OpenAI",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
@@ -71,6 +72,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gemini-3.1-pro     (think)     vertex-ai",
         # "qwen3.6-plus       (think)     Alibaba Cloud",
         "glm-5v-turbo                   智普",
+        "DeepSeek-V4-Pro    (think)     Azure",
         # "gpt-5.4                        LiteLLM",
         # "gpt-5.2                        LiteLLM",
         # "gpt-5.2-chat-latest            LiteLLM",
@@ -147,6 +149,10 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GROK_4_1_FAST
         elif "gpt-5.2-codex" in selected:
             model_type = ModelType.GPT_5_2_CODEX
+        elif "gpt-5.6-terra" in selected:
+            model_type = ModelType.GPT_5_6_TERRA
+        elif "gpt-5.6-luna" in selected:
+            model_type = ModelType.GPT_5_6_LUNA
         elif "gpt-5.5" in selected:
             model_type = ModelType.GPT_5_5
         elif "gpt-5.4" in selected:

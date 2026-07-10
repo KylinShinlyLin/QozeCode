@@ -41,6 +41,8 @@ class ModelType(Enum):
     GLM_4_6 = "glm-4.6"
     GLM_5_2 = "glm-5.2"
     GLM_5V_TURBO = "glm-5v-turbo"
+    GPT_5_6_TERRA = "gpt-5.6-terra"
+    GPT_5_6_LUNA = "gpt-5.6-luna"
     MIMO_V2_5_PRO = "mimo-v2.5-pro"
     DEEPSEEK_V4_PRO_AZURE = "DeepSeek-V4-Pro"
 
@@ -68,6 +70,8 @@ MODEL_VISION_SUPPORT = {
     ModelType.GLM_5V_TURBO: True,         # GLM-5V-Turbo 多模态模型 (V=Vision)
     ModelType.MIMO_V2_5_PRO: False,       # 小米 MiMo 纯文本模型
     ModelType.DEEPSEEK_V4_PRO_AZURE: False,   # Azure DeepSeek 不支持图片输入
+    ModelType.GPT_5_6_TERRA: True,          # OpenAI GPT 支持视觉
+    ModelType.GPT_5_6_LUNA: True,           # OpenAI GPT 支持视觉
 }
 
 
@@ -100,4 +104,6 @@ MODEL_PROVIDER_MAP = {
     ModelType.GLM_4_6: ModelProvider.ZHIPU,
     ModelType.MIMO_V2_5_PRO: ModelProvider.XIAOMI,
     ModelType.DEEPSEEK_V4_PRO_AZURE: ModelProvider.AZURE,
+    ModelType.GPT_5_6_TERRA: ModelProvider.OPENAI,
+    ModelType.GPT_5_6_LUNA: ModelProvider.OPENAI,
 }
