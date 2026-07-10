@@ -1,6 +1,7 @@
 # tui_components/messages/message_list.py
 from textual.containers import ScrollableContainer
 from textual.widgets import Static
+import asyncio
 import uuid
 import time
 import sys
@@ -291,13 +292,8 @@ class MessageList(ScrollableContainer):
         _log("process_stream called")
         await self._stream_handler.process_stream(stream)
 
-    def add_user_message(self, user_message, is_command: bool = False):
-        """添加用户消息到列表
-
-        Args:
-            user_message: UserMessage 对象或纯文本字符串
-            is_command: 是否为命令消息（仅当 user_message 为字符串时使用）
-        """
+    def _create_user_message_widget(self, user_message, is_command: bool = False):
+        """标准化用户消息并创建其展示组件。"""
         if isinstance(user_message, str):
             user_message = UserMessage(
                 id=str(uuid.uuid4())[:8],
@@ -305,8 +301,40 @@ class MessageList(ScrollableContainer):
                 is_command=is_command
             )
         self._auto_scroll = True  # 用户发送消息时恢复自动跟随
-        widget = UserMessageWidget(user_message)
+        return UserMessageWidget(user_message)
+
+    def add_user_message(self, user_message, is_command: bool = False):
+        """通过兼容的异步队列路径添加用户消息。"""
+        widget = self._create_user_message_widget(user_message, is_command)
         self._add_widget(widget)
+        return widget
+
+    async def add_user_message_and_wait_for_render(self, user_message, is_command: bool = False):
+        """挂载用户消息，并等待其布局刷新和自动滚动完成。"""
+        widget = self._create_user_message_widget(user_message, is_command)
+
+        try:
+            await self.mount(widget)
+
+            render_complete = asyncio.get_running_loop().create_future()
+
+            def finish_render():
+                try:
+                    if self._auto_scroll:
+                        self.scroll_end(animate=False)
+                finally:
+                    if not render_complete.done():
+                        render_complete.set_result(None)
+
+            # 先注册回调，再请求刷新，确保本次刷新完成后才继续请求链路。
+            self.call_after_refresh(finish_render)
+            self.refresh(layout=True)
+            await render_complete
+        except Exception as exc:
+            # UI 展示异常不应阻塞 Agent 请求，保留当前容错语义。
+            _log(f"user message render barrier failed: {exc}")
+
+        return widget
 
     def add_static_text(self, text: str):
         """添加纯文本消息（如系统提示）"""

@@ -678,12 +678,13 @@ class Qoze(App):
         self.query_one("#input-line").add_class("hidden")
 
         try:
-            # 显示用户消息
+            # 先完成用户消息的首帧渲染，再开始上下文构造和 Agent 请求。
             is_cmd = user_input.startswith("/") or user_input.lower() in ["init", "clear"]
-            if is_init_command:
-                self.message_list.add_user_message("/init", is_command=True)
-            else:
-                self.message_list.add_user_message(display_input, is_command=is_cmd)
+            displayed_message = "/init" if is_init_command else display_input
+            await self.message_list.add_user_message_and_wait_for_render(
+                displayed_message,
+                is_command=is_init_command or is_cmd,
+            )
 
             image_folder = ".qoze/image"
             model_has_vision = supports_vision(self.model_type)
