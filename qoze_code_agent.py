@@ -610,7 +610,7 @@ async def init_agent():
     global agent, _sqlite_conn
     if agent is not None:
         return
-    _sqlite_db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.qoze', 'data')
+    _sqlite_db_dir = os.path.join(os.getcwd(), '.qoze', 'data')
     os.makedirs(_sqlite_db_dir, exist_ok=True)
     _sqlite_db_path = os.path.join(_sqlite_db_dir, 'checkpoints.db')
     _sqlite_conn = await aiosqlite.connect(_sqlite_db_path)
