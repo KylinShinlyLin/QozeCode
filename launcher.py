@@ -60,8 +60,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     choices = [
         # "gemini-3-flash     (think)     vertex-ai",
         # "kimi-k2.5                      MoonShot",
-        "gpt-5.6-terra (Max)            OpenAI",
-        "gpt-5.6-luna (Max)             OpenAI",
+        "gpt-5.6-terra (medium)         OpenAI",
+        "gpt-5.6-luna (medium)          OpenAI",
         "gpt-5.5                        OpenAI",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
