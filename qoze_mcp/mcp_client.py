@@ -61,8 +61,11 @@ class MCPClientWrapper:
 
         return server_config
 
-    async def connect_all(self, servers: Dict[str, "MCPServerConfig"]) -> List[BaseTool]:
+    async def connect_all(self, servers: dict) -> List[BaseTool]:
         """一次性连接所有指定的 MCP 服务并加载工具
+
+        在 TUI 模式下，会临时重定向 stderr 到 /dev/null，防止 MCP 子进程的输出
+        （如 npx 安装日志、Node.js 警告等）破坏 Textual 界面渲染。
 
         Args:
             servers: {server_name: MCPServerConfig} 字典
@@ -85,6 +88,14 @@ class MCPClientWrapper:
         if not client_config:
             return []
 
+        # TUI 模式下临时重定向 stderr，防止子进程输出破坏界面
+        _saved_stderr = None
+        _null_fd = None
+        if is_tui_mode():
+            _saved_stderr = os.dup(2)
+            _null_fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(_null_fd, 2)
+
         try:
             self._client = MultiServerMCPClient(client_config)
             tools = await asyncio.wait_for(
@@ -102,8 +113,15 @@ class MCPClientWrapper:
             if not is_tui_mode():
                 console.print(f"[yellow]MCP: Failed to load tools: {e}[/yellow]")
             return []
+        finally:
+            # 恢复 stderr
+            if _saved_stderr is not None:
+                os.dup2(_saved_stderr, 2)
+                os.close(_saved_stderr)
+            if _null_fd is not None:
+                os.close(_null_fd)
 
-    async def reconnect_all(self, servers: Dict[str, "MCPServerConfig"]) -> List[BaseTool]:
+    async def reconnect_all(self, servers: dict) -> List[BaseTool]:
         """重新连接所有服务（配置热加载后调用）"""
         await self.disconnect_all()
         return await self.connect_all(servers)

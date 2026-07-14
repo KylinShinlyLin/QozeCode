@@ -17,14 +17,30 @@ def _is_path_within_base(base: Path, target: Path) -> bool:
 
 
 def _resolve_under_cwd(path: str) -> Path:
+    """解析并校验文件路径。
+
+    允许两种安全范围：
+    1. 当前工作目录 (cwd) 内
+    2. ~/.qoze/ 目录内（技能文件、MCP 配置等）
+    """
     base = Path.cwd().resolve()
     target = Path(path).expanduser()
     if not target.is_absolute():
         target = (base / target).resolve()
     else:
         target = target.resolve()
-    if not _is_path_within_base(base, target):
-        raise ValueError("Path must be within current working directory.")
+
+    # 检查是否在允许的范围内
+    qoze_base = Path.home() / ".qoze"
+    if _is_path_within_base(base, target):
+        pass  # 在 cwd 内，允许
+    elif _is_path_within_base(qoze_base, target):
+        pass  # 在 ~/.qoze 内，允许（技能文件、配置等）
+    else:
+        raise ValueError(
+            f"Path must be within current working directory ({base}) "
+            f"or ~/.qoze/ ({qoze_base})."
+        )
     return target
 
 

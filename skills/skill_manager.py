@@ -216,15 +216,20 @@ class SkillManager:
             self._save_config()
 
     def get_active_skills_content(self) -> str:
-        """获取所有激活技能的内容（用于注入 LLM 上下文）"""
-        content_parts = []
+        """获取所有激活技能的摘要（用于注入 LLM 上下文）
 
+        只返回技能名称和描述，不返回完整 SKILL.md 内容。
+        完整内容通过 activate_skill 工具按需注入。
+        """
+        if not self.active_skills:
+            return ""
+
+        lines = [f"共 {len(self.active_skills)} 个激活技能："]
         for skill_name in self.active_skills:
             if skill_name in self.skills:
                 skill = self.skills[skill_name]
-                content_parts.append(f"\n## 🎯 Active Skill: {skill.name}\n{skill.content}")
-
-        return "\n".join(content_parts)
+                lines.append(f"- **{skill.name}**: {skill.description}")
+        return "\n".join(lines)
 
     def list_skills(self, show_all: bool = False):
         """列出技能"""

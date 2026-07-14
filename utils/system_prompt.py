@@ -365,8 +365,11 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
 
     # 添加可用技能
     if available_skills:
-        skills_list = [f"- **{name}**: {description}" for name, description in available_skills.items()]
-        context += "\n## 🎯 Available Skills System\n" + "\n".join(skills_list) + "\n"
+        # 只显示技能名称和描述（摘要），不展示完整 SKILL.md 内容
+        skills_summary = "\n".join(
+            f"- **{name}**: {desc}" for name, desc in available_skills.items()
+        )
+        context += f"\n## 🎯 Available Skills System ({len(available_skills)} 个)\n{skills_summary}\n"
 
     # 添加激活的技能
     if active_skills_content:
