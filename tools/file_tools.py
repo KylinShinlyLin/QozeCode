@@ -18,7 +18,7 @@ def _is_path_within_base(base: Path, target: Path) -> bool:
 
 def _resolve_under_cwd(path: str) -> Path:
     base = Path.cwd().resolve()
-    target = Path(path)
+    target = Path(path).expanduser()
     if not target.is_absolute():
         target = (base / target).resolve()
     else:
