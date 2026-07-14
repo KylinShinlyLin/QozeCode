@@ -59,7 +59,7 @@ from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 from tools.code_tools import analyze_project, find_symbols, trace_imports
 from tools.asr_tool import transcribe_audio
 # from tools.common_tools import ask_for_user
-from skills.skill_manager import SkillManager
+from tools.skill_tools import get_skill_manager
 from qoze_mcp.mcp_manager import MCPManager
 from utils.directory_tree import get_directory_tree
 from utils.git_context import get_git_context
@@ -131,7 +131,7 @@ def get_context_info(system_info="", system_release="", system_version="", machi
 
     global skill_manager
     if skill_manager is None:
-        skill_manager = SkillManager()
+        skill_manager = get_skill_manager()
 
     global mcp_manager
     if mcp_manager is None:
@@ -604,6 +604,7 @@ agent_builder.add_conditional_edges(
 agent = None  # 由 init_agent() 异步初始化
 _sqlite_conn = None  # 由 shutdown_agent() 关闭
 
+
 async def init_agent():
     """异步初始化 agent（使用 SQLite 持久化 checkpoint）。需要在事件循环启动后调用。"""
     import aiosqlite
@@ -619,6 +620,7 @@ async def init_agent():
     await _sqlite_conn.execute("PRAGMA synchronous=NORMAL")
     _memory = AsyncSqliteSaver(_sqlite_conn)
     agent = agent_builder.compile(checkpointer=_memory)
+
 
 async def shutdown_agent():
     """关闭 agent 的 SQLite 连接，确保进程能正常退出。"""
@@ -643,34 +645,34 @@ async def get_checkpoint_stats(thread_id: str = "default_session"):
     """
     if agent is None:
         return None
-    
+
     try:
         config = {"configurable": {"thread_id": thread_id}}
-        
+
         # 统计 checkpoint 数量
         checkpoint_count = 0
         async for _ in agent.checkpointer.alist(config):
             checkpoint_count += 1
-        
+
         if checkpoint_count == 0:
             return None
-        
+
         # 获取最新 checkpoint 的消息（用异步 API，AsyncSqliteSaver 禁止同步调用）
         tup = await agent.checkpointer.aget_tuple(config)
         if tup is None:
             return None
-        
+
         channel_values = tup.checkpoint.get('channel_values', {})
         messages = channel_values.get('messages', [])
         if not messages:
             return None
-        
+
         from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
         user_msgs = sum(1 for m in messages if isinstance(m, HumanMessage))
         ai_msgs = sum(1 for m in messages if isinstance(m, AIMessage))
         tool_msgs = sum(1 for m in messages if isinstance(m, ToolMessage))
         total_chars = sum(len(str(m)) for m in messages)
-        
+
         # 提取时间戳
         last_time = None
         ts = tup.checkpoint.get('ts', '')
@@ -681,7 +683,7 @@ async def get_checkpoint_stats(thread_id: str = "default_session"):
                 last_time = dt.astimezone().strftime('%m-%d %H:%M')
             except Exception:
                 pass
-        
+
         return {
             'message_count': len(messages),
             'total_chars': total_chars,
