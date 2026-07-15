@@ -31,7 +31,7 @@ dependencies = [
     "pyjwt>=2.10.1",
     "prompt_toolkit>=3.0.52",
     "google-auth",
-    "cryptography>=38.0.3,<47",
+    "cryptography>=38.0.3,<46.0.4",
     "colorama",
     "python-crontab",
     "textual",
