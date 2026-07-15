@@ -550,7 +550,7 @@ async def tool_node(state: dict):
     if len(tool_calls) == 1:
         result = [await _execute_one(tool_calls[0])]
     else:
-        console.print(f"[dim]⚡ 并发执行 {len(tool_calls)} 个工具调用...[/dim]")
+        # console.print(f"[dim]⚡ 并发执行 {len(tool_calls)} 个工具调用...[/dim]")
         result = await asyncio.gather(*[_execute_one(tc) for tc in tool_calls])
 
     return {"messages": result, "ask_user_question": None}
