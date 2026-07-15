@@ -39,7 +39,7 @@ dependencies = [
     "soniox",
     "python-socks[asyncio]",
     "html2text",
-    # macOS only: pyaudio    "langchain-mcp-adapters>=0.1.0",
+    "langchain-mcp-adapters>=0.1.0",
     "mcp>=1.0.0",
     "langgraph-checkpoint-sqlite"
 ]
