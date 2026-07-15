@@ -477,6 +477,46 @@ base_url=https://api.xiaomimimo.com/v1
 }
 
 # ============================================================
+# 清理旧版 QozeCode PowerShell Profile 配置
+# ============================================================
+function Remove-QozeProfilePath {
+    if (-not $PROFILE -or -not (Test-Path $PROFILE)) {
+        return $false
+    }
+
+    $lines = Get-Content -Path $PROFILE
+    $remainingLines = @()
+    $skipLines = 0
+    $removed = $false
+
+    foreach ($line in $lines) {
+        if ($line.Trim() -eq "# QozeCode PATH") {
+            # 旧版安装器写入的区块固定为标记行加三行 PowerShell 代码。
+            $skipLines = 3
+            $removed = $true
+            continue
+        }
+        if ($skipLines -gt 0) {
+            $skipLines--
+            continue
+        }
+        $remainingLines += $line
+    }
+
+    if (-not $removed) {
+        return $false
+    }
+
+    $remainingContent = $remainingLines -join [Environment]::NewLine
+    if ([string]::IsNullOrWhiteSpace($remainingContent)) {
+        Remove-Item -Force $PROFILE
+    } else {
+        Set-Content -Path $PROFILE -Value $remainingContent -Encoding UTF8
+    }
+    return $true
+}
+
+# ============================================================
 # 配置环境变量 (PATH)
 # ============================================================
 function Configure-Env {
@@ -501,34 +541,13 @@ function Configure-Env {
         Write-Success "已添加到当前会话 PATH"
     }
 
-    # --- 3. PowerShell Profile ---
-    if ($PROFILE) {
-        $profileDir = Split-Path $PROFILE -Parent
-        if (-not (Test-Path $profileDir)) {
-            New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
-        }
-        if (-not (Test-Path $PROFILE)) {
-            New-Item -ItemType File -Path $PROFILE -Force | Out-Null
-        }
-
-        $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
-        if (-not $profileContent) { $profileContent = "" }
-        if ($profileContent -notmatch [regex]::Escape("# QozeCode PATH")) {
-            Write-Info "将 PATH 配置添加到 PowerShell Profile: $PROFILE"
-@"
-
-# QozeCode PATH
-if (`$env:PATH -notmatch [regex]::Escape("$BIN_DIR")) {
-    `$env:PATH = "$BIN_DIR;`$env:PATH"
-}
-"@ | Add-Content -Path $PROFILE
-            Write-Success "已添加 PATH 配置到 PowerShell Profile"
-        } else {
-            Write-Info "PowerShell Profile 已包含 QozeCode PATH 配置"
-        }
+    # 用户 PATH 已足够支持新终端中的 qoze 命令；不再创建 PowerShell Profile，
+    # 避免 Restricted 执行策略导致每次启动 PowerShell 都报错。
+    if (Remove-QozeProfilePath) {
+        Write-Success "已移除旧版 PowerShell Profile 中的 QozeCode PATH 配置"
     }
 
-    # --- 4. 创建激活脚本 (方便手动调用) ---
+    # --- 3. 创建激活脚本 (方便手动调用) ---
     $activateScript = "$INSTALL_DIR\activate_qoze.ps1"
 @"
 # QozeCode 环境激活脚本
@@ -621,31 +640,9 @@ function Uninstall-QozeCode {
         Write-Success "已从用户 PATH 中移除"
     }
 
-    # 从 PowerShell Profile 中移除 QozeCode 相关行
-    if ($PROFILE -and (Test-Path $PROFILE)) {
-        Write-Info "从 PowerShell Profile 中移除 QozeCode 配置..."
-        $lines = Get-Content $PROFILE
-        $inBlock = $false
-        $newLines = @()
-        foreach ($line in $lines) {
-            if ($line -match "# QozeCode PATH") {
-                $inBlock = $true
-                continue
-            }
-            if ($inBlock) {
-                if ($line -match [regex]::Escape($BIN_DIR)) {
-                    continue
-                } elseif ($line.Trim() -eq "") {
-                    # 跳过紧随的空行
-                    continue
-                } else {
-                    $inBlock = $false
-                }
-            }
-            $newLines += $line
-        }
-        $newLines | Set-Content $PROFILE
-        Write-Success "已从 PowerShell Profile 中移除"
+    # 清理旧版安装器写入的 Profile 区块；不会改动用户的其它 Profile 内容。
+    if (Remove-QozeProfilePath) {
+        Write-Success "已从 PowerShell Profile 中移除 QozeCode 配置"
     }
 
     Write-Success "QozeCode 卸载完成"
