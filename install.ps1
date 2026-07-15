@@ -381,26 +381,13 @@ if exist "%VENV_QOZE%" (
 
     Write-Success "启动脚本创建完成: $launcherPath"
 
-    # 同时创建 PowerShell 启动脚本
+    # PowerShell 会优先解析同名 .ps1；在 Restricted 策略下这会阻止 qoze.cmd 启动。
+    # 仅保留 .cmd 启动器，并删除旧版安装留下的同名 PowerShell 脚本。
     $psLauncherPath = "$BIN_DIR\qoze.ps1"
-    @"
-# QozeCode PowerShell Launcher
-param(
-    [Parameter(ValueFromRemainingArguments=`$true)]
-    `$RemainingArgs
-)
-
-`$qozeExe = "$VENV_DIR\Scripts\qoze.exe"
-if (Test-Path `$qozeExe) {
-    & `$qozeExe @RemainingArgs
-} else {
-    Write-Host "[ERROR] QozeCode 入口点未找到: `$qozeExe" -ForegroundColor Red
-    Write-Host "请重新运行安装脚本。"
-    exit 1
-}
-"@ | Out-File -FilePath $psLauncherPath -Encoding UTF8
-
-    Write-Success "PowerShell 启动脚本创建完成: $psLauncherPath"
+    if (Test-Path $psLauncherPath) {
+        Remove-Item -Force $psLauncherPath
+        Write-Success "已移除旧版 PowerShell 启动脚本: $psLauncherPath"
+    }
 }
 
 # ============================================================
@@ -664,7 +651,6 @@ function Show-Debug {
 
     Write-Host "文件检查:" -ForegroundColor Cyan
     Write-Host "  启动脚本 (qoze.cmd):   $(if (Test-Path "$BIN_DIR\qoze.cmd")      {'[OK] 存在'} else {'[MISSING] 不存在'})"
-    Write-Host "  启动脚本 (qoze.ps1):   $(if (Test-Path "$BIN_DIR\qoze.ps1")      {'[OK] 存在'} else {'[MISSING] 不存在'})"
     Write-Host "  虚拟环境 qoze.exe:     $(if (Test-Path "$VENV_DIR\Scripts\qoze.exe") {'[OK] 存在'} else {'[MISSING] 不存在'})"
     Write-Host "  源码目录:              $(if (Test-Path $PROJECT_DIR)          {'[OK] 存在'} else {'[MISSING] 不存在'})"
     Write-Host "  配置文件:              $(if (Test-Path $CONFIG_FILE)          {'[OK] 存在'} else {'[MISSING] 不存在'})"
