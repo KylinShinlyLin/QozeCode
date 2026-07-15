@@ -30,7 +30,7 @@ def set_tui_mode(enabled: bool = True):
     _tui_mode = enabled
     if enabled:
         if _null_file is None:
-            _null_file = open(os.devnull, "w")
+            _null_file = open(os.devnull, "w", encoding="utf-8")
         console.file = _null_file
     else:
         console.file = sys.stdout
