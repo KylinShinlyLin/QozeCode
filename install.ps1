@@ -243,11 +243,13 @@ function Create-Venv {
 
     & $script:PythonExe -m venv $VENV_DIR
 
-    # 激活虚拟环境并升级 pip
-    $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
-    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-    . $activateScript
-    & pip install --upgrade pip
+    # 始终使用刚创建的虚拟环境解释器，避免调用父环境中的 pip。
+    $venvPython = "$VENV_DIR\Scripts\python.exe"
+    & $venvPython -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMsg "pip 升级失败"
+        exit 1
+    }
 
     Write-Success "虚拟环境创建完成"
 }
@@ -255,49 +257,105 @@ function Create-Venv {
 # ============================================================
 # 安装依赖
 # ============================================================
+function Install-Tiktoken {
+    param([string]$VenvPython)
+
+    # Windows ARM64 尚无 tiktoken 官方 wheel。优先安装官方二进制包；
+    # 不可用时安装兼容 wheel，避免 pip 回退到需要 Rust 的源码编译。
+    Write-Info "安装 tiktoken（Token 计数库，缺少官方 wheel 时使用兼容实现）..."
+    & $VenvPython -m pip install tiktoken --only-binary=:all:
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Warning "tiktoken 无预编译包（Windows ARM64 常见），安装兼容实现以跳过 Rust 编译..."
+    $stubRoot = "$INSTALL_DIR\tiktoken_stub"
+    $wheelFile = "$INSTALL_DIR\tiktoken-0.13.0-py3-none-any.whl"
+    $packageDir = "$stubRoot\tiktoken"
+    $distInfoDir = "$stubRoot\tiktoken-0.13.0.dist-info"
+
+    Remove-Item -Recurse -Force $stubRoot -ErrorAction SilentlyContinue
+    Remove-Item -Force $wheelFile -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $packageDir, $distInfoDir | Out-Null
+
+@'
+"""Minimal tiktoken compatibility implementation for platforms without a wheel."""
+__version__ = "0.13.0"
+
+class Encoding:
+    def encode(self, text, *args, **kwargs):
+        return list(str(text).encode("utf-8"))
+
+    def decode(self, tokens, *args, **kwargs):
+        return bytes(tokens).decode("utf-8", errors="replace")
+
+
+def get_encoding(*args, **kwargs):
+    return Encoding()
+
+
+def encoding_for_model(*args, **kwargs):
+    return Encoding()
+
+
+def list_encoding_names():
+    return []
+'@ | Set-Content -Path "$packageDir\__init__.py" -Encoding ASCII
+
+@'
+Metadata-Version: 2.1
+Name: tiktoken
+Version: 0.13.0
+Summary: QozeCode compatibility implementation for platforms without a tiktoken wheel
+'@ | Set-Content -Path "$distInfoDir\METADATA" -Encoding ASCII
+
+@'
+Wheel-Version: 1.0
+Generator: QozeCode install.ps1
+Root-Is-Purelib: true
+Tag: py3-none-any
+'@ | Set-Content -Path "$distInfoDir\WHEEL" -Encoding ASCII
+
+"tiktoken" | Set-Content -Path "$distInfoDir\top_level.txt" -Encoding ASCII
+New-Item -ItemType File -Force -Path "$distInfoDir\RECORD" | Out-Null
+
+    $wheelZip = "$INSTALL_DIR\tiktoken-stub.zip"
+    Remove-Item -Force $wheelZip -ErrorAction SilentlyContinue
+    Compress-Archive -Path "$stubRoot\*" -DestinationPath $wheelZip -Force
+    Move-Item -Force $wheelZip $wheelFile
+
+    & $VenvPython -m pip install --no-deps --ignore-installed $wheelFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMsg "tiktoken 兼容包安装失败"
+        exit 1
+    }
+}
+
 function Install-Dependencies {
     Write-Info "安装项目依赖..."
 
-    $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
-    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-    . $activateScript
-
-    Push-Location $PROJECT_DIR
-
-    # Windows ARM64 等平台 tiktoken（langchain-openai 的传递依赖）无预编译包且缺少 Rust 编译器
-    # 先尝试二进制安装；若失败则创建存根包骗过 pip，运行时自动回退到字符估算
-    Write-Info "安装 tiktoken（Token 计数库，安装失败不影响核心功能）..."
-    & pip install tiktoken --only-binary tiktoken 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "tiktoken 无预编译包（Windows ARM64 常见），创建存根包以跳过编译..."
-        $pkgDir = "$VENV_DIR\Lib\site-packages\tiktoken"
-        $distDir = "$VENV_DIR\Lib\site-packages\tiktoken-0.13.0.dist-info"
-        New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
-        New-Item -ItemType Directory -Force -Path $distDir | Out-Null
-        @"
-# Stub: tiktoken is not available on this platform.
-# The app uses character-based fallback for token counting (see qoze_code_agent.py).
-def get_encoding(*a, **kw): raise ImportError("tiktoken unavailable on this platform")
-def encoding_for_model(*a, **kw): raise ImportError("tiktoken unavailable on this platform")
-def list_encoding_names(*a, **kw): return []
-"@ | Out-File -FilePath "$pkgDir\__init__.py" -Encoding utf8
-        "Metadata-Version: 2.1`nName: tiktoken`nVersion: 0.13.0" | Out-File -FilePath "$distDir\METADATA" -Encoding utf8
-        "" | Out-File -FilePath "$distDir\RECORD" -Encoding utf8
-    }
-
-    Write-Info "安装核心依赖..."
-    & pip install -e .
-    if ($LASTEXITCODE -ne 0) {
-        Pop-Location
-        Write-Error "依赖安装失败，请检查网络连接和 Python 环境"
+    $venvPython = "$VENV_DIR\Scripts\python.exe"
+    if (-not (Test-Path $venvPython)) {
+        Write-ErrorMsg "虚拟环境 Python 不存在: $venvPython"
         exit 1
     }
 
-    Pop-Location
+    Push-Location $PROJECT_DIR
+    try {
+        Install-Tiktoken -VenvPython $venvPython
+
+        Write-Info "安装核心依赖..."
+        & $venvPython -m pip install -e .
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorMsg "依赖安装失败，请检查网络连接和 Python 环境"
+            exit 1
+        }
+    } finally {
+        Pop-Location
+    }
 
     Write-Success "项目依赖安装完成"
 }
-
 # ============================================================
 # 创建启动脚本 (qoze.cmd)
 # ============================================================
@@ -675,17 +733,26 @@ function Update-QozeCode {
     Check-Requirements
     Download-Source
 
-    $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
-    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-    . $activateScript
+    $venvPython = "$VENV_DIR\Scripts\python.exe"
+    if (-not (Test-Path $venvPython)) {
+        Write-ErrorMsg "虚拟环境不存在，请先运行 install"
+        exit 1
+    }
 
     Push-Location $PROJECT_DIR
-    & pip install -e . --upgrade
-    Pop-Location
+    try {
+        Install-Tiktoken -VenvPython $venvPython
+        & $venvPython -m pip install -e . --upgrade
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorMsg "QozeCode 更新失败"
+            exit 1
+        }
+    } finally {
+        Pop-Location
+    }
 
     Write-Success "QozeCode 更新完成"
 }
-
 # ============================================================
 # 主安装流程
 # ============================================================
