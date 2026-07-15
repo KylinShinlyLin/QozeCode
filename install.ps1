@@ -123,6 +123,40 @@ function Check-Requirements {
         }
     }
 
+    # 如果检测到的 Python 在 Qoze 安装目录内（用户可能在旧 venv 中运行脚本），
+    # 需要切换到系统 Python，否则后续删除旧 venv 后会导致 python.exe 丢失
+    if ($pythonCmd -like "$INSTALL_DIR*") {
+        Write-Warning "检测到 Python 来自 Qoze 虚拟环境，正在查找系统 Python..."
+        # 临时从 PATH 中移除 venv，重新查找系统 Python
+        $oldPath = $env:PATH
+        $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notlike "$INSTALL_DIR*" }) -join ';'
+        try {
+            $pythonCmd = (Get-Command python -ErrorAction Stop).Source
+        } catch {
+            try {
+                $pythonCmd = (Get-Command python3 -ErrorAction Stop).Source
+            } catch {
+                # 备选：尝试常见安装路径
+                $candidates = @(
+                    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+                    "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+                    "C:\Program Files\Python312\python.exe",
+                    "C:\Python312\python.exe"
+                )
+                $pythonCmd = $null
+                foreach ($p in $candidates) {
+                    if (Test-Path $p) { $pythonCmd = $p; break }
+                }
+                if (-not $pythonCmd) {
+                    Write-ErrorMsg "无法找到系统 Python。请先退出虚拟环境 (deactivate) 再运行安装脚本。"
+                    exit 1
+                }
+            }
+        }
+        $env:PATH = $oldPath
+        Write-Success "找到系统 Python: $pythonCmd"
+    }
+
     $pythonVersion = & $pythonCmd -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
     $versionOk = & $pythonCmd -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)"
     if ($LASTEXITCODE -ne 0) {

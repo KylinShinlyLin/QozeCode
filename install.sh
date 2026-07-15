@@ -47,9 +47,33 @@ check_requirements() {
         exit 1
     fi
 
-    python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
+    # 如果检测到的 python3 在 Qoze 安装目录内（用户可能在旧 venv 中运行脚本），
+    # 需要使用系统 Python，否则后续删除旧 venv 后 python3 会丢失
+    PYTHON3_CMD="python3"
+    PYTHON3_PATH=$(command -v python3)
+    if [[ "$PYTHON3_PATH" == "$INSTALL_DIR"* ]]; then
+        log_warning "检测到 python3 来自 Qoze 虚拟环境，正在查找系统 python3..."
+        # 临时从 PATH 中移除 venv 路径
+        SAVED_PATH="$PATH"
+        export PATH=$(echo "$PATH" | sed "s|$INSTALL_DIR/[^:]*:||g" | sed 's/:$//')
+        PYTHON3_CMD=$(command -v python3 2>/dev/null || echo "")
+        if [[ -z "$PYTHON3_CMD" ]]; then
+            # 备选：常见系统路径
+            for p in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
+                if [[ -x "$p" ]]; then PYTHON3_CMD="$p"; break; fi
+            done
+        fi
+        export PATH="$SAVED_PATH"
+        if [[ -z "$PYTHON3_CMD" ]]; then
+            log_error "无法找到系统 Python 3。请先退出虚拟环境 (deactivate) 再运行安装脚本。"
+            exit 1
+        fi
+        log_success "找到系统 python3: $PYTHON3_CMD"
+    fi
 
-    if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 9) else 1)"; then
+    python_version=$($PYTHON3_CMD -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
+
+    if ! $PYTHON3_CMD -c "import sys; exit(0 if sys.version_info >= (3, 9) else 1)"; then
         log_error "Python 版本过低 ($python_version)，需要 3.9 或更高版本"
         exit 1
     fi
@@ -121,7 +145,7 @@ create_venv() {
         rm -rf "$VENV_DIR"
     fi
 
-    python3 -m venv "$VENV_DIR"
+    $PYTHON3_CMD -m venv "$VENV_DIR"
     source "$VENV_DIR/bin/activate"
 
     # 升级 pip
