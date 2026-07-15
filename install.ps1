@@ -169,10 +169,12 @@ function Download-Source {
         Write-Warning "检测到已存在的源码，正在更新到最新版本..."
         Push-Location $PROJECT_DIR
 
-        # 中止任何可能卡住的状态
-        git merge --abort 2>$null
-        git rebase --abort 2>$null
-        git am --abort 2>$null
+        # 中止任何可能卡住的状态（忽略错误，对标 bash 的 || true）
+        $ErrorActionPreference = "Continue"
+        git merge --abort *>$null
+        git rebase --abort *>$null
+        git am --abort *>$null
+        $ErrorActionPreference = "Stop"
 
         # 获取远端、清理、强制重置
         git fetch origin $BRANCH
