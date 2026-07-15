@@ -28,6 +28,9 @@ $CONFIG_DIR    = "$env:APPDATA\qoze"
 $CONFIG_FILE   = "$CONFIG_DIR\qoze.conf"
 $PYTHON_MIN    = "3.9"
 
+# 脚本级变量：Python 可执行文件路径
+$script:PythonExe = $null
+
 # ============================================================
 # 颜色日志函数
 # ============================================================
@@ -93,21 +96,40 @@ function Check-Requirements {
         Write-Warning "检测到 Microsoft Store 占位 Python，正在尝试使用 winget 安装..."
         try {
             winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements
-            refreshenv 2>$null
-            $pythonCmd = (Get-Command python -ErrorAction Stop).Source
+            # winget 安装后，查找真实 Python 路径（避免依赖 PATH 刷新）
+            $candidates = @(
+                "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+                "$env:APPDATA\Python\Python312\python.exe",
+                "C:\Program Files\Python312\python.exe",
+                "C:\Program Files (x86)\Python312\python.exe"
+            )
+            $found = $false
+            foreach ($p in $candidates) {
+                if (Test-Path $p) {
+                    $pythonCmd = $p
+                    $found = $true
+                    break
+                }
+            }
+            if (-not $found) {
+                # 最后尝试刷新 PATH 后再找
+                $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                try { $pythonCmd = (Get-Command python -ErrorAction Stop).Source } catch { }
+            }
         } catch {
             Write-ErrorMsg "无法自动安装 Python。请手动从 https://www.python.org/downloads/ 安装。"
             exit 1
         }
     }
 
-    $pythonVersion = & python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
-    $versionOk = & python -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)"
+    $pythonVersion = & $pythonCmd -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
+    $versionOk = & $pythonCmd -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorMsg "Python 版本过低 ($pythonVersion)，需要 $PYTHON_MIN 或更高版本。"
         exit 1
     }
     Write-Success "Python 版本检查通过 ($pythonVersion)"
+    $script:PythonExe = $pythonCmd
 
     # --- 检查 Git ---
     Write-Info "检查 Git..."
@@ -184,7 +206,7 @@ function Create-Venv {
         Remove-Item -Recurse -Force $VENV_DIR
     }
 
-    & python -m venv $VENV_DIR
+    & $script:PythonExe -m venv $VENV_DIR
 
     # 激活虚拟环境并升级 pip
     $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
@@ -546,7 +568,7 @@ function Show-Debug {
     Write-Host ""
 
     Write-Host "工具检查:" -ForegroundColor Cyan
-    try { $pv = & python --version 2>&1; Write-Host "  Python:  $pv" } catch { Write-Host "  Python:  [MISSING]" -ForegroundColor Red }
+    try { $pv = & $script:PythonExe --version 2>&1; Write-Host "  Python:  $pv" } catch { Write-Host "  Python:  [MISSING]" -ForegroundColor Red }
     try { $gv = & git --version 2>&1; Write-Host "  Git:     $gv" } catch { Write-Host "  Git:     [MISSING]" -ForegroundColor Red }
     Write-Host ""
 }
