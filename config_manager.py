@@ -105,15 +105,27 @@ def _ensure_dir(path: str):
         return False
 
 
+def _read_config(path: str) -> configparser.ConfigParser:
+    """以 UTF-8 优先读取配置，并兼容旧版系统默认编码配置。"""
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(path, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        # 旧版 Windows 用户可能手动保存过 GBK 配置，保留兼容性。
+        cfg = configparser.ConfigParser()
+        cfg.read(path)
+    return cfg
+
+
 def _load_config() -> Tuple[configparser.ConfigParser, str]:
     cfg = configparser.ConfigParser()
     system_config, user_config = get_config_dirs()
     # 优先读取系统级配置，其次读取用户目录配置
     if os.path.exists(system_config):
-        cfg.read(system_config)
+        cfg = _read_config(system_config)
         return cfg, system_config
     if os.path.exists(user_config):
-        cfg.read(user_config)
+        cfg = _read_config(user_config)
         return cfg, user_config
     # 两边都不存在则创建对象，稍后保存
     return cfg, system_config
@@ -126,21 +138,21 @@ def _save_config(cfg: configparser.ConfigParser) -> str:
     # Windows 上系统路径通常不可写，直接写到用户目录
     if sys.platform == "win32":
         _ensure_dir(os.path.dirname(user_config))
-        with open(user_config, "w") as f:
+        with open(user_config, "w", encoding="utf-8") as f:
             cfg.write(f)
         return user_config
 
     # macOS/Linux: 优先尝试写入系统级配置目录
     if _ensure_dir(system_dir):
         try:
-            with open(system_config, "w") as f:
+            with open(system_config, "w", encoding="utf-8") as f:
                 cfg.write(f)
             return system_config
         except PermissionError:
             pass
     # 回退到用户目录
     _ensure_dir(os.path.dirname(user_config))
-    with open(user_config, "w") as f:
+    with open(user_config, "w", encoding="utf-8") as f:
         cfg.write(f)
     return user_config
 
