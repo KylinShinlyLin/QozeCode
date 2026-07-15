@@ -33,7 +33,6 @@ dependencies = [
     "google-auth",
     "colorama",
     "python-crontab",
-    "hnswlib",
     "textual",
     "jinja2",
     "soniox",
