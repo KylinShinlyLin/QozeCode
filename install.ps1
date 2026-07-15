@@ -169,21 +169,19 @@ function Download-Source {
         Write-Warning "检测到已存在的源码，正在更新到最新版本..."
         Push-Location $PROJECT_DIR
 
-        # 中止任何可能卡住的状态（忽略错误，对标 bash 的 || true）
+        # 中止任何可能卡住的状态 + 获取/清理/重置（统一抑制 stderr 噪音）
         $ErrorActionPreference = "Continue"
         git merge --abort *>$null
         git rebase --abort *>$null
         git am --abort *>$null
-        $ErrorActionPreference = "Stop"
-
-        # 获取远端、清理、强制重置
-        git fetch origin $BRANCH
-        git clean -fdx
-        git checkout --quiet -f $BRANCH 2>$null
+        git fetch origin $BRANCH *>$null
+        git clean -fdx *>$null
+        git checkout --quiet -f $BRANCH *>$null
         if ($LASTEXITCODE -ne 0) {
-            git checkout --quiet -f -b $BRANCH "origin/$BRANCH" 2>$null
+            git checkout --quiet -f -b $BRANCH "origin/$BRANCH" *>$null
         }
-        git reset --hard "origin/$BRANCH"
+        git reset --hard "origin/$BRANCH" *>$null
+        $ErrorActionPreference = "Stop"
 
         Pop-Location
     } else {
