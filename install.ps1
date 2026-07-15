@@ -179,9 +179,9 @@ function Download-Source {
         # 获取远端、清理、强制重置
         git fetch origin $BRANCH
         git clean -fdx
-        git checkout -f $BRANCH 2>$null
+        git checkout --quiet -f $BRANCH 2>$null
         if ($LASTEXITCODE -ne 0) {
-            git checkout -f -b $BRANCH "origin/$BRANCH" 2>$null
+            git checkout --quiet -f -b $BRANCH "origin/$BRANCH" 2>$null
         }
         git reset --hard "origin/$BRANCH"
 
