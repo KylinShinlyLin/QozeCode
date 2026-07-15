@@ -600,19 +600,11 @@ class MessageStreamHandler:
         return False
 
     def _estimate_text_tokens(self, text: str) -> int:
-        """估算单段文本的 token 数，优先使用 tiktoken 精确计算"""
+        """估算单段文本的 token 数（使用字符估算，tiktoken 已禁用）"""
         if not text:
             return 0
-        try:
-            import tiktoken
-            try:
-                encoding = tiktoken.encoding_for_model("gpt-4")
-            except Exception:
-                encoding = tiktoken.get_encoding("cl100k_base")
-            return len(encoding.encode(text))
-        except Exception:
-            # fallback: 混合文本（中英文）约 0.4 tokens/char
-            return int(len(text) * 0.4)
+        # fallback: 混合文本（中英文）约 0.4 tokens/char
+        return int(len(text) * 0.4)
 
     def _estimate_total_tokens(self) -> int:
         """估算当前所有累积内容（content + thinking + tool_calls）的 token 总数"""

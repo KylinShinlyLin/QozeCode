@@ -272,14 +272,7 @@ function Install-Dependencies {
         exit 1
     }
 
-    # tiktoken 在 Windows ARM64 上需要 Rust 编译器从源码编译，作为可选依赖安装
-    Write-Info "安装可选依赖: tiktoken (Token 计数，安装失败不影响核心功能)..."
-    & pip install tiktoken 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "tiktoken 安装失败（Windows ARM64 需要 Rust 编译器），将使用字符估算作为 fallback"
-    } else {
-        Write-Success "tiktoken 安装成功"
-    }
+    # tiktoken 已移除（Windows ARM64 等平台缺少 Rust 编译器无法安装，Token 计数统一使用字符估算）
 
     Pop-Location
 

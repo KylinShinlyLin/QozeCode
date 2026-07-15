@@ -10,7 +10,7 @@ class StatusBar(Static):
         self.state_desc = "Idle"
         self.state_style = None
         self.token_count = 0
-        self.tiktoken_available = True
+        self.tiktoken_available = False
 
     def update_state(self, state, style=None):
         self.state_desc = state

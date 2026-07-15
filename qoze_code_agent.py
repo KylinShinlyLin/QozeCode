@@ -29,6 +29,7 @@ import base64
 import operator
 import platform
 import traceback
+import json
 from typing import Literal, List
 from langchain_core.messages import AnyMessage
 from langchain_core.messages import HumanMessage
@@ -756,96 +757,16 @@ def reset_conversation_state():
 
 
 def is_tiktoken_available() -> bool:
-    """检测 tiktoken 是否可用（是否有预编译包或 Rust 编译器）"""
-    try:
-        import tiktoken
-        tiktoken.get_encoding("cl100k_base")
-        return True
-    except Exception:
-        return False
+    """检测 tiktoken 是否可用（已禁用，tiktoken 在 Windows ARM64 等平台上需要 Rust 编译器）"""
+    return False
 
 
 def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
     """
     估算消息的 token 数量
-    优先使用 tiktoken 进行精确计算，如果失败则使用字符估算
+    使用字符数估算（tiktoken 已禁用）
     计算范围包括：content、tool_calls、thinking/reasoning_content
     """
-    total_tokens = 0
-
-    # 尝试使用 tiktoken 进行精确计算
-    try:
-        import tiktoken
-        import json
-
-        # 尝试获取对应模型的编码器
-        try:
-            encoding = tiktoken.encoding_for_model(model)
-        except (KeyError, Exception):
-            # 如果模型未识别或出错，使用 cl100k_base（适用于 GPT-4, GPT-3.5 等）
-            try:
-                encoding = tiktoken.get_encoding("cl100k_base")
-            except Exception:
-                # tiktoken 初始化失败（如网络问题），回退到字符估算
-                raise ImportError("tiktoken initialization failed")
-
-        for msg in messages:
-            msg_tokens = 0
-
-            # 1. 计算 content
-            if hasattr(msg, 'content'):
-                content = msg.content
-                if isinstance(content, str):
-                    msg_tokens += len(encoding.encode(content))
-                elif isinstance(content, list):
-                    # 多模态消息，计算文本部分
-                    for item in content:
-                        if isinstance(item, dict):
-                            if item.get('type') == 'text':
-                                text = item.get('text', '')
-                                msg_tokens += len(encoding.encode(text))
-                            elif item.get('type') == 'image_url':
-                                # 图片粗略估算 (gpt-4o 等模型)
-                                msg_tokens += 1000
-
-            # 2. 计算 tool_calls (AIMessage 的工具调用参数)
-            tool_calls = getattr(msg, 'tool_calls', None)
-            if tool_calls:
-                for tc in tool_calls:
-                    tc_text = json.dumps(tc, ensure_ascii=False)
-                    msg_tokens += len(encoding.encode(tc_text))
-
-            # 3. 计算 thinking / reasoning_content
-            reasoning = ""
-            if hasattr(msg, 'additional_kwargs') and msg.additional_kwargs:
-                for key in ['reasoning_content', 'thinking', 'thought', 'reasoning']:
-                    if key in msg.additional_kwargs:
-                        val = msg.additional_kwargs[key]
-                        if isinstance(val, str):
-                            reasoning += val
-                        elif isinstance(val, dict):
-                            reasoning += val.get('text', '')
-            if hasattr(msg, 'reasoning_content') and msg.reasoning_content:
-                if isinstance(msg.reasoning_content, str):
-                    reasoning += msg.reasoning_content
-            if reasoning:
-                msg_tokens += len(encoding.encode(reasoning))
-
-            # 4. 每条消息有固定的开销（角色标记等）
-            if msg_tokens > 0 or tool_calls:
-                msg_tokens += 4
-
-            total_tokens += msg_tokens
-
-        # 每次回复有固定的开销
-        total_tokens += 3
-
-        return total_tokens
-
-    except (ImportError, Exception):
-        # tiktoken 不可用或初始化失败，使用字符估算作为 fallback
-        pass
-
     # Fallback：使用字符数估算
     total_chars = 0
     for msg in messages:
