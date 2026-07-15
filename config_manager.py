@@ -3,19 +3,47 @@
 - 统一在 /etc/conf/qoze.conf 维护模型密钥
 - 缺少写权限时回退到 ~/.qoze/qoze.conf，并提示用户
 - 首次选择模型时若缺少密钥，交互式提示输入并保存
+- 跨平台路径：macOS/Linux 与 Windows 使用不同的默认路径
 """
 
 import configparser
 import os
+import sys
 from typing import Tuple, Dict, Union
 
 from shared_console import console
 from enums import ModelProvider, ModelType
 
-CONFIG_DIR = "/etc/conf"
-CONFIG_FILE = os.path.join(CONFIG_DIR, "qoze.conf")
-FALLBACK_DIR = os.path.expanduser("~/.qoze")
-FALLBACK_FILE = os.path.join(FALLBACK_DIR, "qoze.conf")
+
+def _get_qoze_base_dir() -> str:
+    """
+    返回 .qoze 根目录（跨平台）
+    - macOS/Linux: ~/.qoze/
+    - Windows: %APPDATA%/qoze/
+    """
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        if not appdata:
+            appdata = os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
+        return os.path.join(appdata, "qoze")
+    else:
+        return os.path.expanduser("~/.qoze")
+
+
+def get_config_dirs() -> Tuple[str, str]:
+    """
+    返回 (system_config_path, user_config_path)
+    - macOS/Linux: system=/etc/conf/qoze.conf, user=~/.qoze/qoze.conf
+    - Windows: system=C:/ProgramData/qoze/qoze.conf, user=%APPDATA%/qoze/qoze.conf
+    """
+    if sys.platform == "win32":
+        program_data = os.environ.get("ProgramData", "C:\\ProgramData")
+        system_config = os.path.join(program_data, "qoze", "qoze.conf")
+        user_config = os.path.join(_get_qoze_base_dir(), "qoze.conf")
+    else:
+        system_config = "/etc/conf/qoze.conf"
+        user_config = os.path.join(_get_qoze_base_dir(), "qoze.conf")
+    return system_config, user_config
 
 
 def get_tavily_key() -> str:
@@ -79,31 +107,42 @@ def _ensure_dir(path: str):
 
 def _load_config() -> Tuple[configparser.ConfigParser, str]:
     cfg = configparser.ConfigParser()
-    # 优先读取 /etc/conf，其次读取用户目录
-    if os.path.exists(CONFIG_FILE):
-        cfg.read(CONFIG_FILE)
-        return cfg, CONFIG_FILE
-    if os.path.exists(FALLBACK_FILE):
-        cfg.read(FALLBACK_FILE)
-        return cfg, FALLBACK_FILE
+    system_config, user_config = get_config_dirs()
+    # 优先读取系统级配置，其次读取用户目录配置
+    if os.path.exists(system_config):
+        cfg.read(system_config)
+        return cfg, system_config
+    if os.path.exists(user_config):
+        cfg.read(user_config)
+        return cfg, user_config
     # 两边都不存在则创建对象，稍后保存
-    return cfg, CONFIG_FILE
+    return cfg, system_config
 
 
 def _save_config(cfg: configparser.ConfigParser) -> str:
-    # 优先尝试写入 /etc/conf
-    if _ensure_dir(CONFIG_DIR):
+    system_config, user_config = get_config_dirs()
+    system_dir = os.path.dirname(system_config)
+
+    # Windows 上系统路径通常不可写，直接写到用户目录
+    if sys.platform == "win32":
+        _ensure_dir(os.path.dirname(user_config))
+        with open(user_config, "w") as f:
+            cfg.write(f)
+        return user_config
+
+    # macOS/Linux: 优先尝试写入系统级配置目录
+    if _ensure_dir(system_dir):
         try:
-            with open(CONFIG_FILE, "w") as f:
+            with open(system_config, "w") as f:
                 cfg.write(f)
-            return CONFIG_FILE
+            return system_config
         except PermissionError:
             pass
-    # 回退用户目录
-    _ensure_dir(FALLBACK_DIR)
-    with open(FALLBACK_FILE, "w") as f:
+    # 回退到用户目录
+    _ensure_dir(os.path.dirname(user_config))
+    with open(user_config, "w") as f:
         cfg.write(f)
-    return FALLBACK_FILE
+    return user_config
 
 
 def get_config_path() -> str:

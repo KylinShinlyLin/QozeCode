@@ -124,8 +124,9 @@ def get_context_info(system_info="", system_release="", system_version="", machi
                - static_system_prompt: 可被缓存的静态 System Prompt
                - dynamic_context: 每次变化的动态上下文
     """
-    # 兼容 ~/.qoze/skills 下的脚本调用
-    user_qoze_path = os.path.expanduser("~/.qoze")
+    from config_manager import _get_qoze_base_dir
+    # 兼容 ~/.qoze/skills 下的脚本调用 (Windows 兼容)
+    user_qoze_path = _get_qoze_base_dir()
     if user_qoze_path not in sys.path:
         sys.path.append(user_qoze_path)
 

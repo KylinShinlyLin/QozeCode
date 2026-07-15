@@ -17,7 +17,7 @@ from textual import events
 def _copy_text_to_clipboard(text: str) -> bool:
     """将文本复制到系统剪贴板。
 
-    在 macOS 上使用 pbcopy（原生支持，所有终端可用）；
+    在 macOS 上使用 pbcopy，在 Windows 上使用 clip；
     其他平台返回 False 让调用方使用 Textual 内置方法。
 
     Returns:

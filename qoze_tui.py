@@ -53,6 +53,7 @@ try:
 except ImportError:
     skills_tui_handler = None
 
+from config_manager import _get_qoze_base_dir
 try:
     from dynamic_commands_patch import get_dynamic_commands, get_skills_commands, get_mcp_commands
 except ImportError:
@@ -534,7 +535,8 @@ class Qoze(App):
                     '  /mcp status             显示 MCP 连接状态\n'
                     '  /mcp activate <服务名>   激活指定的 MCP 服务\n'
                     '  /mcp deactivate <服务名> 反激活指定的 MCP 服务\n\n'
-                    'MCP 服务配置存放在 ~/.qoze/mcp_config.json\n'
+                    f'MCP 服务配置存放在 {_get_qoze_base_dir()}/mcp_config.json\n'
+
                     '使用 mcp_config.template.json 作为参考模板'
                 )
                 self.message_list.mount(Static(Text(help_text, style='bold cyan')))
@@ -545,7 +547,7 @@ class Qoze(App):
                 if not servers:
                     self.message_list.mount(Static(Text(
                         '当前没有配置任何 MCP 服务。\n'
-                        '参考 mcp_config.template.json 配置 ~/.qoze/mcp_config.json 添加 MCP 服务。',
+                        f'参考 mcp_config.template.json 配置 {_get_qoze_base_dir()}/mcp_config.json 添加 MCP 服务。',
                         style='dim yellow'
                     )))
                     return

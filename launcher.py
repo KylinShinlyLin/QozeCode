@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 
 from constant import template_content
 from enums import ModelProvider, ModelType
+from config_manager import _get_qoze_base_dir, get_config_dirs
 
 # 屏蔽 absl 库的 STDERR 警告
 os.environ.setdefault('ABSL_LOGGING_VERBOSITY', '1')  # 只显示 WARNING 及以上级别
@@ -20,7 +21,7 @@ os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 屏蔽 TensorFlow 信息�
 from shared_console import console
 
 START_TIME = time.perf_counter()
-LOG_DIR = os.path.expanduser("~/.qoze")
+LOG_DIR = _get_qoze_base_dir()
 LOG_FILE = os.path.join(LOG_DIR, "launcher.log")
 
 try:
@@ -196,25 +197,27 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
 
 
 def ensure_config():
-    # 区分系统环境 配置文件
-    config_dir = "/etc/conf"
-    config_file = os.path.join(config_dir, "qoze.conf")
-    fallback_dir = os.path.expanduser("~/.qoze")
-    fallback_file = os.path.join(fallback_dir, "qoze.conf")
+    """确保配置文件存在，不存在则创建。
+    优先使用系统级路径，无权限则回退到用户级路径。
+    """
+    system_config, user_config = get_config_dirs()
 
-    if os.path.exists(config_file) or os.path.exists(fallback_file):
+    if os.path.exists(system_config) or os.path.exists(user_config):
         return
 
+    # 先尝试系统级配置
     try:
-        os.makedirs(config_dir, exist_ok=True)
-        with open(config_file, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(system_config), exist_ok=True)
+        with open(system_config, "w", encoding="utf-8") as f:
             f.write(template_content)
         return
     except Exception:
         pass
+
+    # 回退到用户级配置
     try:
-        os.makedirs(fallback_dir, exist_ok=True)
-        with open(fallback_file, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(user_config), exist_ok=True)
+        with open(user_config, "w", encoding="utf-8") as f:
             f.write(template_content)
     except Exception as e:
         console.print(f"创建配置文件失败: {e}", style="red")

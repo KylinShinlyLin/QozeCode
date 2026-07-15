@@ -37,11 +37,10 @@ dependencies = [
     "textual",
     "pymupdf",
     "jinja2",
-    "playwright",
     "soniox",
     "python-socks[asyncio]",
     "html2text",
-    "pyaudio",
+    # macOS only: pyaudio
     "tiktoken",
     "langchain-mcp-adapters>=0.1.0",
     "mcp>=1.0.0",
@@ -56,4 +55,4 @@ py-modules = ["qoze_tui", "launcher", "enums", "qoze_code_agent", "model_initial
 packages = ["tools", "utils", "skills", "tui_components", "qoze_mcp"]
 
 [project.optional-dependencies]
-browser = ["playwright", "nest_asyncio"]
+macos = ["pyaudio"]

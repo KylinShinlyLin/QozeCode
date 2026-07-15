@@ -5,6 +5,8 @@ QozeCode Skills Tools - LLM 可调用的技能管理工具
 from langchain_core.tools import tool
 from skills.skill_manager import SkillManager
 from shared_console import console
+from config_manager import _get_qoze_base_dir
+import os
 from rich.table import Table
 
 # 全局技能管理器实例
@@ -163,7 +165,7 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
 
 如需重新安装，请先使用 deactivate_skill 停用后手动删除，然后重新获取安装指引。"""
 
-        install_dir = f"~/.qoze/skills/{skill_name}"
+        install_dir = os.path.join(_get_qoze_base_dir(), "skills", skill_name)
 
         # 构建安装指引
         guide_lines = [
@@ -223,13 +225,13 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             "  - ./scripts/xxx.py",
             "",
             "✅ 推荐使用以下方式之一：",
-            f"  1. 用户目录: ~/.qoze/skills/{skill_name}/scripts/xxx.py",
+            f"  1. 用户目录: {_get_qoze_base_dir()}/skills/{skill_name}/scripts/xxx.py",
             "",
             "如果技能内容中包含对其他技能的引用，例如：",
             f"  python .qoze/skills/other-skill/scripts/tool.py",
             "",
             "应该修改为：",
-            f"  python ~/.qoze/skills/other-skill/scripts/tool.py",
+            f"  python {_get_qoze_base_dir()}/skills/other-skill/scripts/tool.py",
             "",
         ]
 

@@ -3,8 +3,13 @@ QozeCode MCP Tools - LLM 可调用的 MCP 管理工具
 对标 skill_tools.py 的设计
 """
 
+import platform
+import shutil
+import asyncio
+
 from langchain_core.tools import tool
 from shared_console import console, is_tui_mode
+from config_manager import _get_qoze_base_dir
 
 
 # 全局 MCP 管理器实例（由 qoze_code_agent.py 注入）
@@ -31,6 +36,33 @@ def _log(msg: str, style: str = "dim"):
         console.print(f"[{style}]{msg}[/{style}]")
 
 
+def _get_chrome_path() -> str:
+    """跨平台检测 Chrome/Chromium 可执行文件路径。
+
+    按平台优先级依次尝试常见安装路径，始终返回一个可用路径。
+
+    Returns:
+        Chrome 可执行文件的绝对路径或可执行的命令名
+    """
+    system = platform.system()
+    if system == "Darwin":
+        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    elif system == "Windows":
+        for p in [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            __import__('os').path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe"),
+        ]:
+            if __import__('os').path.exists(p):
+                return p
+        return "chrome"  # fallback to PATH
+    else:  # Linux 等
+        for p in ["google-chrome", "chromium-browser", "chromium"]:
+            if shutil.which(p):
+                return p
+        return "google-chrome"
+
+
 @tool
 async def list_mcp_servers() -> str:
     """列出所有已配置的 MCP (Model Context Protocol) 服务及其状态。
@@ -47,7 +79,7 @@ async def list_mcp_servers() -> str:
 
         if not servers:
             return "[NO_MCP_SERVERS] 当前没有配置任何 MCP 服务。\n" \
-                   "你可以在 ~/.qoze/mcp_config.json 中配置 MCP 服务。"
+                   f"你可以在 {_get_qoze_base_dir()}/mcp_config.json 中配置 MCP 服务。"
 
         lines = ["MCP 服务列表:"]
         for name, desc in servers.items():
@@ -94,7 +126,15 @@ async def activate_mcp_server(server_name: str) -> str:
         # chrome-devtools 特殊处理：先确保独立 Chrome 实例在运行，再激活 MCP
         if server_name == "chrome-devtools":
             import subprocess, os
-            chrome_script = os.path.expanduser("~/.qoze/chrome-mcp.sh")
+
+            # 跨平台脚本路径检测
+            if platform.system() == "Windows":
+                chrome_script = os.path.join(_get_qoze_base_dir(), "chrome-mcp.ps1")
+                use_shell_script = False
+            else:
+                chrome_script = os.path.join(_get_qoze_base_dir(), "chrome-mcp.sh")
+                use_shell_script = True
+
             # 检测 Chrome 远程调试端口
             check = subprocess.run(
                 ["curl", "-s", "--max-time", "2", "http://127.0.0.1:9222/json/version"],
@@ -104,20 +144,26 @@ async def activate_mcp_server(server_name: str) -> str:
                 _log("MCP: Chrome 未运行，正在自动启动...", "yellow")
                 # 尝试通过便捷脚本启动
                 if os.path.exists(chrome_script):
-                    subprocess.run(["bash", chrome_script, "start"],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if use_shell_script:
+                        subprocess.run(["bash", chrome_script, "start"],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    else:
+                        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass",
+                                        "-File", chrome_script, "start"],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 else:
-                    # fallback: 直接启动 Chrome
+                    # fallback: 跨平台直接启动 Chrome
+                    chrome_path = _get_chrome_path()
                     subprocess.Popen(
-                        ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                        [chrome_path,
                          "--remote-debugging-port=9222",
-                         f"--user-data-dir={__import__('os').path.expanduser('~')}/.qoze/chrome-mcp-profile",
+                         f"--user-data-dir={os.path.expanduser('~')}/.qoze/chrome-mcp-profile",
                          "--no-first-run", "--no-default-browser-check"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                     )
                 # 等待 Chrome 远程调试端口就绪
                 for _ in range(10):
-                    await __import__('asyncio').sleep(1)
+                    await asyncio.sleep(1)
                     r = subprocess.run(
                         ["curl", "-s", "--max-time", "2", "http://127.0.0.1:9222/json/version"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
