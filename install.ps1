@@ -13,6 +13,7 @@
 # 错误处理
 # ============================================================
 $ErrorActionPreference = "Stop"
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force 2>$null
 
 # ============================================================
 # 配置变量
@@ -210,6 +211,7 @@ function Create-Venv {
 
     # 激活虚拟环境并升级 pip
     $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
     . $activateScript
     & pip install --upgrade pip
 
@@ -223,6 +225,7 @@ function Install-Dependencies {
     Write-Info "安装项目依赖..."
 
     $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
     . $activateScript
 
     Push-Location $PROJECT_DIR
@@ -613,6 +616,7 @@ function Update-QozeCode {
     Download-Source
 
     $activateScript = "$VENV_DIR\Scripts\Activate.ps1"
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
     . $activateScript
 
     Push-Location $PROJECT_DIR
