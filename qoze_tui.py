@@ -199,6 +199,8 @@ class Qoze(App):
             pass
         self.request_indicator = self.query_one("#request-indicator", RequestIndicator)
         self.status_bar = self.query_one(StatusBar)
+        if not qoze_code_agent.is_tiktoken_available():
+            self.status_bar.tiktoken_available = False
         self.sidebar = self.query_one("#sidebar", Sidebar)
 
         # 连接 tool_status_panel 到 message_list

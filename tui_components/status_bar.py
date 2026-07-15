@@ -10,6 +10,7 @@ class StatusBar(Static):
         self.state_desc = "Idle"
         self.state_style = None
         self.token_count = 0
+        self.tiktoken_available = True
 
     def update_state(self, state, style=None):
         self.state_desc = state
@@ -52,6 +53,8 @@ class StatusBar(Static):
             left = f" {self.state_desc} | {shortcuts}"
             result = Text(left, style="dim")
 
-        result.append(" " * 5)
-        result.append(f"Context: {token_str} tokens", style="dim")
+        # 只有 tiktoken 可用且 token_count > 0 时才显示精确的 Context tokens
+        if self.tiktoken_available and count > 0:
+            result.append(" " * 5)
+            result.append(f"Context: {token_str} tokens", style="dim")
         return result

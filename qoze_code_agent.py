@@ -755,6 +755,16 @@ def reset_conversation_state():
     conversation_state["sent_images"] = {}
 
 
+def is_tiktoken_available() -> bool:
+    """检测 tiktoken 是否可用（是否有预编译包或 Rust 编译器）"""
+    try:
+        import tiktoken
+        tiktoken.get_encoding("cl100k_base")
+        return True
+    except Exception:
+        return False
+
+
 def estimate_token_count(messages: list, model: str = "gpt-4") -> int:
     """
     估算消息的 token 数量
