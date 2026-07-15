@@ -340,7 +340,8 @@ function Configure-Env {
     Write-Info "配置环境变量..."
 
     # --- 1. 用户 PATH (持久化) ---
-    $currentUserPath = [Environment]::GetEnvironmentVariable("PATH", "User") ?? ""
+    $currentUserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (-not $currentUserPath) { $currentUserPath = "" }
     if ($currentUserPath -notmatch [regex]::Escape($BIN_DIR)) {
         Write-Info "将 $BIN_DIR 添加到用户 PATH..."
         $newUserPath = "$currentUserPath;$BIN_DIR".TrimStart(";")
@@ -367,7 +368,8 @@ function Configure-Env {
             New-Item -ItemType File -Path $PROFILE -Force | Out-Null
         }
 
-        $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue ?? ""
+        $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
+        if (-not $profileContent) { $profileContent = "" }
         if ($profileContent -notmatch [regex]::Escape("# QozeCode PATH")) {
             Write-Info "将 PATH 配置添加到 PowerShell Profile: $PROFILE"
 @"
@@ -467,7 +469,8 @@ function Uninstall-QozeCode {
     }
 
     # 从用户 PATH 中移除
-    $currentUserPath = [Environment]::GetEnvironmentVariable("PATH", "User") ?? ""
+    $currentUserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (-not $currentUserPath) { $currentUserPath = "" }
     if ($currentUserPath -match [regex]::Escape($BIN_DIR)) {
         Write-Info "从用户 PATH 中移除 $BIN_DIR ..."
         $newPath = ($currentUserPath -split ";" | Where-Object { $_ -ne $BIN_DIR }) -join ";"
@@ -528,9 +531,11 @@ function Show-Debug {
     Write-Host ""
 
     Write-Host "PATH 检查:" -ForegroundColor Cyan
-    $inUserPath = ([Environment]::GetEnvironmentVariable("PATH", "User") ?? "") -match [regex]::Escape($BIN_DIR)
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User"); if (-not $userPath) { $userPath = "" }
+    $inUserPath = $userPath -match [regex]::Escape($BIN_DIR)
     Write-Host "  用户 PATH 包含 BIN_DIR: $(if ($inUserPath) {'[OK] 是'} else {'[NO] 否'})"
-    $inSessionPath = ($env:PATH ?? "") -match [regex]::Escape($BIN_DIR)
+    $sessionPath = $env:PATH; if (-not $sessionPath) { $sessionPath = "" }
+    $inSessionPath = $sessionPath -match [regex]::Escape($BIN_DIR)
     Write-Host "  会话 PATH 包含 BIN_DIR: $(if ($inSessionPath) {'[OK] 是'} else {'[NO] 否'})"
 
     $profileStatus = "[N/A]"
