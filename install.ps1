@@ -264,15 +264,34 @@ function Install-Dependencies {
 
     Push-Location $PROJECT_DIR
 
-    Write-Info "安装核心依赖..."
-    # Windows ARM64 上 tiktoken（langchain-openai 的传递依赖）缺少预编译包，
-    # 安装可能失败但不影响核心功能（Token 计数会自动回退到字符估算）
-    & pip install -e .
+    # Windows ARM64 等平台 tiktoken（langchain-openai 的传递依赖）无预编译包且缺少 Rust 编译器
+    # 先尝试二进制安装；若失败则创建存根包骗过 pip，运行时自动回退到字符估算
+    Write-Info "安装 tiktoken（Token 计数库，安装失败不影响核心功能）..."
+    & pip install tiktoken --only-binary tiktoken 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "部分可选依赖安装失败（如 tiktoken 在 Windows ARM64 需要 Rust 编译器），核心功能不受影响"
+        Write-Warning "tiktoken 无预编译包（Windows ARM64 常见），创建存根包以跳过编译..."
+        $pkgDir = "$VENV_DIR\Lib\site-packages\tiktoken"
+        $distDir = "$VENV_DIR\Lib\site-packages\tiktoken-0.13.0.dist-info"
+        New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+        New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+        @"
+# Stub: tiktoken is not available on this platform.
+# The app uses character-based fallback for token counting (see qoze_code_agent.py).
+def get_encoding(*a, **kw): raise ImportError("tiktoken unavailable on this platform")
+def encoding_for_model(*a, **kw): raise ImportError("tiktoken unavailable on this platform")
+def list_encoding_names(*a, **kw): return []
+"@ | Out-File -FilePath "$pkgDir\__init__.py" -Encoding utf8
+        "Metadata-Version: 2.1`nName: tiktoken`nVersion: 0.13.0" | Out-File -FilePath "$distDir\METADATA" -Encoding utf8
+        "" | Out-File -FilePath "$distDir\RECORD" -Encoding utf8
     }
 
-    # tiktoken 已移除（Windows ARM64 等平台缺少 Rust 编译器无法安装，Token 计数统一使用字符估算）
+    Write-Info "安装核心依赖..."
+    & pip install -e .
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        Write-Error "依赖安装失败，请检查网络连接和 Python 环境"
+        exit 1
+    }
 
     Pop-Location
 
