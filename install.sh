@@ -176,16 +176,10 @@ install_dependencies() {
     source "$VENV_DIR/bin/activate"
     cd "$BUILD_DIR/QozeCode"
 
-    # 先尝试完整安装（含 pymupdf PDF 支持）
-    log_info "安装核心依赖 (含 PDF 支持)..."
-    if ! pip install -e ".[pdf]" 2>/dev/null; then
-        log_warning "pymupdf (PDF 支持) 安装失败（可能缺少编译工具），跳过 PDF 功能继续安装..."
-        log_info "重新安装核心依赖 (不含 PDF)..."
-        pip install -e . || {
-            log_error "核心依赖安装失败，请检查网络连接和 Python 环境"
-            exit 1
-        }
-    fi
+    pip install -e . || {
+        log_error "依赖安装失败，请检查网络连接和 Python 环境"
+        exit 1
+    }
 
     log_success "项目依赖安装完成"
 }
@@ -417,14 +411,10 @@ main() {
             download_source
             source "$VENV_DIR/bin/activate"
             cd "$BUILD_DIR/QozeCode"
-            log_info "更新依赖 (含 PDF 支持)..."
-            if ! pip install -e ".[pdf]" --upgrade 2>/dev/null; then
-                log_warning "pymupdf (PDF 支持) 更新失败，跳过 PDF 功能继续更新..."
-                pip install -e . --upgrade || {
-                    log_error "核心依赖更新失败"
-                    exit 1
-                }
-            fi
+            pip install -e . --upgrade || {
+                log_error "核心依赖更新失败"
+                exit 1
+            }
             log_success "QozeCode 更新完成"
             ;;
         "debug")

@@ -55,4 +55,3 @@ packages = ["tools", "utils", "skills", "tui_components", "qoze_mcp"]
 
 [project.optional-dependencies]
 macos = ["pyaudio"]
-pdf = ["pymupdf"]
