@@ -230,8 +230,26 @@ function Install-Dependencies {
 
     Push-Location $PROJECT_DIR
 
-    # 安装项目（editable 模式）
-    & pip install -e .
+    # 先尝试完整安装（含 pymupdf PDF 支持）
+    Write-Info "安装核心依赖 (含 PDF 支持)..."
+    $ErrorActionPreference = "Continue"
+    & pip install -e ".[pdf]"
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = "Stop"
+
+    if ($exitCode -ne 0) {
+        Write-Warning "pymupdf (PDF 支持) 安装失败（可能缺少 Visual Studio C++ 编译工具），跳过 PDF 功能继续安装..."
+        Write-Info "重新安装核心依赖 (不含 PDF)..."
+        $ErrorActionPreference = "Continue"
+        & pip install -e .
+        $exitCode = $LASTEXITCODE
+        $ErrorActionPreference = "Stop"
+        if ($exitCode -ne 0) {
+            Pop-Location
+            Write-Error "核心依赖安装失败，请检查网络连接和 Python 环境"
+            exit 1
+        }
+    }
 
     Pop-Location
 

@@ -35,7 +35,6 @@ dependencies = [
     "python-crontab",
     "hnswlib",
     "textual",
-    "pymupdf",
     "jinja2",
     "soniox",
     "python-socks[asyncio]",
@@ -56,3 +55,4 @@ packages = ["tools", "utils", "skills", "tui_components", "qoze_mcp"]
 
 [project.optional-dependencies]
 macos = ["pyaudio"]
+pdf = ["pymupdf"]
