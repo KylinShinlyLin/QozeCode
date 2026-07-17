@@ -176,8 +176,8 @@ class Qoze(App):
 
     def _get_tips_text(self) -> str:
         """获取 Tips 文本"""
-        return f"""模型: {self.model_name or '未知'}  •  目录: {os.getcwd()}
-💡 clear → 清空会话  •  quit/exit → 退出  •  line → 多行模式  •  Ctrl+Q → 语音输入  •  Ctrl+N → 录音笔记"""
+        return f"""模型: {self.model_name or '未知'} • 目录: {os.getcwd()}
+💡 clear → 清空会话 • quit/exit → 退出 • line → 多行模式 • Ctrl+Q → 语音输入 • Ctrl+N → 录音笔记"""
 
     def on_mount(self):
         self.message_list = self.query_one("#message-list", MessageList)
