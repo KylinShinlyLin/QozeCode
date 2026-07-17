@@ -390,6 +390,15 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     if shutil.which("lark-cli"):
         context += "\n## 🔧 环境工具: 当前电脑已安装 `lark-cli`（飞书命令行工具），你可以使用 lark-cli 来操作飞书文档、云空间、日历等飞书资源。\n"
 
+    # 检测 ripgrep（rg）是否安装，为项目检索策略提供环境依据
+    try:
+        rg_path = shutil.which("rg")
+    except Exception:
+        rg_path = None
+
+    if rg_path:
+        context += f"\n## 🔎 终端工具能力\n- ripgrep (`rg`): 已安装（`{rg_path}`）\n"
+
     # 检测 ffmpeg 是否安装，若已安装则提示 Agent 可以使用
     ffmpeg_path = shutil.which("ffmpeg")
     if ffmpeg_path:

@@ -268,10 +268,10 @@ class Qoze(App):
             logging.error(f"Token count update failed: {e}")
             pass
 
-    def print_welcome(self):
-        """更新欢迎区域的 tips（在 clear 后调用）"""
-        if self.welcome_tips:
-            self.welcome_tips.update(self._get_tips_text())
+    # def print_welcome(self):
+    #     """更新欢迎区域的 tips（在 clear 后调用）"""
+    #     if self.welcome_tips:
+    #         self.welcome_tips.update(self._get_tips_text())
 
     def hide_welcome(self):
         """隐藏欢迎区域（当有新消息时）"""
@@ -500,7 +500,7 @@ class Qoze(App):
             self.total_tokens = 0
             self.status_bar.update_token_count(0)
             self.show_welcome()
-            self.print_welcome()
+            # self.print_welcome()
             return
 
         if skills_tui_handler and user_input.lower().startswith('skills'):
@@ -1016,7 +1016,7 @@ class Qoze(App):
                 self.total_tokens = 0
                 self.status_bar.update_token_count(0)
                 self.show_welcome()
-                self.print_welcome()
+                # self.print_welcome()
 
         except Exception as e:
             import logging
