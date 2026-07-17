@@ -244,7 +244,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         required_keys = ["api_key"]
 
     # 10. Kimi For Coding
-    elif model_identifier in ("kimi-for-coding", "KimiCode"):
+    elif model_identifier in ("kimi-for-coding", "k3", "KimiCode"):
         section = "KimiCode"
         required_keys = ["api_key"]
 

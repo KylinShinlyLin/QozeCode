@@ -312,7 +312,16 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
     elif provider == ModelProvider.MOONSHOT:
         try:
             from langchain_openai import ChatOpenAI
-            if model_type == ModelType.KIMI_FOR_CODING:
+            if model_type == ModelType.KIMI_K3:
+                creds = ensure_model_credentials("k3")
+                llm = ChatOpenAI(
+                    api_key=creds["api_key"],
+                    model="k3",
+                    base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
+                    default_headers={"User-Agent": "RooCode/1.0"},
+                    reasoning_effort="max",
+                )
+            elif model_type == ModelType.KIMI_FOR_CODING:
                 creds = ensure_model_credentials("kimi-for-coding")
                 llm = ChatOpenAI(
                     api_key=creds["api_key"],
