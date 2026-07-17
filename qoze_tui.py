@@ -153,7 +153,7 @@ class Qoze(App):
                 # 欢迎区域 - 包含 ASCII Art 和 Tips
                 with Vertical(id="welcome-panel"):
                     yield Static(tui_constants.QOZE_CODE_ART.strip("\n"), id="welcome-art")
-                    yield Static(self._get_tips_text(), id="welcome-tips")
+                    # yield Static(self._get_tips_text(), id="welcome-tips")
 
                 yield MessageList(
                     id="message-list",
@@ -177,13 +177,13 @@ class Qoze(App):
     def _get_tips_text(self) -> str:
         """获取 Tips 文本"""
         return f"""模型: {self.model_name or '未知'} • 目录: {os.getcwd()}
-💡 clear → 清空会话 • quit/exit → 退出 • line → 多行模式 • Ctrl+Q → 语音输入 • Ctrl+N → 录音笔记"""
+💡 clear → 清空会话 • quit/exit → 退出 • line → 多行模式 • Ctrl+Q → 语音输入"""
 
     def on_mount(self):
         self.message_list = self.query_one("#message-list", MessageList)
         self.tool_status_panel = self.query_one("#tool-status-panel", ToolStatusPanel)
         self.welcome_panel = self.query_one("#welcome-panel", Vertical)
-        self.welcome_tips = self.query_one("#welcome-tips", Static)
+        # self.welcome_tips = self.query_one("#welcome-tips", Static)
         self.input_box = self.query_one("#input-box", Input)
         self.multi_line_input = self.query_one("#multi-line-input", TextArea)
         # 修复 TextArea 光标颜色（TextArea 光标由语法主题 cursor_style 控制，不走普通 CSS）
