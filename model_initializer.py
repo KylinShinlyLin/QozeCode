@@ -319,7 +319,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
                     model="k3",
                     base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
                     default_headers={"User-Agent": "RooCode/1.0"},
-                    reasoning_effort="low",
+                    reasoning_effort="max",
                 )
             elif model_type == ModelType.KIMI_FOR_CODING:
                 creds = ensure_model_credentials("kimi-for-coding")
