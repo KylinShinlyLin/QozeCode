@@ -181,6 +181,11 @@ class MessageList(ScrollableContainer):
         padding: 1 2;
         border: none;
         overflow-y: auto;
+        overflow-x: hidden;
+        /* 隐藏滚动条绘制：JetBrains 终端（JediTerm）对滚动条背景色块的
+           高频差分重绘存在缺陷，会在右边缘残留滑块/轨道色块（像素错乱）。
+           滚动功能不受影响（鼠标滚轮/键盘仍可用）。 */
+        scrollbar-visibility: hidden;
     }
     """
 

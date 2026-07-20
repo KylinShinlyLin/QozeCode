@@ -12,6 +12,7 @@ from textual.reactive import reactive
 import time
 
 from .auto_copy_widgets import AutoCopyStatic
+from ..terminal_compat import sanitize_display_text
 
 
 class ThinkingWidget(Static):
@@ -62,12 +63,12 @@ class ThinkingWidget(Static):
         self._mounted = False
         self._is_finalized = False
         self._last_update_time = 0
-        self._update_interval = 0.01  # 节流间隔（秒）
+        self._update_interval = 0.15  # 节流间隔（秒）
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield AutoCopyStatic(
-                "💭 已思考 0 字符 ▸",
+                "已思考 0 字符 ▸",
                 classes="thinking-header",
                 id="thinking-header",
             )
@@ -116,24 +117,26 @@ class ThinkingWidget(Static):
             content = self.query_one("#thinking-content", Static)
 
             count = len(self._thinking_buffer)
+            # ▸/▾/✓ 为 text 默认呈现符号，在本终端宽度与 wcwidth 一致，可安全使用；
+            # emoji 类字符统一由 terminal_compat 在显示边界剥离
             if self._collapsed:
                 arrow = "✓" if self._is_finalized else "▸"
             else:
                 arrow = "✓" if self._is_finalized else "▾"
 
-            header.update(f"💭 已思考 {count:,} 字符 {arrow}")
-
-            if self._thinking_buffer:
-                content.update(self._thinking_buffer)
-            else:
-                content.update(" ")
+            header.update(f"已思考 {count:,} 字符 {arrow}")
 
             if self._collapsed:
+                # 收起时跳过隐藏内容的更新，避免 CJK 长文本的无效测量/重绘
                 content.add_class("hidden")
             else:
                 content.remove_class("hidden")
-
-            self.refresh(layout=True)
+                if self._thinking_buffer:
+                    content.update(sanitize_display_text(self._thinking_buffer))
+                else:
+                    content.update(" ")
+            # 注意：不再手动 refresh(layout=True)，Static.update 与 display 切换
+            # 会自动触发所需重排，手动 layout 刷新在流式期间会造成重绘风暴
         except Exception:
             pass
 

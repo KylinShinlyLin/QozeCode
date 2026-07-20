@@ -9,6 +9,7 @@ import os
 from datetime import datetime
 
 from .types import BotMessage
+from ..terminal_compat import sanitize_display_text
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
@@ -57,6 +58,8 @@ class BotMessageWidget(Static):
     }
 
     BotMessageWidget Markdown {
+        width: 100%;
+        height: auto;
         margin: 0;
         padding: 0;
     }
@@ -106,7 +109,7 @@ class BotMessageWidget(Static):
     def _update_content_display(self):
         try:
             content_static = self.query_one("#content-static", Static)
-            content_static.update(self._content_buffer if self._content_buffer else " ")
+            content_static.update(sanitize_display_text(self._content_buffer) if self._content_buffer else " ")
         except Exception as e:
             _log(f"_update_content_display: ERROR - {e}")
 
@@ -135,10 +138,10 @@ class BotMessageWidget(Static):
             content_static = self.query_one("#content-static", Static)
             content_md = self.query_one("#content-md", AutoCopyMarkdown)
 
-            # 隐藏 Static，显示 Markdown
+            # 先更新 Markdown 内容，再切换显隐，减少中间帧的布局抖动
+            content_md.update(sanitize_display_text(self._content_buffer) if self._content_buffer else " ")
             content_static.add_class("hidden")
             content_md.remove_class("hidden")
-            content_md.update(self._content_buffer if self._content_buffer else " ")
 
             # 触发布局刷新，确保高度重新计算
             self.refresh(layout=True)
