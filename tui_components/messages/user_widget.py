@@ -73,7 +73,7 @@ def _truncate_content(content: str, max_lines: int = MAX_DISPLAY_LINES, max_char
     if total_chars > len(result):
         parts.append(f"{total_chars - len(result)} 字符")
     detail = "，".join(parts)
-    result += f"\n\n📋 ... (内容过长已省略: {detail})"
+    result += f"\n\n... (内容过长已省略: {detail})"
 
     return result
 
