@@ -30,7 +30,7 @@ struct Session: Identifiable {
 }
 
 enum AgentState: String {
-    case idle, thinking, executing, waitingApproval = "waiting_approval", done, error
+    case idle, thinking, executing, waitingApproval = "waiting_approval", done, error, interrupted
 
     /// 聚合优先级 (多会话取最高)
     var priority: Int {
@@ -39,7 +39,7 @@ enum AgentState: String {
         case .waitingApproval: return 4
         case .executing: return 3
         case .thinking: return 2
-        case .done: return 1
+        case .done, .interrupted: return 1
         case .idle: return 0
         }
     }
@@ -135,9 +135,9 @@ final class SessionStore: ObservableObject {
             NotificationService.shared.notify(state: newState, session: updated)
         }
 
-        // done/error 为瞬时态: 5 秒后自动回落 idle
+        // done/error/interrupted 为瞬时态: 5 秒后自动回落 idle
         revertTasks[id]?.cancel()
-        if newState == .done || newState == .error {
+        if newState == .done || newState == .error || newState == .interrupted {
             revertTasks[id] = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { return }

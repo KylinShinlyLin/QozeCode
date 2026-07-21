@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import asyncio
+import concurrent.futures
 import os
 import sys
 import uuid
@@ -760,8 +761,8 @@ class Qoze(App):
             await self.message_list.stream_agent_response(stream)
             island_report("done")
 
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            pass
+        except (KeyboardInterrupt, concurrent.futures.CancelledError):
+            island_report("interrupted")
         except Exception as e:
             island_report("error", last_message=str(e))
             await self.message_list.mount(Static(f"Error: {e}"))

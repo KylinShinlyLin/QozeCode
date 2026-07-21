@@ -17,6 +17,7 @@ enum MenuBarIcon {
         case .waitingApproval: return "exclamationmark.triangle.fill"
         case .done: return "checkmark.circle.fill"
         case .error: return "xmark.octagon.fill"
+        case .interrupted: return "stop.circle.fill"
         }
     }
 
@@ -29,6 +30,7 @@ enum MenuBarIcon {
         case .waitingApproval: return .orange
         case .done: return .green
         case .error: return .red
+        case .interrupted: return .yellow
         }
     }
 
@@ -42,6 +44,7 @@ enum MenuBarIcon {
         case .waitingApproval: return NSColor(srgbRed: 1.0, green: 0x9F/255, blue: 0x0A/255, alpha: 1)
         case .done: return NSColor(srgbRed: 0x30/255, green: 0xD1/255, blue: 0x58/255, alpha: 1)
         case .error: return NSColor(srgbRed: 1.0, green: 0x45/255, blue: 0x3A/255, alpha: 1)
+        case .interrupted: return NSColor(srgbRed: 1.0, green: 0xD6/255, blue: 0x0A/255, alpha: 1)
         }
     }
 

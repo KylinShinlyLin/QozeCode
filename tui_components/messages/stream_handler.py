@@ -127,7 +127,7 @@ class MessageStreamHandler:
 
         except asyncio.CancelledError:
             _log("Stream cancelled by user")
-            # 取消不算错误，静默处理
+            # 取消不算错误, 先完成 UI 收尾
             if self._pending_update and self.current_bot_message:
                 await self._flush_update()
             if self.current_bot_message:
@@ -136,7 +136,8 @@ class MessageStreamHandler:
                 self._thinking_widget.finalize()
                 if self.on_thinking_finalized:
                     self.on_thinking_finalized(self._thinking_widget)
-            return
+            # re-raise: 让调用方区分"完成"与"中断" (asyncio 取消契约, 不应静默吞掉)
+            raise
 
         except Exception as e:
             _log(f"Fatal error: {e}")

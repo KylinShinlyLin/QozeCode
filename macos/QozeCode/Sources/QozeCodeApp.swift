@@ -74,7 +74,7 @@ struct QozeCodeApp: App {
                 .animation(.linear(duration: 1.2).repeatForever(autoreverses: false),
                            value: executingSpin)
                 .onAppear { executingSpin = true }
-        case .done, .error:
+        case .done, .error, .interrupted:
             // 手绘徽章: 彩底圆 + 白 glyph (StateIconRenderer, 与通知附件同源)
             Image(nsImage: StateIconRenderer.icon(for: aggregated, size: 15))
                 .renderingMode(.original)

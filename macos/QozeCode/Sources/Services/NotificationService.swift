@@ -37,6 +37,9 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         case .error:
             title = "QozeCode 出错"
             body = session.lastMessage.isEmpty ? session.projectName : session.lastMessage
+        case .interrupted:
+            title = "QozeCode 已中断"
+            body = session.taskSummary.isEmpty ? session.projectName : session.taskSummary
         default:
             return  // 其他状态不发通知
         }
