@@ -67,7 +67,6 @@ CSS = """
         border-top: heavy #414868;
         display: none;
         overflow-y: auto;
-        scrollbar-visibility: hidden;
     }
 
     #stream-output > BlockQuote {
