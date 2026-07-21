@@ -63,6 +63,7 @@ from tools.asr_tool import transcribe_audio
 from tools.skill_tools import get_skill_manager
 from qoze_mcp.mcp_manager import MCPManager
 from utils.directory_tree import get_directory_tree
+from utils.island_reporter import report_state as island_report
 from utils.git_context import get_git_context
 from utils.system_prompt import get_static_system_prompt, get_dynamic_context, load_memory_context
 
@@ -294,6 +295,7 @@ class MessagesState(TypedDict):
 # Step 2: Define model node
 async def llm_call(state: dict):
     import asyncio
+    island_report("thinking")
     system_release = ''
     system_info = platform.system()
     system_version = "unknown"
@@ -527,6 +529,11 @@ async def tool_node(state: dict):
         """执行单个工具调用，返回 ToolMessage"""
         tool_name = tc["name"]
         try:
+            if tool_name == "execute_command":
+                island_report("executing", tool=tool_name,
+                              command=str(tc["args"].get("command", "")))
+            else:
+                island_report("executing", tool=tool_name)
             tool = tools_by_name[tool_name]
             if tool_name in _ASYNC_TOOL_NAMES:
                 observation = await tool.ainvoke(tc["args"])

@@ -27,6 +27,7 @@ class DynamicCommandsGenerator:
             ("/init", "初始化项目指引"),
             ("/checkpoint", "保存会话 checkpoint"),
             ("/checkpoint --clear", "保存 checkpoint 并清空会话"),
+            ("/island", "唤起 QozeCode 菜单栏伴侣 (macOS)"),
             ("/mcp", "显示 MCP 系统帮助"),
             ("/mcp list", "列出所有 MCP 服务及状态"),
             ("/mcp status", "显示 MCP 连接状态"),

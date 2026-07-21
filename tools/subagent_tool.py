@@ -267,7 +267,7 @@ def _build_subagent(model_with_tools):
             args = tool_call["args"]
             args_summary = _format_tool_args(tool_name, args)
             round_num = state.get("llm_calls", 0) + 1
-            console.print(f"[cyan]  🔧 [{round_num}] {tool_name}({args_summary})[/cyan]")
+            console.print(f"[cyan] [{round_num}] {tool_name}({args_summary})[/cyan]")
             try:
                 t = tools_by_name[tool_name]
                 if tool_name in _SUBAGENT_ASYNC_TOOLS:

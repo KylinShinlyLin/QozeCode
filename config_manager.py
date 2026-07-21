@@ -97,6 +97,37 @@ def get_jina_key() -> str:
     return jina_key.strip("\"'")
 
 
+def get_island_enabled() -> bool:
+    """
+    获取 QozeIsland (macOS 菜单栏伴侣) 集成开关
+    配置: [island] -> enabled, 默认 true (App 未运行时自动静默降级, 无副作用)
+    """
+    try:
+        cfg, _ = _load_config()
+        section = "island"
+        if not cfg.has_section(section):
+            return True
+        return cfg.getboolean(section, "enabled", fallback=True)
+    except Exception:
+        return True
+
+
+def get_island_auto_launch() -> bool:
+    """
+    获取 QozeIsland 启动时自动唤起开关
+    配置: [island] -> auto_launch, 默认 true
+    (macOS 且已安装 App 时, qoze 启动自动唤起; 未安装时静默跳过)
+    """
+    try:
+        cfg, _ = _load_config()
+        section = "island"
+        if not cfg.has_section(section):
+            return True
+        return cfg.getboolean(section, "auto_launch", fallback=True)
+    except Exception:
+        return True
+
+
 def _ensure_dir(path: str):
     try:
         os.makedirs(path, exist_ok=True)

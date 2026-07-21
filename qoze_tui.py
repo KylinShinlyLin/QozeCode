@@ -12,6 +12,11 @@ import time
 from tui_components import tui_constants
 
 from utils.audio_manager import AudioManager
+from utils.island_reporter import (
+    init_island_reporter, maybe_auto_launch_island,
+    is_island_installed, is_island_running, launch_island,
+    report_state as island_report,
+)
 
 from rich.console import Group
 from rich.panel import Panel
@@ -436,6 +441,8 @@ class Qoze(App):
             qoze_code_agent.llm_with_tools = llm.bind_tools(all_tools)
 
             qoze_code_agent.current_model_type = self.model_type
+            maybe_auto_launch_island()  # macOS + 已安装 + auto_launch 时静默唤起 Island
+            init_island_reporter(model=self.model_name)
             from tools.subagent_tool import reset_subagent_cache
             reset_subagent_cache()
             self.agent_ready = True
@@ -451,6 +458,30 @@ class Qoze(App):
         except Exception as e:
             logging.exception("Initialization Failed")
             self.message_list.mount(Static(f"Initialization Failed: {e}"))
+
+    def _handle_island_command(self):
+        """处理 /island 命令: 唤起 QozeIsland 并反馈状态"""
+        if sys.platform != "darwin":
+            self.message_list.mount(Static(Text(
+                "Island: 菜单栏伴侣仅支持 macOS", style="bold yellow")))
+            return
+        if not is_island_installed():
+            self.message_list.mount(Static(Text(
+                "Island: 未安装菜单栏 App\n构建安装: bash macos/build_island.sh",
+                style="bold yellow")))
+            return
+        if is_island_running():
+            self.message_list.mount(Static(Text(
+                "Island: ✓ 菜单栏伴侣已在运行", style="bold green")))
+            return
+        ok, msg = launch_island()
+        if ok:
+            self.message_list.mount(Static(Text(
+                f"Island: ✓ {msg}, 状态上报将在数秒内自动接入",
+                style="bold green")))
+        else:
+            self.message_list.mount(Static(Text(
+                f"Island: ✗ {msg}", style="bold red")))
 
     async def process_user_input(self, user_input):
         if not user_input.strip():
@@ -470,6 +501,11 @@ class Qoze(App):
 
         if user_input.lower() in ["quit", "exit", "q"]:
             self._safe_exit()
+            return
+
+        # ---- island 命令 (唤起 macOS 菜单栏伴侣, 不经过 LLM) ----
+        if user_input.lower() == "island":
+            self._handle_island_command()
             return
 
         # ---- checkpoint 命令 (独立 LLM 调用，不经过 Agent StateGraph) ----
@@ -722,12 +758,15 @@ class Qoze(App):
                 config={"recursion_limit": 300, "configurable": {"thread_id": self.thread_id}}
             )
             await self.message_list.stream_agent_response(stream)
+            island_report("done")
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         except Exception as e:
+            island_report("error", last_message=str(e))
             await self.message_list.mount(Static(f"Error: {e}"))
         finally:
+            island_report("idle")
             self.request_indicator.stop_request()
             self.status_bar.update_state("Idle")
             # 请求结束后精确计算并校正 token 数

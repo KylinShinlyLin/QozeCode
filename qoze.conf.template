@@ -63,3 +63,10 @@ model_name=DeepSeek-V4-Pro
 [Xiaomi]
 api_key=
 base_url=https://api.xiaomimimo.com/v1
+
+[island]
+; QozeIsland macOS 菜单栏伴侣 (docs/qozeisland-tech-design.md)
+; false = 完全禁用集成; 未安装 App 时无需修改, 自动静默降级
+enabled = true
+; true = qoze 启动时自动唤起 Island App (仅 macOS 且已安装时生效, 未安装静默跳过)
+auto_launch = true

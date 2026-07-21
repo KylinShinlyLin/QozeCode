@@ -78,7 +78,7 @@ def _count_src_files(root: Path, exts: list[str]) -> dict[str, int]:
             continue
         if item.name in exclude:
             continue
-        if item.is_dir():
+        if item.is_dir(): 
             count = 0
             for f in item.rglob("*"):
                 if f.suffix in exts and not any(p in exclude for p in f.parts):
