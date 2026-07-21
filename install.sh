@@ -19,7 +19,6 @@ INSTALL_DIR="$HOME/.qoze"
 BIN_DIR="$HOME/.local/bin"
 VENV_DIR="$INSTALL_DIR/venv"
 BUILD_DIR="$INSTALL_DIR/build"
-WITH_ISLAND=false   # --with-island: 同时编译安装 macOS Island 菜单栏伴侣
 
 # 日志函数
 log_info() {
@@ -318,22 +317,8 @@ install_island_component() {
         return 0
     fi
 
-    # 判定: --with-island 直接装; 否则经 /dev/tty 交互询问 (默认不装, 兼容 curl|bash)
-    local want=false
-    if [ "$WITH_ISLAND" = true ]; then
-        want=true
-    elif [ -e /dev/tty ]; then
-        printf "${BLUE}[INFO]${NC} 是否安装 QozeCode 菜单栏伴侣 Island? [y/N] " > /dev/tty 2>/dev/null || true
-        read -r reply < /dev/tty 2>/dev/null || true
-        case "${reply:-}" in [yY]|[yY][eE][sS]) want=true ;; esac
-    fi
-
-    if [ "$want" != true ]; then
-        log_info "跳过 Island 安装 (随时可手动安装: bash $build_script)"
-        return 0
-    fi
-
-    log_info "编译构建 Island (本地 swiftc + ad-hoc 签名)..."
+    # 有 Swift 构建环境即默认直接安装 (无需询问; 卸载: bash macos/uninstall_island.sh)
+    log_info "检测到 Swift 构建环境, 编译安装 Island 菜单栏伴侣..."
     if bash "$build_script"; then
         log_success "Island 安装完成: ~/Applications/QozeCode.app"
         open "$HOME/Applications/QozeCode.app" 2>/dev/null || true
@@ -441,7 +426,7 @@ show_help() {
     echo ""
     echo "选项："
     echo "  install     安装 QozeCode (源码安装)"
-    echo "              加 --with-island 同时编译安装 macOS Island 菜单栏伴侣"
+    echo "              macOS 且有 Swift 构建环境时自动安装 Island 菜单栏伴侣"
     echo "  uninstall   卸载 QozeCode"
     echo "  update      更新 QozeCode"
     echo "  debug       显示调试信息"
@@ -450,15 +435,7 @@ show_help() {
 
 # 主函数
 main() {
-    local cmd=""
-    for arg in "$@"; do
-        case "$arg" in
-            --with-island) WITH_ISLAND=true ;;
-            --) ;;
-            *) [ -z "$cmd" ] && cmd="$arg" ;;
-        esac
-    done
-    cmd="${cmd:-install}"
+    local cmd="${1:-install}"
 
     case "$cmd" in
         "install")
