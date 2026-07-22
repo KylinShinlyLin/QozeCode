@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 /doc
+doc/
 # C extensions
 *.so
 .qoze/
