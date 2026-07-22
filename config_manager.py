@@ -238,7 +238,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         required_keys = ["api_key"]
 
     # 6. Vertex AI (Gemini)
-    elif model_identifier in ("gemini-3.1-pro", "gemini-3-flash", "gemini-3.5-flash", "VertexAi"):
+    elif model_identifier in ("gemini-3.1-pro", "gemini-3-flash", "gemini-3.5-flash", "gemini-3.6-flash", "VertexAi"):
         section = "VertexAi"
         if not cfg.has_section(section):
             fail(f"Gemini/Vertex AI 凭证 (section [{section}])")

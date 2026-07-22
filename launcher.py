@@ -70,6 +70,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "kimi-for-coding    (think)     MoonShot",
         "glm-5.2                        智普",
         # "mimo-v2.5-pro      (think)     小米",
+        "gemini-3.6-flash   (think)     vertex-ai",
         "gemini-3.5-flash   (think)     vertex-ai",
         "gemini-3.1-pro     (think)     vertex-ai",
         # "qwen3.6-plus       (think)     Alibaba Cloud",
@@ -135,7 +136,9 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         # 2. 解析 ModelType
         # if "gemini-3-pro" in selected:
         #     model_type = ModelType.GEMINI_3_PRO
-        if "gemini-3.1-pro" in selected:
+        if "gemini-3.6-flash" in selected:
+            model_type = ModelType.GEMINI_3_6_FLASH
+        elif "gemini-3.1-pro" in selected:
             model_type = ModelType.GEMINI_3_1_PRO
         elif "gemini-3.5-flash" in selected:
             model_type = ModelType.GEMINI_3_5_FLASH
