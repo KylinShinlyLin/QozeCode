@@ -21,7 +21,7 @@ class MCPServerConfig:
     """MCP 服务配置数据类"""
     name: str
     description: str = ""
-    transport: str = "stdio"          # "stdio" | "http"
+    transport: str = "stdio"  # "stdio" | "http"
     # stdio 字段
     command: Optional[str] = None
     args: List[str] = field(default_factory=list)
@@ -259,8 +259,7 @@ class MCPManager:
 
             return tools, (
                 f"[MCP_ACTIVATED] 服务 '{name}' 已激活！\n"
-                f"新增 {len(tools)} 个工具: {', '.join(tool_names)}\n"
-                f"描述: {server.description}"
+                f"新增 {len(tools)} 个工具 \n"
             )
         except Exception as e:
             return [], f"[MCP_ERROR] 激活 '{name}' 失败: {e}"
