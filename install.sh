@@ -176,7 +176,13 @@ install_dependencies() {
     source "$VENV_DIR/bin/activate"
     cd "$BUILD_DIR/QozeCode"
 
-    pip install -e . || {
+    # macOS 附带语音依赖 pyaudio (pyproject.toml 的 [macos] extra)；其他平台跳过
+    pkg_spec="."
+    if [ "$(uname -s)" = "Darwin" ]; then
+        pkg_spec=".[macos]"
+    fi
+
+    pip install -e "$pkg_spec" || {
         log_error "依赖安装失败，请检查网络连接和 Python 环境"
         exit 1
     }
@@ -459,7 +465,11 @@ main() {
             download_source
             source "$VENV_DIR/bin/activate"
             cd "$BUILD_DIR/QozeCode"
-            pip install -e . --upgrade || {
+            pkg_spec="."
+            if [ "$(uname -s)" = "Darwin" ]; then
+                pkg_spec=".[macos]"
+            fi
+            pip install -e "$pkg_spec" --upgrade || {
                 log_error "核心依赖更新失败"
                 exit 1
             }
