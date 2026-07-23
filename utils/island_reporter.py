@@ -182,6 +182,24 @@ class IslandReporter:
             except (queue.Empty, queue.Full):
                 pass
 
+    def report_token_usage(self, snapshot: dict):
+        """上报 token 用量快照 (token.usage 消息, 全量 days 数据)。
+
+        不缓存为 _latest_state (重连不补发): Island 打开面板时会重读
+        ~/.qoze/token_usage.json, 用量消息允许丢失。
+        """
+        if not self.enabled:
+            return
+        msg = {
+            "type": "token.usage",
+            "session_id": self.session_id,
+            "data": snapshot,
+        }
+        try:
+            self._queue.put_nowait(msg)
+        except queue.Full:
+            pass
+
     def shutdown(self):
         """进程退出时尽力发送 session.unregister 并关闭连接"""
         self._stop.set()
@@ -305,3 +323,9 @@ def report_state(state: str, **detail):
     """便捷入口: 未初始化或配置禁用时静默忽略"""
     if _reporter is not None:
         _reporter.report_state(state, **detail)
+
+
+def report_token_usage(snapshot: dict):
+    """便捷入口: 上报 token 用量快照, 未初始化或配置禁用时静默忽略"""
+    if _reporter is not None:
+        _reporter.report_token_usage(snapshot)

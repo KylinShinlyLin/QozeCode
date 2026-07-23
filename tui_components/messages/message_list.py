@@ -293,6 +293,16 @@ class MessageList(ScrollableContainer):
         _log("process_stream called")
         await self._stream_handler.process_stream(stream)
 
+    def consume_stream_usage(self):
+        """取出本次请求流中模型返回的精确 token 用量 (无则返回 None)。
+
+        必须在下一次 stream_agent_response 之前调用 (process_stream 会重置)。
+        """
+        handler = getattr(self, "_stream_handler", None)
+        if handler is None:
+            return None
+        return handler.consume_stream_usage()
+
     def _create_user_message_widget(self, user_message, is_command: bool = False):
         """标准化用户消息并创建其展示组件。"""
         if isinstance(user_message, str):

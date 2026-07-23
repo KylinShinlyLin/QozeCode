@@ -70,7 +70,6 @@ check_requirements() {
         fi
         log_success "找到系统 python3: $PYTHON3_CMD"
     fi
-
     python_version=$($PYTHON3_CMD -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
 
     if ! $PYTHON3_CMD -c "import sys; exit(0 if sys.version_info >= (3, 9) else 1)"; then

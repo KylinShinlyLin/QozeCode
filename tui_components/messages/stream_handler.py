@@ -79,6 +79,7 @@ class MessageStreamHandler:
         self._accumulated_ai_message = None
         self._pending_update = False
         self._need_new_bot_widget = False
+        self._usage_by_message = {}  # 精确 token 用量: 消息 id → usage_metadata (同一条消息取最后一次快照)
 
     def reset(self):
         """重置状态"""
@@ -95,6 +96,26 @@ class MessageStreamHandler:
         self._accumulated_ai_message = None
         self._pending_update = False
         self._need_new_bot_widget = False
+        self._usage_by_message = {}  # 精确 token 用量: 消息 id → usage_metadata (同一条消息取最后一次快照)
+
+    def consume_stream_usage(self):
+        """取出本次流累计的精确 token 用量并清空。
+
+        一次用户请求可能触发多轮 LLM 调用 (tool 循环), 按消息 id 去重后求和。
+        返回 {"input_tokens": n, "output_tokens": n}; 无精确用量时返回 None。
+        """
+        usages = list(self._usage_by_message.values())
+        self._usage_by_message = {}
+        if not usages:
+            _log("consume_stream_usage: no usage_metadata collected (fallback to estimate)")
+            return None
+        input_tokens = sum(int(u.get("input_tokens", 0) or 0) for u in usages)
+        output_tokens = sum(int(u.get("output_tokens", 0) or 0) for u in usages)
+        _log(f"consume_stream_usage: calls={len(usages)} input={input_tokens} output={output_tokens} "
+             f"detail={usages}")
+        if input_tokens <= 0 and output_tokens <= 0:
+            return None
+        return {"input_tokens": input_tokens, "output_tokens": output_tokens}
 
     async def process_stream(self, stream):
         """处理流式输出"""
@@ -199,6 +220,19 @@ class MessageStreamHandler:
 
     async def _process_ai_message_chunk(self, message_chunk, chunk_count: int):
         """处理 AI 消息块 - 累积内容并检测 tool_calls"""
+        # 采集模型返回的精确 token 用量
+        # - 多数厂商: 只在末尾 chunk 出现一次; 部分厂商(如 GLM)每个 chunk 都带累计 usage
+        # - 按消息 id 去重, 同一次 LLM 调用只保留最后一次快照
+        # - chunk 无 id 时归入同一匿名桶 "_anon" (last-wins), 绝不能按 chunk 序号建独立 key,
+        #   否则同一次调用的多个 usage 快照会被重复累计
+        usage_meta = getattr(message_chunk, "usage_metadata", None)
+        if usage_meta:
+            msg_id = getattr(message_chunk, "id", None)
+            if not msg_id:
+                msg_id = (getattr(message_chunk, "response_metadata", None) or {}).get("id") or "_anon"
+            self._usage_by_message[msg_id] = usage_meta
+            _log(f"usage chunk: key={msg_id} chunk={chunk_count} usage={usage_meta}")
+
         thinking = self._extract_thinking(message_chunk)
         content = self._extract_content(message_chunk)
 

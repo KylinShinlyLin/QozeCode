@@ -46,6 +46,26 @@ struct PlanProgress: Decodable {
     let total: Int
 }
 
+/// C→S token 用量快照 (每次请求结束后全量推送; 与 ~/.qoze/token_usage.json 同构)
+struct TokenUsageMessage: Decodable {
+    let session_id: String?
+    let data: TokenUsageData?
+}
+
+struct TokenUsageData: Decodable {
+    let days: [String: TokenDayUsage]?
+}
+
+struct TokenDayUsage: Decodable {
+    let models: [String: TokenModelUsage]?
+}
+
+struct TokenModelUsage: Decodable {
+    let input: Int?
+    let output: Int?
+    let requests: Int?
+}
+
 /// C→S 批准请求 (M2)
 struct ApprovalRequestMessage: Decodable {
     let session_id: String
@@ -68,6 +88,7 @@ enum IncomingMessage {
     case register(RegisterMessage)
     case unregister(UnregisterMessage)
     case state(StateMessage)
+    case tokenUsage(TokenUsageMessage)
     case approvalRequest(ApprovalRequestMessage)
 
     static func decode(line: Data) -> IncomingMessage? {
@@ -82,6 +103,8 @@ enum IncomingMessage {
             return (try? decoder.decode(UnregisterMessage.self, from: line)).map { .unregister($0) }
         case "state":
             return (try? decoder.decode(StateMessage.self, from: line)).map { .state($0) }
+        case "token.usage":
+            return (try? decoder.decode(TokenUsageMessage.self, from: line)).map { .tokenUsage($0) }
         case "approval.request":
             return (try? decoder.decode(ApprovalRequestMessage.self, from: line)).map { .approvalRequest($0) }
         default:

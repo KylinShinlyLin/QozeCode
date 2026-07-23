@@ -9,15 +9,35 @@ struct PopoverView: View {
     /// 双保险: 即使 @Published 更新在 MenuBarExtra 内容窗口失效,
     /// 1s tick 也强制 body 重新求值, 保证会话列表/耗时显示新鲜
     @State private var tick = 0
+    /// 页签: 会话 / 用量
+    @State private var selectedTab: PopoverTab = .sessions
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    enum PopoverTab {
+        case sessions, usage
+    }
 
     var body: some View {
         let _ = tick  // 建立刷新依赖
         VStack(alignment: .leading, spacing: 0) {
-            if store.sessions.isEmpty {
-                emptyState
+            Picker("", selection: $selectedTab) {
+                Text("会话").tag(PopoverTab.sessions)
+                Text("用量").tag(PopoverTab.usage)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            if selectedTab == .sessions {
+                if store.sessions.isEmpty {
+                    emptyState
+                } else {
+                    sessionList
+                }
             } else {
-                sessionList
+                TokenUsageView()
             }
             Divider()
             footer

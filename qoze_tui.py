@@ -17,6 +17,7 @@ from utils.island_reporter import (
     init_island_reporter, maybe_auto_launch_island,
     is_island_installed, is_island_running, launch_island,
     report_state as island_report,
+    report_token_usage as island_report_token_usage,
 )
 
 from rich.console import Group
@@ -278,6 +279,43 @@ class Qoze(App):
     #     """更新欢迎区域的 tips（在 clear 后调用）"""
     #     if self.welcome_tips:
     #         self.welcome_tips.update(self._get_tips_text())
+
+    def _record_token_usage(self):
+        """请求结束时记录本次 token 消耗 (按天 × 按模型持久化并上报 Island)。
+
+        口径: 优先使用模型流式返回的精确 usage_metadata (input/output 分开);
+        模型不返回时降级为本次请求上下文 token 估算差值 (计入 input)。
+        """
+        try:
+            from tui_components.messages.stream_handler import _log as _usage_log
+        except Exception:
+            def _usage_log(_msg):
+                return None
+        try:
+            from utils.token_usage import get_token_usage_tracker
+            tracker = get_token_usage_tracker()
+            usage = None
+            try:
+                usage = self.message_list.consume_stream_usage()
+            except Exception:
+                usage = None
+            if usage:
+                _usage_log(f"record_token_usage: EXACT model={self.model_name} usage={usage}")
+                tracker.record(self.model_name or "未知",
+                               usage.get("input_tokens", 0),
+                               usage.get("output_tokens", 0))
+            else:
+                # 降级: 上下文估算差值 (update_token_count 已在 finally 中先执行,
+                # total_tokens 为请求后精确值, _stream_base_tokens 为请求前基准)
+                base = getattr(self, "_stream_base_tokens", 0) or 0
+                delta = max(0, int(self.total_tokens or 0) - int(base))
+                _usage_log(f"record_token_usage: FALLBACK model={self.model_name} "
+                           f"total={self.total_tokens} base={base} delta={delta}")
+                if delta > 0:
+                    tracker.record(self.model_name or "未知", delta, 0)
+            island_report_token_usage(tracker.snapshot())
+        except Exception as e:
+            logging.debug(f"record token usage failed: {e}")
 
     def hide_welcome(self):
         """隐藏欢迎区域（当有新消息时）"""
@@ -772,6 +810,8 @@ class Qoze(App):
             self.status_bar.update_state("Idle")
             # 请求结束后精确计算并校正 token 数
             self.update_token_count()
+            # 记录本次请求的 token 消耗并按天持久化, 推送快照给 Island
+            self._record_token_usage()
             self.query_one("#input-line").remove_class("hidden")
             self.input_box.focus()
             self.processing_worker = None

@@ -87,6 +87,9 @@ final class SessionStore: ObservableObject {
             applyDetail(msg.detail, to: &session)
             transition(session, to: newState)
 
+        case .tokenUsage(let msg):
+            TokenUsageStore.shared.apply(msg)
+
         case .approvalRequest(let msg):
             // M2: 批准卡片 UI; M1 先以 waiting_approval 状态呈现
             guard var session = sessions[msg.session_id] else { return }
