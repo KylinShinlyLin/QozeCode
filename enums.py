@@ -31,6 +31,7 @@ class ModelType(Enum):
     KIMI_K2_5 = "kimi-k2.5"
     KIMI_FOR_CODING = "kimi-for-coding"
     KIMI_K3 = "k3"
+    KIMI_K3_256K = "k3-256k"
     # CLAUDE_4 = "claude-4"
     # CLAUDE_4_6_SONNET = "claude-sonnet-4-6"
     # CLAUDE_4_6_OPUS = "claude-opus-4-6"
@@ -64,6 +65,7 @@ MODEL_VISION_SUPPORT = {
     ModelType.KIMI_K2_5: True,            # Kimi k2.5 支持图片输入
     ModelType.KIMI_FOR_CODING: True,      # 专用编程模型，支持视觉
     ModelType.KIMI_K3: True,             # Kimi K3 旗舰模型，支持视觉
+    ModelType.KIMI_K3_256K: True,        # Kimi K3 256K 上下文模型，支持视觉
     ModelType.KIMI_2_5: True,             # Kimi 2.5 支持图片输入
     ModelType.QWEN_3_MAX: True,           # Qwen 支持多模态
     ModelType.QWEN_3_6_PLUS: True,        # Qwen 支持多模态
@@ -92,6 +94,7 @@ MODEL_PROVIDER_MAP = {
     ModelType.KIMI_K2_5: ModelProvider.MOONSHOT,
     ModelType.KIMI_FOR_CODING: ModelProvider.MOONSHOT,
     ModelType.KIMI_K3: ModelProvider.MOONSHOT,
+    ModelType.KIMI_K3_256K: ModelProvider.MOONSHOT,
     ModelType.GPT_5_5: ModelProvider.OPENAI,
     ModelType.GPT_5_4: ModelProvider.LITELLM,
     ModelType.GEMINI_3_1_PRO: ModelProvider.VERTEX_AI,
