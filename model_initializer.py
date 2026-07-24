@@ -234,7 +234,8 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             os.environ["OPENAI_API_KEY"] = creds["api_key"]
             model_config = {
                 "api_key": creds["api_key"],
-                "model": model_type.value
+                "model": model_type.value,
+                "stream_usage": True
             }
 
             # gpt-5.6-terra / gpt-5.6-luna 不支持在 /v1/chat/completions 
@@ -255,7 +256,8 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
             llm = ChatOpenAI(
                 model=model_type.value,
                 api_key=creds["api_key"],
-                base_url="https://api.deepseek.com"
+                base_url="https://api.deepseek.com",
+                stream_usage=True,
             )
             return llm
         except ImportError:
@@ -322,6 +324,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
                     base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
                     default_headers={"User-Agent": "RooCode/1.0"},
                     reasoning_effort="max",
+                    stream_usage=True,
                 )
             elif model_type == ModelType.KIMI_FOR_CODING:
                 creds = ensure_model_credentials("kimi-for-coding")
@@ -330,6 +333,7 @@ def initialize_llm(provider: ModelProvider, model_type: ModelType):
                     model="kimi-for-coding",
                     base_url=creds.get("base_url") or "https://api.kimi.com/coding/v1",
                     default_headers={"User-Agent": "RooCode/1.0"},
+                    stream_usage=True,
                 )
             else:
                 creds = ensure_model_credentials("kimi-k2.5")
