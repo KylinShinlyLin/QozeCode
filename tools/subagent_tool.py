@@ -132,12 +132,14 @@ def _get_subagent_tools():
     )
     from tools.search_tool import tavily_search, read_url
     from tools.math_tools import multiply, add, divide
+    from tools.date_tools import get_current_datetime
 
     _subagent_tools_cache = [
         execute_command,
         read_file, list_files, list_dir, find_files, grep_file, search_in_files,
         tavily_search, read_url,
         multiply, add, divide,
+        get_current_datetime,
     ]
     return _subagent_tools_cache
 

@@ -9,6 +9,8 @@ import glob
 import shutil
 import subprocess
 
+from utils.datetime_utils import get_current_time_text
+
 
 def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, max_total_chars: int = 8000) -> str:
     """
@@ -192,7 +194,7 @@ Subagent 会自动使用与主 Agent 相同的系统提示和工作原则，无�
 ### 注意事项
 - Subagent 之间**不能直接通信**，协调和综合由你完成
 - 每个 subagent 有 120 秒超时和 15 轮推理限制
-- Subagent **没有浏览器工具、技能工具、dispatch_subagent**，只能用代码/搜索/文档/数学工具
+- Subagent **没有浏览器工具、技能工具、dispatch_subagent**，只能用代码/搜索/文档/数学/时间工具
 - Subagent 返回后，检查结果是否充分；不充分可重新分派或自行补充
 - `task` 永远必填；通过 task 描述来控制 subagent 的行为和输出格式
 
@@ -247,7 +249,8 @@ def get_subagent_system_prompt():
 
     Subagent 的工具集与主 Agent 不同：
     - 有: tavily_search, read_url, read_lark_document, read_file, execute_command,
-          list_files, list_dir, find_files, grep_file, search_in_files, multiply, add, divide
+          list_files, list_dir, find_files, grep_file, search_in_files, multiply, add, divide,
+          get_current_datetime
     - 无: 浏览器工具、技能工具、dispatch_subagent
 
     所以需要独立的 system prompt，不包含这些不可用工具的说明。
@@ -259,6 +262,7 @@ def get_subagent_system_prompt():
 - **网络与搜索**: `tavily_search`（网络搜索）、`read_url`（读取网页）、`read_lark_document`（获取飞书文档的 lark-cli 读取指引，需配合 execute_command 执行 lark-cli 命令）
 - **文件操作**: `read_file`（读取文件）、`execute_command`（执行命令）、`list_files`、`list_dir`、`find_files`、`grep_file`、`search_in_files`
 - **数学**: `multiply`、`add`、`divide`
+- **时间**: `get_current_datetime`（获取当前真实系统时间，凡涉及"今天/最新/最近"等时间判断必须先调用，禁止猜测日期）
 - **你没有**浏览器工具、技能工具、dispatch_subagent，不要尝试调用它们。
 
 ## 工作原则
@@ -341,11 +345,14 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     Returns:
         str: 格式化的动态上下文
     """
+    current_time_text = get_current_time_text()
+
     context = f"""## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})
 **架构**: {machine_type}
 **处理器**: {processor}
 **Shell**: {shell}
+**当前时间**: {current_time_text}（当前真实系统时间，每次请求自动刷新。涉及"今天/最新/最近/本周/今年"等时间判断必须以此为准，严禁凭训练记忆猜测日期；也可调用 `get_current_datetime` 工具获取精确时间）
 **python环境**: 基本python，需要的像excel等工具库都已经安装
 
 ## 当前环境
@@ -353,11 +360,11 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
 
 ## 当前项目目录
 {directory_tree}
+"""
 
     # 添加 Git 上下文（自动提取，无需 Agent 执行 git status）
     if git_context:
         context += f"\n{git_context}\n"
-"""
 
     # 添加自定义规则
     if rules_prompt:
