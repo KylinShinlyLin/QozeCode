@@ -9,7 +9,7 @@ import glob
 import shutil
 import subprocess
 
-from utils.datetime_utils import get_current_time_text
+# from utils.datetime_utils import get_current_time_text  # 暂时屏蔽：缓存命中率对照测试
 
 
 def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, max_total_chars: int = 8000) -> str:
@@ -345,14 +345,13 @@ def get_dynamic_context(system_info, system_release, system_version, machine_typ
     Returns:
         str: 格式化的动态上下文
     """
-    current_time_text = get_current_time_text()
+    # current_time_text = get_current_time_text()  # 暂时屏蔽：避免每次请求改变缓存前缀
 
     context = f"""## 系统环境信息
 **操作系统**: {system_info} {system_release} ({system_version})
 **架构**: {machine_type}
 **处理器**: {processor}
 **Shell**: {shell}
-**当前时间**: {current_time_text}（当前真实系统时间，每次请求自动刷新。涉及"今天/最新/最近/本周/今年"等时间判断必须以此为准，严禁凭训练记忆猜测日期；也可调用 `get_current_datetime` 工具获取精确时间）
 **python环境**: 基本python，需要的像excel等工具库都已经安装
 
 ## 当前环境

@@ -59,7 +59,7 @@ from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mc
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 from tools.code_tools import analyze_project, find_symbols, trace_imports
 from tools.asr_tool import transcribe_audio
-from tools.date_tools import get_current_datetime
+# from tools.date_tools import get_current_datetime  # 暂时屏蔽：缓存命中率对照测试
 # from tools.common_tools import ask_for_user
 from tools.skill_tools import get_skill_manager
 from qoze_mcp.mcp_manager import MCPManager
@@ -234,7 +234,7 @@ base_tools = [
     activate_mcp_server,
     deactivate_mcp_server,
     transcribe_audio,
-    get_current_datetime,
+    # get_current_datetime,  # 暂时屏蔽：缓存命中率对照测试
     dispatch_subagent,
     analyze_project,
     find_symbols,
