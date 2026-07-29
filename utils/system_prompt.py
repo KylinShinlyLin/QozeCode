@@ -61,7 +61,7 @@ def load_memory_context(memory_dir: str = ".qoze/memory", max_files: int = 5, ma
             else:
                 break
 
-        memory_text += f"---\n### 📄 {fname}\n\n{file_content}\n\n"
+        memory_text += f"---\n### 📄 会话记忆 {loaded + 1}\n\n{file_content}\n\n"
         total_chars += len(file_content)
         loaded += 1
 

@@ -97,7 +97,7 @@ def get_git_context(current_dir: str = None) -> str:
     
     # 3. 最近 3 条 commit
     log = _run_git([
-        "log", "--oneline", "-3", "--format=%h %s (%ar)"
+        "log", "--oneline", "-3", "--format=%h %s"
     ], cwd)
     if log:
         parts.append(f"\n**最近 3 次提交**:\n```\n{log}\n```")
