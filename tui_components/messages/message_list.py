@@ -353,18 +353,36 @@ class MessageList(ScrollableContainer):
         self._add_widget(widget)
 
     def _add_widget(self, widget):
-        """挂载组件，仅在 auto_scroll 时滚动到底部"""
+        """挂载组件，仅在 auto_scroll 时滚动到底部
+
+        优化：高频挂载场景下合并滚动请求，避免 call_after_refresh 队列堆积。
+        """
         self.mount(widget)
-        if self._auto_scroll:
-            self.call_after_refresh(self.scroll_end, animate=False)
+        if self._auto_scroll and not getattr(self, '_scroll_pending', False):
+            self._scroll_pending = True
+            self.call_after_refresh(self._deferred_scroll_end)
 
     def _update_widget(self, widget):
+        """刷新组件 — 仅更新内容显示，不强制 layout 重算。
+        
+        Static.update() 会触发必要的重绘，layout 只在 widget 尺寸变化时才需要，
+        流式期间内容增长不改变 widget 尺寸（height: auto），省略 layout 大幅减少开销。
+        """
+
         """刷新组件（更新内容显示 + 重新计算布局）"""
         try:
             # 先更新内容显示（将 buffer 写入 Static），再刷新布局
             if hasattr(widget, '_update_content_display'):
                 widget._update_content_display()
             widget.refresh(layout=True)
+        except Exception:
+            pass
+
+    def _deferred_scroll_end(self):
+        """滚动到底部并清除 pending 标记，允许多 widget 挂载合并为一次滚动"""
+        self._scroll_pending = False
+        try:
+            self.scroll_end(animate=False)
         except Exception:
             pass
 

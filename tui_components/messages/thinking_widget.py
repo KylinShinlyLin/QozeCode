@@ -63,7 +63,10 @@ class ThinkingWidget(Static):
         self._mounted = False
         self._is_finalized = False
         self._last_update_time = 0
-        self._update_interval = 0.15  # 节流间隔（秒）
+        self._update_interval = 0.08  # 节流间隔（秒），降低延迟提升响应感
+        # 缓存的 child widget 引用
+        self._header_widget = None
+        self._content_widget = None
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -80,6 +83,12 @@ class ThinkingWidget(Static):
 
     def on_mount(self) -> None:
         self._mounted = True
+        # 缓存 child widget 引用
+        try:
+            self._header_widget = self.query_one("#thinking-header", Static)
+            self._content_widget = self.query_one("#thinking-content", Static)
+        except Exception:
+            pass
         if self._thinking_buffer:
             self._update_display()
 
@@ -111,10 +120,12 @@ class ThinkingWidget(Static):
     # ---------- 内部更新 ----------
 
     def _update_display(self):
-        """刷新头部计数和内容区域"""
+        """刷新头部计数和内容区域 — 使用缓存的 child 引用避免 DOM 查询"""
         try:
-            header = self.query_one("#thinking-header", Static)
-            content = self.query_one("#thinking-content", Static)
+            header = self._header_widget
+            content = self._content_widget
+            if header is None or content is None:
+                return
 
             count = len(self._thinking_buffer)
             # ▸/▾/✓ 为 text 默认呈现符号，在本终端宽度与 wcwidth 一致，可安全使用；

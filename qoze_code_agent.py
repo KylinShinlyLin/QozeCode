@@ -628,7 +628,7 @@ async def init_agent():
     _sqlite_conn = await aiosqlite.connect(_sqlite_db_path)
     # 启用 WAL 模式 + 确保写入可靠性
     await _sqlite_conn.execute("PRAGMA journal_mode=WAL")
-    await _sqlite_conn.execute("PRAGMA synchronous=NORMAL")
+    await _sqlite_conn.execute("PRAGMA synchronous=FULL")
     _memory = AsyncSqliteSaver(_sqlite_conn)
     agent = agent_builder.compile(checkpointer=_memory)
 
@@ -645,6 +645,71 @@ async def shutdown_agent():
         await _sqlite_conn.close()
         _sqlite_conn = None
     agent = None
+
+# ─── thread_id 持久化 ─────────────────────────────────────────────
+
+def _get_thread_state_path() -> str:
+    """获取 thread_id 持久化文件路径"""
+    return os.path.join(os.getcwd(), '.qoze', 'thread_state.json')
+
+
+def load_last_thread_id() -> str:
+    """从持久化文件恢复上次使用的 thread_id。
+    不在此处验证数据库（agent 可能尚未初始化），调用方可在 init_agent 后验证。
+    """
+    import json as _json
+    state_path = _get_thread_state_path()
+    try:
+        if not os.path.exists(state_path):
+            return "default_session"
+        with open(state_path, 'r', encoding='utf-8') as f:
+            data = _json.load(f)
+        tid = data.get('thread_id', 'default_session')
+        if not tid:
+            return "default_session"
+        return tid
+    except Exception:
+        return "default_session"
+
+
+def save_thread_id(thread_id: str):
+    """持久化当前 thread_id。"""
+    import json as _json
+    try:
+        state_path = _get_thread_state_path()
+        os.makedirs(os.path.dirname(state_path), exist_ok=True)
+        with open(state_path, 'w', encoding='utf-8') as f:
+            _json.dump({'thread_id': thread_id}, f)
+    except Exception:
+        pass  # 静默失败，不影响主流程
+
+
+async def validate_thread_id(thread_id: str) -> str:
+    """验证 thread_id 在数据库中是否有 checkpoint 数据。
+    如果 agent 尚未初始化或无数据，返回 'default_session'。
+    """
+    if agent is None or agent.checkpointer is None:
+        return thread_id  # agent 未初始化，先信任持久化的值
+    try:
+        config = {"configurable": {"thread_id": thread_id}}
+        checkpoint_count = 0
+        async for _ in agent.checkpointer.alist(config):
+            checkpoint_count += 1
+            if checkpoint_count > 0:
+                return thread_id
+        # 该 thread_id 无数据，检查 default_session
+        if thread_id != "default_session":
+            default_config = {"configurable": {"thread_id": "default_session"}}
+            default_count = 0
+            async for _ in agent.checkpointer.alist(default_config):
+                default_count += 1
+                if default_count > 0:
+                    break
+            if default_count > 0:
+                return "default_session"
+        return thread_id  # 即使无数据也返回原值，agent 会自然从零开始
+    except Exception:
+        return thread_id
 
 
 async def get_checkpoint_stats(thread_id: str = "default_session"):
@@ -724,6 +789,34 @@ async def clear_checkpoints(thread_id: str) -> bool:
         return True
     except Exception:
         return False
+
+
+async def cleanup_all_checkpoints() -> int:
+    """Clean up all checkpoint threads, freeing disk space from orphan threads.
+
+    Returns:
+        int: Number of threads cleaned up
+    """
+    if agent is None or agent.checkpointer is None:
+        return 0
+    try:
+        conn = agent.checkpointer._conn if hasattr(agent.checkpointer, '_conn') else None
+        if conn is None:
+            return 0
+        rows = await conn.execute_fetchall(
+            "SELECT DISTINCT thread_id FROM checkpoints"
+        )
+        count = 0
+        for row in rows:
+            tid = row[0]
+            try:
+                await agent.checkpointer.adelete_thread(tid)
+                count += 1
+            except Exception:
+                pass
+        return count
+    except Exception:
+        return 0
 
 
 def get_image_files(folder_path: str) -> List[str]:

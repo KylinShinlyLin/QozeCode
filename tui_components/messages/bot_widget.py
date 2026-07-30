@@ -33,6 +33,7 @@ class BotMessageWidget(Static):
     """AI 回复组件 - 流式期间用 Static，结束后切 Markdown
 
     注意：thinking 内容已独立为 ThinkingWidget，本组件只展示 content。
+    优化：缓存 child widget 引用避免每次更新的 DOM 查询。
     """
 
     DEFAULT_CSS = """
@@ -88,6 +89,9 @@ class BotMessageWidget(Static):
         self._content_buffer = message.content or ""
         self._last_update = 0
         self._mounted = False
+        # 缓存的 child widget 引用，避免流式期间反复 query_one
+        self._content_static = None
+        self._content_md = None
         _log(f"init: content_len={len(self._content_buffer)}")
 
     def compose(self) -> ComposeResult:
@@ -100,6 +104,12 @@ class BotMessageWidget(Static):
 
     def on_mount(self) -> None:
         self._mounted = True
+        # 缓存 child widget 引用
+        try:
+            self._content_static = self.query_one("#content-static", Static)
+            self._content_md = self.query_one("#content-md", AutoCopyMarkdown)
+        except Exception:
+            pass
         _log(f"on_mount: content_len={len(self._content_buffer)}")
         if self._content_buffer:
             self._update_content_display()
@@ -107,9 +117,11 @@ class BotMessageWidget(Static):
         self._apply_error_style()
 
     def _update_content_display(self):
+        """流式期间更新 Static 显示 — 直接使用缓存的引用，无 DOM 查询开销"""
         try:
-            content_static = self.query_one("#content-static", Static)
-            content_static.update(sanitize_display_text(self._content_buffer) if self._content_buffer else " ")
+            if self._content_static is not None:
+                text = sanitize_display_text(self._content_buffer) if self._content_buffer else " "
+                self._content_static.update(text)
         except Exception as e:
             _log(f"_update_content_display: ERROR - {e}")
 
@@ -124,27 +136,31 @@ class BotMessageWidget(Static):
     def append_content(self, text: str):
         """流式追加内容 — 仅累积到 buffer，不立即更新显示。
 
-        显示更新由 _update_widget() 在 _flush_update 节流周期（0.15s）内统一处理，
+        显示更新由 _update_widget() 在 _flush_update 节流周期内统一处理，
         避免每个 chunk 都触发 Static.update() 导致渲染队列积压。
         """
         self._content_buffer += text
 
     def finalize(self):
-        """流式结束，从 Static 切换到 Markdown 渲染"""
+        """流式结束，从 Static 切换到 Markdown 渲染
+        
+        优化：不再手动 refresh(layout=True)，update() + class toggle 已足够触发重排。
+        """
         _log(f"finalize: content_len={len(self._content_buffer)}")
         if not self._mounted:
             return
         try:
-            content_static = self.query_one("#content-static", Static)
-            content_md = self.query_one("#content-md", AutoCopyMarkdown)
+            # 使用缓存引用
+            if self._content_static is None or self._content_md is None:
+                self._content_static = self.query_one("#content-static", Static)
+                self._content_md = self.query_one("#content-md", AutoCopyMarkdown)
 
+            text = sanitize_display_text(self._content_buffer) if self._content_buffer else " "
             # 先更新 Markdown 内容，再切换显隐，减少中间帧的布局抖动
-            content_md.update(sanitize_display_text(self._content_buffer) if self._content_buffer else " ")
-            content_static.add_class("hidden")
-            content_md.remove_class("hidden")
+            self._content_md.update(text)
+            self._content_static.add_class("hidden")
+            self._content_md.remove_class("hidden")
 
-            # 触发布局刷新，确保高度重新计算
-            self.refresh(layout=True)
             # 检测是否为错误消息，应用红色样式
             self._apply_error_style()
         except Exception as e:

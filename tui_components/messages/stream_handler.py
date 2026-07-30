@@ -43,7 +43,7 @@ class MessageStreamHandler:
     thinking 内容通过独立的 ThinkingWidget 展示，与 BotMessageWidget 分离。
     """
 
-    UPDATE_INTERVAL = 0.05
+    UPDATE_INTERVAL = 0.066
     TOKEN_UPDATE_INTERVAL = 1.2  # token 计算最小间隔（秒），避免过于频繁影响渲染
 
     def __init__(self,
@@ -136,7 +136,7 @@ class MessageStreamHandler:
                                                                                         "ToolMessage"]:
                         await self._process_tool_result(message_chunk, chunk_count)
 
-                    # 关键：让出事件循环，给 UI 刷新机会
+                    # 让出事件循环，给 UI 刷新机会
                     await asyncio.sleep(0)
                 except Exception as e:
                     _log(f"ERROR chunk {chunk_count}: {e}")
@@ -558,7 +558,7 @@ class MessageStreamHandler:
             self._pending_update = True
 
     async def _flush_update(self):
-        """刷新 UI 更新"""
+        """刷新 UI 更新 — 仅在存在待更新组件时才触发回调"""
         if self.current_bot_message:
             self.on_bot_updated(self.current_bot_message)
         self._pending_update = False

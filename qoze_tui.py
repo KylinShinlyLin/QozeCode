@@ -141,7 +141,11 @@ class Qoze(App):
         self.provider = provider
         self.agent_ready = False
         self.multiline_mode = False
-        self.thread_id = "default_session"
+        # 尝试恢复上次会话的 thread_id（修复 clear 后重启历史丢失问题）
+        try:
+            self.thread_id = qoze_code_agent.load_last_thread_id()
+        except Exception:
+            self.thread_id = "default_session"
         self.processing_worker = None
 
         self.audio_manager = AudioManager()
@@ -150,7 +154,7 @@ class Qoze(App):
         self._processing_suggestion = False
 
         self._last_scroll_time = 0
-        self._scroll_throttle_ms = 50
+        self._scroll_throttle_ms = 15
         self._scroll_accumulator = 0
 
     def compose(self) -> ComposeResult:
@@ -472,6 +476,9 @@ class Qoze(App):
             # 初始化 SQLite checkpointer（需在事件循环启动后）
             await qoze_code_agent.init_agent()
 
+            # 验证恢复的 thread_id 在数据库中确实有数据
+            self.thread_id = await qoze_code_agent.validate_thread_id(self.thread_id)
+
             # ─── 初始化 MCP 管理器并加载工具 ────────────────────
             qoze_code_agent._ensure_mcp_manager()
             await qoze_code_agent.load_mcp_tools()
@@ -568,10 +575,10 @@ class Qoze(App):
             from tools.subagent_tool import reset_subagent_cache
             reset_subagent_cache()
             self.message_list.clear_messages()
-            # 清除 SQLite 中的历史 checkpoint 和消息
-            old_thread_id = self.thread_id
+            # 先持久化新 thread_id，再清理旧数据（防止中间被 kill 导致状态丢失）
             self.thread_id = str(uuid.uuid4())
-            await qoze_code_agent.clear_checkpoints(old_thread_id)
+            qoze_code_agent.save_thread_id(self.thread_id)
+            await qoze_code_agent.cleanup_all_checkpoints()
             self.total_tokens = 0
             self.status_bar.update_token_count(0)
             self.show_welcome()
@@ -1090,9 +1097,10 @@ class Qoze(App):
                 from tools.subagent_tool import reset_subagent_cache
                 reset_subagent_cache()
                 self.message_list.clear_messages()
-                old_thread_id = self.thread_id
+                # 先持久化新 thread_id，再清理旧数据
                 self.thread_id = str(uuid.uuid4())
-                await qoze_code_agent.clear_checkpoints(old_thread_id)
+                qoze_code_agent.save_thread_id(self.thread_id)
+                await qoze_code_agent.cleanup_all_checkpoints()
                 self.total_tokens = 0
                 self.status_bar.update_token_count(0)
                 self.show_welcome()
