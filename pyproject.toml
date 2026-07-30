@@ -40,7 +40,7 @@ dependencies = [
     "python-socks[asyncio]",
     "html2text",
     "langchain-mcp-adapters>=0.1.0",
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2.0.0",
     "langgraph-checkpoint-sqlite"
 ]
 
