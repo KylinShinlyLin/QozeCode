@@ -3,6 +3,7 @@ QozeCode MCP Tools - LLM 可调用的 MCP 管理工具
 对标 skill_tools.py 的设计
 """
 
+import os
 import platform
 import shutil
 import asyncio
@@ -241,5 +242,244 @@ async def deactivate_mcp_server(server_name: str) -> str:
 
     except Exception as e:
         error_msg = f"[MCP_ERROR] 反激活 MCP 服务失败: {str(e)}"
+        _log(error_msg, "red")
+        return error_msg
+
+
+@tool
+def get_mcp_install_guide(server_name: str = "", server_source: str = "") -> str:
+    """
+    当需要安装/配置新的 MCP (Model Context Protocol) 服务时调用，获取详细的安装指引。
+    此工具只返回安装指引，不执行实际安装。Agent 应该根据返回的指引自行执行安装操作。
+
+    Args:
+        server_name: 要安装/配置的 MCP 服务名称（如 "github"、"postgres"、"chrome-devtools"）。留空则返回通用指引
+        server_source: 服务来源（可选），可以是：
+            - npm 包名（如 "@modelcontextprotocol/server-github"）
+            - 官方文档 URL
+            - 服务用途描述
+
+    Returns:
+        详细的安装指引，包含：
+        - 配置文件位置（默认用户级 ~/.qoze/mcp_config.json）
+        - 配置格式与字段说明（stdio/http）
+        - 前置依赖检查与安装流程
+        - 激活与验证步骤（TUI /mcp 命令 或 activate_mcp_server 工具）
+        - 常见问题与注意事项
+    """
+    try:
+        # 项目根目录（tools/ 的上一级），用于定位 mcp_config.template.json
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_path = os.path.join(_get_qoze_base_dir(), "mcp_config.json")
+        template_path = os.path.join(project_root, "mcp_config.template.json")
+
+        # 已存在检查（manager 未初始化时跳过）
+        mgr, existing = None, {}
+        try:
+            mgr = get_mcp_manager()
+            existing = mgr.list_servers()
+        except Exception:
+            pass
+
+        if server_name and server_name in existing and mgr is not None:
+            status = mgr.get_server_status(server_name)
+            active = "已激活" if status and status["active"] else "未激活"
+            extra = ""
+            if status and status["enabled"] is False:
+                extra = " [已禁用]"
+            tools_info = ""
+            if status and status["tools"]:
+                tools_info = "\n工具 ({}): {}".format(status["tool_count"], ", ".join(status["tools"]))
+            return (
+                f"[MCP_EXISTS] MCP 服务 '{server_name}' 已配置！\n\n"
+                f"配置文件: {config_path}\n"
+                f"描述: {existing.get(server_name, '')}\n"
+                f"状态: {active}{extra}{tools_info}\n\n"
+                "如需修改配置，请编辑上述配置文件后重新激活：\n"
+                f"  - TUI 下执行 /mcp activate {server_name}（或 /mcp deactivate {server_name}）\n"
+                f"  - 或调用 activate_mcp_server('{server_name}')"
+            )
+
+        guide_lines = [
+            "[MCP_INSTALL_GUIDE] MCP 服务安装指引" + (f"（{server_name}）" if server_name else ""),
+            "",
+            "=" * 60,
+            "配置文件位置（默认用户级）",
+            "=" * 60,
+            "",
+            "QozeCode 的 MCP 服务统一在「用户级配置」中管理（本机所有项目共享）：",
+            f"  配置文件: {config_path}",
+            f"  参考模板: {template_path}",
+            "  模板内含 chrome-devtools / postgres / github 三个示例，可对照修改",
+            "",
+            "配置目录不存在时先创建:",
+            f"  mkdir -p {_get_qoze_base_dir()}",
+            "",
+            "=" * 60,
+            "配置格式（JSON）",
+            "=" * 60,
+            "",
+            "mcp_config.json 顶层包含三部分：",
+            '  - servers:        {"服务名": {服务配置}}',
+            "  - active_servers: 已激活的服务名列表（用于下次启动自动恢复）",
+            "  - settings:       连接超时/重试等全局设置（可选）",
+            "",
+            "单个服务支持的字段：",
+            "  - description: 服务说明（list_mcp_servers 展示用）",
+            '  - transport:   "stdio"（本地子进程，默认）或 "http"（远程服务）',
+            "  - enabled:     true/false，是否允许激活",
+            "",
+            "【stdio 传输】用 command 启动本地 MCP server（最常见）：",
+            "  - command: 可执行命令（npx / uvx / python3 等）",
+            '  - args:     参数列表（如 ["-y", "<npm包>"]）',
+            "  - env:      环境变量（密钥类放这里，不要写进命令行）",
+            "",
+            "【http 传输】连接远程 MCP 服务：",
+            "  - url:      服务地址",
+            "  - headers:  认证等请求头（如 Authorization）",
+            "",
+            "完整示例：",
+            "```json",
+            "{",
+            '  "servers": {',
+            '    "github": {',
+            '      "description": "GitHub API：管理 Issue、PR、仓库",',
+            '      "transport": "stdio",',
+            '      "command": "npx",',
+            '      "args": ["-y", "@modelcontextprotocol/server-github"],',
+            '      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxx" },',
+            '      "enabled": true',
+            '    },',
+            '    "my-remote": {',
+            '      "description": "远程 MCP 服务",',
+            '      "transport": "http",',
+            '      "url": "https://example.com/mcp",',
+            '      "headers": { "Authorization": "Bearer xxx" },',
+            '      "enabled": true',
+            '    }',
+            '  },',
+            '  "active_servers": [],',
+            '  "settings": {',
+            '    "connection_timeout": 60,',
+            '    "tool_execution_timeout": 120',
+            '  }',
+            "}",
+            "```",
+            "",
+        ]
+
+        # 安装流程
+        guide_lines.extend([
+            "=" * 60,
+            "安装流程",
+            "=" * 60,
+            "",
+            "1) 确定服务名称与来源：" + (server_source if server_source else "（未提供来源，需先确认 npm 包名或官方文档）"),
+            "",
+        ])
+
+        if server_source and server_source.startswith(("http://", "https://")):
+            guide_lines.extend([
+                "   来源类型: 文档 URL",
+                "   建议先阅读官方文档，确认 transport / command / args / 认证方式后继续：",
+                f"     {server_source}",
+                "",
+            ])
+        elif server_source and (server_source.startswith("@") or "/" in server_source):
+            guide_lines.extend([
+                "   来源类型: npm 包名",
+                f"   验证包是否存在及用法: npm view {server_source}   或   npx {server_source} --help",
+                "",
+            ])
+        elif server_source:
+            guide_lines.extend([
+                "   来源类型: 描述/说明",
+                "   根据描述判断服务类型与启动方式（stdio 本地进程 或 http 远程服务）",
+                "",
+            ])
+
+        guide_lines.extend([
+            "2) 检查前置依赖（stdio 服务需要本地运行时）：",
+            "   - npx 启动: 需要 node/npm（which npx && node --version）",
+            "   - uvx 启动: 需要 uv（which uvx）",
+            "   - python 启动: 需要对应 python 环境及已安装的 mcp 包",
+            "",
+            "3) 写入配置：把服务定义加入 servers（enabled: true），保存为 UTF-8 JSON：",
+            f"   {config_path}",
+            "   示例（用 heredoc 或 python json 写入均可，注意 JSON 语法正确）",
+            "",
+            "4) 激活并加载工具：",
+            f"   - TUI 下执行: /mcp activate {server_name if server_name else '<服务名>'}",
+            f"   - 或调用工具: activate_mcp_server('{server_name if server_name else '<服务名>'}')",
+            "   - 激活成功会实时把该服务提供的工具注册给 Agent 使用",
+            "",
+            "5) 验证：",
+            "   - list_mcp_servers() 查看服务状态与工具数",
+            "   - 实际调用新工具做一次端到端验证",
+            "",
+        ])
+
+        # 激活与自动恢复
+        guide_lines.extend([
+            "=" * 60,
+            "激活机制与自动恢复",
+            "=" * 60,
+            "",
+            "1) 激活成功后，服务名会自动写入 active_servers，下次启动自动恢复连接。",
+            "2) 若 active_servers 为空，启动时会自动激活所有 enabled=true 的服务。",
+            "   所以只配置不激活的服务，enabled 可设为 false。",
+            "3) 反激活: /mcp deactivate <服务名>  或  deactivate_mcp_server('<服务名>')",
+            "4) 修改配置后需重新激活（或重启 QozeCode）才生效：",
+            "   - 配置在启动时加载一次；MCPManager 提供 reload_config 支持热加载",
+            "",
+        ])
+
+        # 注意事项与速查
+        guide_lines.extend([
+            "=" * 60,
+            "注意事项",
+            "=" * 60,
+            "",
+            "1) npx 首次运行会自动下载 npm 包（通常 30-60 秒），属正常现象。",
+            "2) 密钥（token/密码）必须放在 env 字段，禁止明文输出到终端/日志/回复。",
+            "3) chrome-devtools 特殊：需要 Chrome 9222 远程调试端口；",
+            "   activate_mcp_server 会尝试自动拉起独立 Chrome 实例（~/.qoze/chrome-mcp-profile）。",
+            "4) 部分官方 @modelcontextprotocol/server-* 包已归档/不再维护，",
+            "   不确定时用 `npm view <包名>` 查询更新时间，或选用社区维护的替代包。",
+            "5) stdio 服务子进程输出在 TUI 下会被静默抑制，排查问题时可临时在",
+            "   非 TUI 模式（命令行启动 qoze）查看日志。",
+            "",
+            "=" * 60,
+            "常见 MCP 服务器速查（供参考，以 npm view 查询为准）",
+            "=" * 60,
+            "",
+            "| 服务 | npm 包 | 额外要求 |",
+            "|------|--------|----------|",
+            "| github | @modelcontextprotocol/server-github | GITHUB_PERSONAL_ACCESS_TOKEN |",
+            "| postgres | @modelcontextprotocol/server-postgres | 连接串参数 |",
+            "| filesystem | @modelcontextprotocol/server-filesystem | 允许访问的目录 |",
+            "| fetch | @modelcontextprotocol/server-fetch | 无（注意 SSRF 风险） |",
+            "| memory | @modelcontextprotocol/server-memory | 知识图谱持久化文件 |",
+            "| sequential-thinking | @modelcontextprotocol/server-sequential-thinking | 无 |",
+            "| time | @modelcontextprotocol/server-time | 无 |",
+            "| chrome-devtools | chrome-devtools-mcp | Chrome 9222 端口 |",
+            "",
+            "=" * 60,
+            "安装后验证步骤（汇总）",
+            "=" * 60,
+            "",
+            "1. cat 配置确认 JSON 合法:",
+            f"   cat {config_path}",
+            "2. 刷新列表: list_mcp_servers() 或 /mcp list，确认服务已出现",
+            "3. 激活: /mcp activate <服务名> 或 activate_mcp_server('<服务名>')",
+            "4. 确认工具注册: list_mcp_servers() 显示工具数 > 0",
+            "5. 端到端: 实际调用一个新工具验证连通性",
+            "",
+        ])
+
+        return "\n".join(guide_lines)
+
+    except Exception as e:
+        error_msg = f"[MCP_ERROR] 获取 MCP 安装指引时发生错误: {str(e)}"
         _log(error_msg, "red")
         return error_msg

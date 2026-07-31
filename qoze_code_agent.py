@@ -55,7 +55,7 @@ from tools.search_tool import tavily_search, read_url
 #     browser_snapshot, browser_wait_for, browser_handle_dialog, browser_evaluate, \
 #     browser_console_messages, browser_console_get, browser_network_requests, browser_network_get
 from tools.skill_tools import activate_skill, list_available_skills, deactivate_skill, get_skill_install_guide
-from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mcp_server, set_mcp_manager
+from tools.mcp_tools import list_mcp_servers, activate_mcp_server, deactivate_mcp_server, get_mcp_install_guide, set_mcp_manager
 from tools.subagent_tool import dispatch_subagent, reset_subagent_cache
 from tools.code_tools import analyze_project, find_symbols, trace_imports
 from tools.asr_tool import transcribe_audio
@@ -233,6 +233,7 @@ base_tools = [
     list_mcp_servers,
     activate_mcp_server,
     deactivate_mcp_server,
+    get_mcp_install_guide,
     transcribe_audio,
     get_current_datetime,  # 暂时屏蔽：缓存命中率对照测试
     dispatch_subagent,

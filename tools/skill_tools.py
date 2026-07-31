@@ -37,6 +37,7 @@ def activate_skill(skill_name: str) -> str:
     """
     try:
         skill_manager = get_skill_manager()
+        skill_manager.refresh_skills()  # 重新扫描技能目录，确保新安装技能可激活
 
         # 检查技能是否存在
         if skill_name not in skill_manager.skills:
@@ -69,6 +70,7 @@ def list_available_skills() -> str:
     """
     try:
         skill_manager = get_skill_manager()
+        skill_manager.refresh_skills()  # 重新扫描技能目录，确保新安装技能可见
         available_skills = skill_manager.get_available_skills()
 
         if not available_skills:
@@ -160,8 +162,8 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             existing = skill_manager.skills[skill_name]
             return f"""[SKILL_EXISTS] 技能 '{skill_name}' 已存在！
 
-📍 现有位置: {existing.location}
-📝 描述: {existing.description}
+现有位置: {existing.location}
+描述: {existing.description}
 
 如需重新安装，请先使用 deactivate_skill 停用后手动删除，然后重新获取安装指引。"""
 
@@ -172,26 +174,31 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             f"[SKILL_INSTALL_GUIDE] 技能 '{skill_name}' 安装指引",
             "",
             "=" * 60,
-            "📋 安装步骤",
+            "安装位置（默认用户级公共目录）",
             "=" * 60,
             "",
-            f"步骤 1: 创建技能目录",
-            f"  目标路径: {install_dir}",
-            f"  命令: mkdir -p {install_dir}",
+            "QozeCode 按以下优先级发现技能（目录内含 SKILL.md 即视为一个技能）：",
+            "  1. 项目级: .qoze/skills/                     —— 随仓库分发，仅当前项目可见",
+            f"  2. 用户级: {_get_qoze_base_dir()}/skills/   —— 本机所有项目共享（默认）",
+            "  3. 内置:   项目根 .qoze/skills/",
             "",
-            f"步骤 2: 创建 SKILL.md 主文件",
-            f"  文件路径: {install_dir}/SKILL.md",
+            "约定：用户未明确指定层级时，一律安装到用户级目录：",
+            f"  目标目录: {install_dir}",
+            f"  创建命令: mkdir -p {install_dir}",
+            "",
+            "仅当用户明确要求「随项目/仓库分发」时，才安装到项目级：",
+            f"  .qoze/skills/{skill_name}/",
             "",
             "=" * 60,
-            "📝 SKILL.md 文件格式规范",
+            "SKILL.md 文件格式规范",
             "=" * 60,
             "",
-            "SKILL.md 必须包含 YAML frontmatter 和 Markdown 内容：",
+            "SKILL.md 必须以 '---' 开头（YAML frontmatter），name 与 description 必填：",
             "",
             "```markdown",
             "---",
             f"name: {skill_name}",
-            "description: \"技能描述，简要说明此技能的作用\"",
+            'description: "技能描述，简要说明此技能的作用"',
             "version: 1.0.0",
             "author: optional",
             "---",
@@ -214,24 +221,34 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             "- 建议2",
             "```",
             "",
+            "- name 必填，且建议与目录名一致（SkillManager 按 frontmatter 的 name 注册技能）",
+            "- 主文件必须命名为 SKILL.md（区分大小写）",
+            "",
             "=" * 60,
-            "🔧 路径修复指南（重要）",
+            "路径适配指南（重要：QozeCode 特有，必读）",
             "=" * 60,
             "",
-            "在技能内容中，需要特别注意路径的写法：",
+            "1) Agent 执行命令时 cwd 是项目根目录，而不是技能目录。",
+            "   SKILL.md 中所有相对路径（scripts/xxx.py、./xxx.py、skills/xxx/...）",
+            "   执行时都会失败，必须改为基于技能实际安装目录的绝对路径。",
             "",
-            "❌ 避免使用以下相对路径格式：",
-            "  - .qoze/skills/{skill_name}/scripts/xxx.py",
-            "  - ./scripts/xxx.py",
+            "2) 默认绝对路径前缀（用户级安装）：",
+            f"   {install_dir}/",
+            "   示例：把 `python scripts/tool.py` 改为",
+            f"   `python {install_dir}/scripts/tool.py`",
             "",
-            "✅ 推荐使用以下方式之一：",
-            f"  1. 用户目录: {_get_qoze_base_dir()}/skills/{skill_name}/scripts/xxx.py",
+            "3) 技能内文档相对链接（references/xxx.md、../other-skill/SKILL.md）：",
+            f"   读取时同样要用绝对路径，如 {install_dir}/references/xxx.md；",
+            "   多技能互相引用（如 ../lark-shared/SKILL.md）要求相关技能安装在",
+            "   同一级 skills/ 目录下且目录名保持不变，不要改动目录层级。",
             "",
-            "如果技能内容中包含对其他技能的引用，例如：",
-            f"  python .qoze/skills/other-skill/scripts/tool.py",
+            "4) 建议在 SKILL.md 顶部添加「路径基准」说明块，便于 Agent 定位：",
+            f"   > 本技能安装于 {install_dir}/，所有相对引用均以此目录为基准",
+            "   > 转为绝对路径后再执行。",
             "",
-            "应该修改为：",
-            f"  python {_get_qoze_base_dir()}/skills/other-skill/scripts/tool.py",
+            "5) 若实际安装到项目级 .qoze/skills/，绝对路径前缀为",
+            f"   {os.path.abspath('.qoze/skills')}/{skill_name}/；",
+            "   路径修复时必须与技能实际所在层级保持一致。",
             "",
         ]
 
@@ -239,7 +256,7 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
         if skill_source:
             guide_lines.extend([
                 "=" * 60,
-                "📥 技能内容获取",
+                "技能内容获取（多文件技能）",
                 "=" * 60,
                 "",
                 f"技能来源: {skill_source}",
@@ -249,24 +266,32 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             if skill_source.startswith(('http://', 'https://')):
                 guide_lines.extend([
                     "来源类型: URL",
-                    "建议操作:",
-                    f"  1. 下载内容: curl -o /tmp/{skill_name}_skill.md '{skill_source}'",
-                    f"  2. 检查内容: cat /tmp/{skill_name}_skill.md",
-                    f"  3. 复制到目标位置并修复路径",
+                    "",
+                    "【GitHub 仓库内的技能目录】（推荐，可完整保留 SKILL.md + references/ + scripts/）：",
+                    f"  git clone --depth 1 --filter=blob:none --sparse <repo_url> .qoze/{skill_name}-install",
+                    f"  git -C .qoze/{skill_name}-install sparse-checkout set --no-cone <技能在仓库内的路径>",
+                    f"  cp -R .qoze/{skill_name}-install/<技能在仓库内的路径> {install_dir}",
+                    f"  rm -rf .qoze/{skill_name}-install",
+                    "",
+                    "【单个文件 URL】：",
+                    f"  curl -fsSL '<url>' -o {install_dir}/SKILL.md",
+                    "",
+                    "下载/复制完成后，必须按上方「路径适配指南」修正所有相对路径引用。",
                     "",
                 ])
             else:
                 guide_lines.extend([
                     "来源类型: 描述/说明",
                     "建议操作:",
-                    "  根据描述创建符合上述格式的 SKILL.md 文件",
+                    "  根据描述创建符合上述格式的 SKILL.md 文件（含 name/description frontmatter）",
+                    "  如描述中涉及脚本/资源，按「路径适配指南」使用绝对路径",
                     "",
                 ])
 
         # 添加可选的资源目录结构
         guide_lines.extend([
             "=" * 60,
-            "📁 可选目录结构",
+            "可选目录结构",
             "=" * 60,
             "",
             f"如果技能需要额外的脚本或资源，可以创建以下目录：",
@@ -281,17 +306,20 @@ def get_skill_install_guide(skill_name: str, skill_source: str = None) -> str:
             f"└── references/       # 参考资料（可选）",
             "",
             "=" * 60,
-            "✅ 安装后验证步骤",
+            "安装后验证步骤",
             "=" * 60,
             "",
-            "1. 检查文件是否存在:",
+            "1. 检查文件是否存在且 frontmatter 完整:",
             f"   cat {install_dir}/SKILL.md",
+            "   （确认以 '---' 开头，且含 name/description）",
             "",
-            "2. 刷新技能列表:",
+            "2. 刷新技能列表（list_available_skills 会自动重新扫描技能目录）:",
             "   调用 list_available_skills() 查看新技能是否出现",
             "",
             "3. 激活技能测试:",
-            f"   调用 activate_skill('{skill_name}') 验证是否能正常激活",
+            f"   调用 activate_skill('{skill_name}') 验证能否正常加载内容",
+            "",
+            "4. 如技能包含脚本/资源，检查绝对路径引用与可执行权限。",
             "",
             "=" * 60,
         ])
