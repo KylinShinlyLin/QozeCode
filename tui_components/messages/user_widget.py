@@ -8,6 +8,7 @@ from textual.containers import Vertical
 from .auto_copy_widgets import AutoCopyStatic
 
 from .types import UserMessage
+from ..terminal_compat import sanitize_display_text
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
@@ -119,7 +120,11 @@ UserMessageWidget Static {
         self.message = message
         # 关键修复：在 super().__init__() 之前完成所有属性设置，
         # 避免 Textual 内部 reactive/初始化时序导致渲染问题
-        self._content_buffer = _truncate_content(message.content)
+        # 展示层净化：用户输入（常为复制粘贴内容）强制剥离特殊 Unicode 与 emoji，
+        # 避免终端 UI 错乱；完整原始内容保留在 message.content 中供 Agent/上下文使用
+        self._content_buffer = _truncate_content(
+            sanitize_display_text(message.content, strip_emoji=True)
+        )
         self._mounted = False
         _log(f"__init__: "
              f"full_len={len(message.content) if message.content else 0}, "
