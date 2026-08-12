@@ -46,6 +46,7 @@ class ModelType(Enum):
     GLM_5V_TURBO = "glm-5v-turbo"
     GPT_5_6_TERRA = "gpt-5.6-terra"
     GPT_5_6_LUNA = "gpt-5.6-luna"
+    GPT_5_6_SOL = "gpt-5.6-sol"
     MIMO_V2_5_PRO = "mimo-v2.5-pro"
     DEEPSEEK_V4_PRO_AZURE = "DeepSeek-V4-Pro"
 
@@ -78,6 +79,7 @@ MODEL_VISION_SUPPORT = {
     ModelType.DEEPSEEK_V4_PRO_AZURE: False,   # Azure DeepSeek 不支持图片输入
     ModelType.GPT_5_6_TERRA: True,          # OpenAI GPT 支持视觉
     ModelType.GPT_5_6_LUNA: True,           # OpenAI GPT 支持视觉
+    ModelType.GPT_5_6_SOL: True,            # OpenAI GPT 支持视觉
 }
 
 
@@ -115,4 +117,5 @@ MODEL_PROVIDER_MAP = {
     ModelType.DEEPSEEK_V4_PRO_AZURE: ModelProvider.AZURE,
     ModelType.GPT_5_6_TERRA: ModelProvider.OPENAI,
     ModelType.GPT_5_6_LUNA: ModelProvider.OPENAI,
+    ModelType.GPT_5_6_SOL: ModelProvider.OPENAI,
 }

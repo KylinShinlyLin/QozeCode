@@ -61,6 +61,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
     choices = [
         # "gemini-3-flash     (think)     vertex-ai",
         # "kimi-k2.5                      MoonShot",
+        "gpt-5.6-sol (medium)           OpenAI",
         "gpt-5.6-terra (medium)         OpenAI",
         "gpt-5.6-luna (medium)          OpenAI",
         "gpt-5.5                        OpenAI",
@@ -159,6 +160,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.GPT_5_6_TERRA
         elif "gpt-5.6-luna" in selected:
             model_type = ModelType.GPT_5_6_LUNA
+        elif "gpt-5.6-sol" in selected:
+            model_type = ModelType.GPT_5_6_SOL
         elif "gpt-5.5" in selected:
             model_type = ModelType.GPT_5_5
         elif "gpt-5.4" in selected:
