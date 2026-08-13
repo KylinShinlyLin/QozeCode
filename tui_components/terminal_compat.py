@@ -25,7 +25,42 @@ JediTerm）对 emoji 宽度渲染不稳定；而复制粘贴进 TUI 的文本常
 """
 import os
 import re
-from typing import Optional
+from dataclasses import dataclass
+from typing import Mapping, Optional
+
+
+@dataclass(frozen=True)
+class TerminalRenderProfile:
+    """Terminal-specific refresh and retained-tail budgets."""
+
+    name: str
+    frame_interval: float
+    busy_interval: float
+    tail_chars: int
+    tail_lines: int
+
+
+def get_terminal_render_profile(
+    env: Mapping[str, str] | None = None,
+) -> TerminalRenderProfile:
+    """Return render budgets for the supplied environment without side effects."""
+    source = os.environ if env is None else env
+    is_jediterm = "jediterm" in source.get("TERMINAL_EMULATOR", "").lower()
+    if is_jediterm:
+        return TerminalRenderProfile(
+            name="jediterm",
+            frame_interval=0.10,
+            busy_interval=0.166,
+            tail_chars=16 * 1024,
+            tail_lines=120,
+        )
+    return TerminalRenderProfile(
+        name="default",
+        frame_interval=0.05,
+        busy_interval=0.10,
+        tail_chars=32 * 1024,
+        tail_lines=200,
+    )
 
 
 def _detect_jediterm() -> bool:

@@ -1,17 +1,15 @@
-// StateIconRenderer.swift — 手绘矢量状态图标 (NSBezierPath, 免 SVG 转换)
-// 用途: 菜单栏 done/error 徽章 + 系统通知附件缩略图 (UNNotificationAttachment)
-// 设计: 圆形彩底 + 白色圆角 glyph, 小尺寸 (菜单栏 15pt) 与大尺寸 (通知 128pt) 共用
+// StateIconRenderer.swift — 手绘状态图标、通知 PNG 与缓存
+// AppKit 图像创建和缓存访问统一限定 MainActor；临时 PNG 被清理后按需重建。
 
 import AppKit
 
+@MainActor
 enum StateIconRenderer {
+    private static var imageCache: [String: NSImage] = [:]
+    private static var notificationURLCache: [String: URL] = [:]
 
-    // MARK: - done / error 徽章
-
-    /// done: 绿圆底 + 白色圆角对勾
-    static func doneIcon(size: CGFloat) -> NSImage {
-        badge(size: size, color: MenuBarIcon.menuBarNSColor(for: .done)) { rect in
-            // 对勾 (坐标系 y 向上): 左中 → 中下 → 右上
+    private static func doneIcon(size: CGFloat) -> NSImage {
+        badge(size: normalizedSize(size), color: MenuBarIcon.menuBarNSColor(for: .done)) { rect in
             let path = NSBezierPath()
             path.move(to: NSPoint(x: rect.minX + rect.width * 0.24, y: rect.minY + rect.height * 0.52))
             path.line(to: NSPoint(x: rect.minX + rect.width * 0.43, y: rect.minY + rect.height * 0.31))
@@ -20,9 +18,8 @@ enum StateIconRenderer {
         }
     }
 
-    /// error: 红圆底 + 白色圆角 X
-    static func errorIcon(size: CGFloat) -> NSImage {
-        badge(size: size, color: MenuBarIcon.menuBarNSColor(for: .error)) { rect in
+    private static func errorIcon(size: CGFloat) -> NSImage {
+        badge(size: normalizedSize(size), color: MenuBarIcon.menuBarNSColor(for: .error)) { rect in
             let r = rect.insetBy(dx: rect.width * 0.29, dy: rect.height * 0.29)
             let path = NSBezierPath()
             path.move(to: NSPoint(x: r.minX, y: r.minY))
@@ -33,19 +30,40 @@ enum StateIconRenderer {
         }
     }
 
-    // MARK: - 通知附件
-
-    /// 各通知状态对应图标: done/error 手绘徽章, waiting_approval 用染色 SF 三角
     static func icon(for state: AgentState, size: CGFloat) -> NSImage {
-        switch state {
-        case .done: return doneIcon(size: size)
-        case .error: return errorIcon(size: size)
-        default: return MenuBarIcon.tintedImage(for: state, pointSize: size * 0.82)
+        let normalized = normalizedSize(size)
+        let key = cacheKey(state: state, size: normalized)
+        if let cached = imageCache[key] {
+            IslandPerf.event("StateIconCache", detail: "hit \(key)")
+            return cached
         }
+
+        let interval = IslandPerf.begin("StateIconRender")
+        let image: NSImage
+        switch state {
+        case .done:
+            image = doneIcon(size: normalized)
+        case .error:
+            image = errorIcon(size: normalized)
+        default:
+            image = MenuBarIcon.tintedImage(for: state, pointSize: normalized * 0.82)
+        }
+        imageCache[key] = image
+        IslandPerf.end(interval, "\(state.rawValue) \(normalized)")
+        IslandPerf.event("StateIconCache", detail: "miss \(key)")
+        return image
     }
 
-    /// 渲染为 PNG 写入临时目录, 供 UNNotificationAttachment 使用 (同状态覆盖复用)
+    /// 同状态复用稳定 URL；若系统清理临时文件，则重新编码并原子写入。
     static func notificationIconURL(for state: AgentState) -> URL? {
+        let key = state.rawValue
+        if let cached = notificationURLCache[key], FileManager.default.fileExists(atPath: cached.path) {
+            IslandPerf.event("NotificationIconURLCache", detail: "hit \(key)")
+            return cached
+        }
+
+        let interval = IslandPerf.begin("NotificationIconPNG")
+        defer { IslandPerf.end(interval, key) }
         let image = icon(for: state, size: 128)
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
@@ -54,6 +72,8 @@ enum StateIconRenderer {
             .appendingPathComponent("qoze_notify_\(state.rawValue).png")
         do {
             try png.write(to: url, options: .atomic)
+            notificationURLCache[key] = url
+            IslandPerf.event("NotificationIconURLCache", detail: "miss \(key)")
             return url
         } catch {
             DebugLog.log("notification icon write failed: \(error.localizedDescription)")
@@ -61,18 +81,23 @@ enum StateIconRenderer {
         }
     }
 
-    // MARK: - 私有
+    private static func cacheKey(state: AgentState, size: CGFloat) -> String {
+        "\(state.rawValue):\(Int((size * 4).rounded()))"
+    }
 
-    /// 圆形彩底 + 白色 glyph 绘制
+    private static func normalizedSize(_ size: CGFloat) -> CGFloat {
+        max(0.25, (size * 4).rounded() / 4)
+    }
+
     private static func badge(size: CGFloat, color: NSColor, glyph: @escaping (CGRect) -> Void) -> NSImage {
-        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             color.setFill()
             NSBezierPath(ovalIn: rect).fill()
             glyph(rect)
             return true
         }
-        img.isTemplate = false
-        return img
+        image.isTemplate = false
+        return image
     }
 
     private static func stroke(_ path: NSBezierPath, width: CGFloat) {

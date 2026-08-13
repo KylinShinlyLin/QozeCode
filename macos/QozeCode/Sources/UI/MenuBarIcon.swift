@@ -1,13 +1,13 @@
-// MenuBarIcon.swift — 状态 → SF Symbol + 颜色映射
-// 菜单栏着色原理: MenuBarExtra label 对 SF Symbol 强制 template 渲染,
-//   foregroundStyle/symbolRenderingMode 均被忽略 → 必须离线把颜色画进 NSImage
-//   并置 isTemplate=false, 颜色才能在菜单栏存活 (idle 保持 template 系统默认色)
-// Popover 会话行: SwiftUI 正常环境, 直接用 symbol + color
+// MenuBarIcon.swift — 状态 → SF Symbol + 颜色映射与菜单栏图像缓存
+// AppKit 图像创建和缓存访问统一限定 MainActor，避免跨线程绘图与额外锁竞争。
 
 import AppKit
 import SwiftUI
 
+@MainActor
 enum MenuBarIcon {
+    private static var tintedImageCache: [String: NSImage] = [:]
+
     static func symbolName(for state: AgentState?) -> String {
         guard let state = state else { return "brain" }
         switch state {
@@ -35,10 +35,9 @@ enum MenuBarIcon {
     }
 
     /// 菜单栏染色专用色板: macOS 深色模式系统色 (固定 sRGB)
-    /// 离线绘图不按菜单栏外观解析动态色 → 必须用固定亮色, 否则深色菜单栏上发暗
     static func menuBarNSColor(for state: AgentState) -> NSColor {
         switch state {
-        case .idle: return NSColor(white: 0.78, alpha: 1)  // (idle 走 template, 不会用到)
+        case .idle: return NSColor(white: 0.78, alpha: 1)
         case .thinking: return NSColor(srgbRed: 0xBF/255, green: 0x5A/255, blue: 0xF2/255, alpha: 1)
         case .executing: return NSColor(srgbRed: 0x0A/255, green: 0x84/255, blue: 1.0, alpha: 1)
         case .waitingApproval: return NSColor(srgbRed: 1.0, green: 0x9F/255, blue: 0x0A/255, alpha: 1)
@@ -48,24 +47,27 @@ enum MenuBarIcon {
         }
     }
 
-    /// 各状态在菜单栏的渲染尺寸 (sparkles glyph 偏宽, 缩小避免显"肥")
     static func pointSize(for state: AgentState) -> CGFloat {
-        switch state {
-        case .thinking: return 13
-        default: return 16
-        }
+        state == .thinking ? 13 : 16
     }
 
-    /// 各状态 symbol 字重 (sparkles 用细字重, 笔画更轻盈)
     static func symbolWeight(for state: AgentState) -> NSFont.Weight {
         state == .thinking ? .regular : .medium
     }
 
-    /// 离线染色的 symbol 位图 (非 idle 状态的菜单栏图标)
-    /// 做法: 画 symbol → 以其不透明区域为 mask 用 sourceAtop 填充状态色 → 关闭 template
+    /// 离线染色的 symbol 位图。尺寸按 1/4 pt 规范化，避免浮点噪声生成重复缓存项。
     static func tintedImage(for state: AgentState, pointSize sizeOverride: CGFloat? = nil) -> NSImage {
+        let size = normalizedSize(sizeOverride ?? pointSize(for: state))
+        let key = "\(state.rawValue):\(Int((size * 4).rounded()))"
+        if let cached = tintedImageCache[key] {
+            IslandPerf.event("MenuBarIconCache", detail: "hit \(key)")
+            return cached
+        }
+
+        let interval = IslandPerf.begin("MenuBarIconRender")
+        defer { IslandPerf.end(interval, "\(state.rawValue) \(size)") }
+
         let name = symbolName(for: state)
-        let size = sizeOverride ?? pointSize(for: state)
         let nsColor = menuBarNSColor(for: state)
         guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil),
               let base = symbol.withSymbolConfiguration(.init(pointSize: size, weight: symbolWeight(for: state))) else {
@@ -78,6 +80,12 @@ enum MenuBarIcon {
             return true
         }
         tinted.isTemplate = false
+        tintedImageCache[key] = tinted
+        IslandPerf.event("MenuBarIconCache", detail: "miss \(key)")
         return tinted
+    }
+
+    private static func normalizedSize(_ size: CGFloat) -> CGFloat {
+        max(0.25, (size * 4).rounded() / 4)
     }
 }

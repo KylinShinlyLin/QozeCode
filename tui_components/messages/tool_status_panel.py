@@ -26,7 +26,6 @@ class RunningToolItem(Static):
     def __init__(self, tool_id: str, display_text: str, **kwargs):
         self.tool_id = tool_id
         self._start_time = datetime.now()
-        self._timer = None
         super().__init__(**kwargs)
         self.display_text = display_text
 
@@ -56,14 +55,6 @@ class RunningToolItem(Static):
         except Exception:
             pass
 
-    def on_mount(self):
-        self._timer = self.set_interval(0.1, self._update)
-
-    def on_unmount(self):
-        if self._timer:
-            self._timer.stop()
-            self._timer = None
-
     def get_elapsed_time(self) -> float:
         return (datetime.now() - self._start_time).total_seconds()
 
@@ -89,6 +80,30 @@ class ToolStatusPanel(Vertical):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._running_tools: Dict[str, RunningToolItem] = {}
+        self._timer = None
+        self._mounted = False
+
+    def on_mount(self):
+        self._mounted = True
+        self._start_timer_if_needed()
+
+    def on_unmount(self):
+        self._mounted = False
+        self._stop_timer()
+
+    def _start_timer_if_needed(self):
+        if self._mounted and self._running_tools and self._timer is None:
+            self._timer = self.set_interval(0.25, self._update_running_tools)
+
+    def _stop_timer(self):
+        if self._timer is not None:
+            self._timer.stop()
+            self._timer = None
+
+    def _update_running_tools(self):
+        """Update all elapsed-time rows from the panel shared ticker."""
+        for item in tuple(self._running_tools.values()):
+            item._update()
 
     def compose(self) -> ComposeResult:
         # 不再显示 "运行中..." header
@@ -142,6 +157,7 @@ class ToolStatusPanel(Vertical):
         item = RunningToolItem(tool_id, display_text)
         self._running_tools[tool_id] = item
         self.mount(item)
+        self._start_timer_if_needed()
 
         self.refresh()
         return item
@@ -167,8 +183,9 @@ class ToolStatusPanel(Vertical):
                     del self._running_tools[tid]
                     break
 
-        # 如果没有运行中的工具，隐藏面板
+        # 如果没有运行中的工具，隐藏面板并停止共享 ticker
         if not self._running_tools:
+            self._stop_timer()
             self.remove_class("visible")
             self.styles.display = "none"
 
@@ -179,6 +196,7 @@ class ToolStatusPanel(Vertical):
         for item in self._running_tools.values():
             item.remove()
         self._running_tools.clear()
+        self._stop_timer()
         self.remove_class("visible")
         self.styles.display = "none"
 

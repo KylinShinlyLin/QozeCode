@@ -16,7 +16,11 @@ from langchain_core.messages import AIMessage, ToolMessage as LC_ToolMessage
 
 from .types import BotMessage, ToolMessage, ToolStatus
 from .bot_widget import BotMessageWidget
+from .display_buffer import IncrementalDisplayBuffer
+from .stream_scheduler import StreamRenderScheduler
 from .thinking_widget import ThinkingWidget
+from ..terminal_compat import get_terminal_render_profile, sanitize_display_text
+from utils.performance_metrics import get_perf_metrics
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
@@ -43,7 +47,6 @@ class MessageStreamHandler:
     thinking 内容通过独立的 ThinkingWidget 展示，与 BotMessageWidget 分离。
     """
 
-    UPDATE_INTERVAL = 0.066
     TOKEN_UPDATE_INTERVAL = 1.2  # token 计算最小间隔（秒），避免过于频繁影响渲染
 
     def __init__(self,
@@ -73,13 +76,15 @@ class MessageStreamHandler:
         self._thinking_widget = None  # 独立的 ThinkingWidget
         self._active_tools: Dict[str, dict] = {}
         self._processed_tool_ids: Set[str] = set()
-        self._last_update_time = 0
-        self._accumulated_content = ""
         self._expecting_new_message = False
         self._accumulated_ai_message = None
-        self._pending_update = False
         self._need_new_bot_widget = False
         self._usage_by_message = {}  # 精确 token 用量: 消息 id → usage_metadata (同一条消息取最后一次快照)
+        self._content_buffer = None
+        self._thinking_buffer = None
+        self._render_scheduler = None
+        self._stream_active = False
+        self._finalized_thinking_widgets: Set[int] = set()
 
     def reset(self):
         """重置状态"""
@@ -87,16 +92,31 @@ class MessageStreamHandler:
         self._thinking_widget = None
         self._active_tools.clear()
         self._processed_tool_ids.clear()
-        self._last_update_time = 0
         self._last_token_update_time = 0
-        self._accumulated_content = ""
-        self._accumulated_thinking = ""
         self._accumulated_tool_calls_text = ""
         self._expecting_new_message = False
         self._accumulated_ai_message = None
-        self._pending_update = False
         self._need_new_bot_widget = False
         self._usage_by_message = {}  # 精确 token 用量: 消息 id → usage_metadata (同一条消息取最后一次快照)
+        self._finalized_thinking_widgets = set()
+        profile = get_terminal_render_profile()
+        self._content_buffer = IncrementalDisplayBuffer(
+            sanitize_display_text,
+            tail_chars=profile.tail_chars,
+            tail_lines=profile.tail_lines,
+        )
+        self._thinking_buffer = IncrementalDisplayBuffer(
+            sanitize_display_text,
+            tail_chars=profile.tail_chars,
+            tail_lines=profile.tail_lines,
+        )
+        self._metrics = get_perf_metrics()
+        self._render_scheduler = StreamRenderScheduler(
+            self._flush_stream_snapshots,
+            interval=profile.frame_interval,
+            busy_interval=profile.busy_interval,
+            metrics=self._metrics,
+        )
 
     def consume_stream_usage(self):
         """取出本次流累计的精确 token 用量并清空。
@@ -118,88 +138,128 @@ class MessageStreamHandler:
         return {"input_tokens": input_tokens, "output_tokens": output_tokens}
 
     async def process_stream(self, stream):
-        """处理流式输出"""
+        """处理流式输出，并严格管理每次调用的 scheduler 生命周期。"""
+        if self._stream_active:
+            raise RuntimeError("process_stream is already active on this handler")
+
+        self._stream_active = True
+        scheduler = None
+        chunk_count = 0
+        stream_error = None
+        stream_traceback = ""
+        cancelled_error = None
+
         _log("=" * 60)
         _log("Stream started")
-        self.reset()
-        chunk_count = 0
 
         try:
-            async for message_chunk, metadata in stream:
-                chunk_count += 1
-                chunk_type = type(message_chunk).__name__
+            # 顺序复用时不能让上轮 scheduler 的回调进入新一轮状态。
+            previous_scheduler = self._render_scheduler
+            if previous_scheduler is not None:
+                await previous_scheduler.close()
 
-                try:
-                    if isinstance(message_chunk, (AIMessage,)) or chunk_type in ["AIMessageChunk", "AIMessage"]:
-                        await self._process_ai_message_chunk(message_chunk, chunk_count)
-                    elif isinstance(message_chunk, (LC_ToolMessage,)) or chunk_type in ["ToolMessageChunk",
-                                                                                        "ToolMessage"]:
-                        await self._process_tool_result(message_chunk, chunk_count)
+            self.reset()
+            scheduler = self._render_scheduler
 
-                    # 让出事件循环，给 UI 刷新机会
-                    await asyncio.sleep(0)
-                except Exception as e:
-                    _log(f"ERROR chunk {chunk_count}: {e}")
+            try:
+                async for message_chunk, metadata in stream:
+                    chunk_count += 1
+                    self._metric_increment("stream.chunks")
+                    chunk_type = type(message_chunk).__name__
+
+                    try:
+                        if isinstance(message_chunk, (AIMessage,)) or chunk_type in ["AIMessageChunk", "AIMessage"]:
+                            await self._process_ai_message_chunk(message_chunk, chunk_count)
+                        elif isinstance(message_chunk, (LC_ToolMessage,)) or chunk_type in ["ToolMessageChunk",
+                                                                                            "ToolMessage"]:
+                            await self._process_tool_result(message_chunk, chunk_count)
+
+                        # 让出事件循环，给 UI 刷新机会
+                        await asyncio.sleep(0)
+                    except Exception as e:
+                        _log(f"ERROR chunk {chunk_count}: {e}")
+                        import traceback
+                        tb = traceback.format_exc()
+                        _log(tb)
+                        # 单个 chunk 的兼容处理保持原行为：通知后继续消费流。
+                        self._notify_error(e, tb)
+
+            except asyncio.CancelledError as e:
+                cancelled_error = e
+                _log("Stream cancelled by user")
+            except Exception as e:
+                stream_error = e
+                _log(f"Fatal error: {e}")
+                import traceback
+                stream_traceback = traceback.format_exc()
+                _log(stream_traceback)
+
+            finalize_error = None
+            finalize_traceback = ""
+            try:
+                # normal/cancel/error 都强制输出正文与 thinking 的最新统一帧，
+                # 再将正文切换为最终 Markdown。
+                if scheduler is not None and not getattr(scheduler, "_closed", False):
+                    await scheduler.flush_final()
+                    await self._finalize_current_bot(flush_snapshot=False)
+            except Exception as e:
+                finalize_error = e
+                import traceback
+                finalize_traceback = traceback.format_exc()
+                _log(f"Finalization error: {e}")
+                _log(finalize_traceback)
+
+            thinking_error = None
+            try:
+                await self._finalize_current_thinking()
+            except Exception as e:
+                thinking_error = e
+
+            if stream_error is not None:
+                # 原始 iterator 异常必须始终先通知，不能被收尾异常静默覆盖。
+                self._notify_error(stream_error, stream_traceback)
+                if finalize_error is not None:
+                    self._notify_error(finalize_error, finalize_traceback)
+                if thinking_error is not None:
                     import traceback
-                    tb = traceback.format_exc()
-                    _log(tb)
-                    # 通知 UI 显示错误
-                    self._notify_error(e, tb)
+                    self._notify_error(
+                        thinking_error,
+                        "".join(traceback.format_exception(thinking_error)),
+                    )
+                return
 
-        except asyncio.CancelledError:
-            _log("Stream cancelled by user")
-            # 取消不算错误, 先完成 UI 收尾
-            if self._pending_update and self.current_bot_message:
-                await self._flush_update()
-            if self.current_bot_message:
-                self.current_bot_message.finalize()
-            if self._thinking_widget:
-                self._thinking_widget.finalize()
-                if self.on_thinking_finalized:
-                    self.on_thinking_finalized(self._thinking_widget)
-            # re-raise: 让调用方区分"完成"与"中断" (asyncio 取消契约, 不应静默吞掉)
-            raise
+            if cancelled_error is not None:
+                # 取消收尾异常不改变 asyncio 取消契约，但仍尽力通知 UI。
+                if finalize_error is not None:
+                    self._notify_error(finalize_error, finalize_traceback)
+                if thinking_error is not None:
+                    import traceback
+                    self._notify_error(thinking_error, "".join(traceback.format_exception(thinking_error)))
+                raise cancelled_error
 
-        except Exception as e:
-            _log(f"Fatal error: {e}")
-            import traceback
-            tb = traceback.format_exc()
-            _log(tb)
-            # 通知 UI 显示错误
-            self._notify_error(e, tb)
-            # 注意：不再 raise，异常已通过 on_error 通知 UI
-            return
+            if finalize_error is not None:
+                raise finalize_error
+            if thinking_error is not None:
+                raise thinking_error
 
-        if self._pending_update and self.current_bot_message:
-            await self._flush_update()
+            if self.on_stream_complete:
+                estimated_tokens = self._estimate_total_tokens()
+                self.on_stream_complete(estimated_tokens)
 
-        # 流式结束，切换到 Markdown 渲染
-        if self.current_bot_message:
-            self.current_bot_message.finalize()
-            await asyncio.sleep(0)
-
-        # finalize thinking widget
-        if self._thinking_widget:
-            self._thinking_widget.finalize()
-            if self.on_thinking_finalized:
-                self.on_thinking_finalized(self._thinking_widget)
-
-        if self.on_stream_complete:
-            estimated_tokens = self._estimate_total_tokens()
-            self.on_stream_complete(estimated_tokens)
-
-        # 诊断：thinking 有内容但 content 为空 → 可能是模型 thinking 超时/卡死
-        think_len = len(self._accumulated_thinking)
-        content_len_final = len(self._accumulated_content)
-        _log(f"Stream ended, chunks={chunk_count}, thinking_len={think_len}, content_len={content_len_final}")
-        if think_len > 0 and content_len_final == 0 and self.current_bot_message:
-            _log("WARNING: thinking produced but content is empty — model may have timed out during reasoning")
-            self.current_bot_message.append_content(
-                "\n\n⚠️ 模型推理完成但未返回内容，可能是推理超时或 token 预算耗尽。请重试。"
-            )
-            self.current_bot_message.finalize()
-        _log("=" * 60)
-
+            # 诊断：thinking 有内容但 content 为空 → 可能是模型 thinking 超时/卡死
+            think_len = self._thinking_buffer.raw_length
+            content_len_final = self._content_buffer.raw_length
+            _log(f"Stream ended, chunks={chunk_count}, thinking_len={think_len}, content_len={content_len_final}")
+            if think_len > 0 and content_len_final == 0:
+                _log("WARNING: thinking produced but content is empty — model may have timed out during reasoning")
+            _log("=" * 60)
+        finally:
+            # 局部引用确保 reset/复用不会关闭错轮 scheduler；close 本身幂等。
+            try:
+                if scheduler is not None:
+                    await scheduler.close()
+            finally:
+                self._stream_active = False
     def _notify_error(self, exc: Exception, traceback_str: str):
         """通过 on_error 回调通知 UI 层显示错误"""
         if not self.on_error:
@@ -236,31 +296,35 @@ class MessageStreamHandler:
         thinking = self._extract_thinking(message_chunk)
         content = self._extract_content(message_chunk)
 
+        # Tool loops change ownership before either field in this chunk is handled.
+        # In particular, content must not consume the flag before thinking is rotated.
+        if self._expecting_new_message and (content or thinking):
+            await self._begin_new_ai_round()
+
+        # tool_calls 的 id/name/args 会跨 chunk 增量到达，必须用 LangChain 的
+        # 结构化合并（AIMessageChunk += 对 tool_calls 做 dict/list 合并，不是字符串拼接）。
+        # 不能只在含 tool_calls 的 chunk 才累积，否则 args 分片会丢失并显示为 "(empty)"。
         if self._accumulated_ai_message is None:
             self._accumulated_ai_message = message_chunk
         else:
             try:
                 self._accumulated_ai_message += message_chunk
             except TypeError:
-                # 流中混入了不同类型的消息（AIMessageChunk vs AIMessage），
-                # 尝试手动合并关键字段，避免丢失已累积的 content/thinking
+                # 流中混入不同类型（AIMessageChunk vs AIMessage），手动合并关键字段
                 _log(f"Accumulation type mismatch: "
                      f"{type(self._accumulated_ai_message).__name__} "
                      f"+ {type(message_chunk).__name__}, manual merge")
-                # 将新 chunk 的 content 附加到旧消息上（如果旧消息是 str 类型）
                 old_content = getattr(self._accumulated_ai_message, 'content', '')
                 new_content = getattr(message_chunk, 'content', '')
                 if isinstance(old_content, str) and isinstance(new_content, str):
                     combined = type(message_chunk)(content=old_content + new_content)
                 else:
                     combined = message_chunk
-                # 保留新消息的 tool_calls（更完整）
                 if hasattr(combined, 'tool_calls') and hasattr(message_chunk, 'tool_calls'):
                     combined.tool_calls = message_chunk.tool_calls
                 if hasattr(combined, 'additional_kwargs') and hasattr(message_chunk, 'additional_kwargs'):
                     combined.additional_kwargs = message_chunk.additional_kwargs
                 self._accumulated_ai_message = combined
-
         await self._handle_ai_content(message_chunk, thinking, content)
 
         # 检测 finish_reason，若是 tool_calls 则立即从 Static 切换到 Markdown
@@ -268,19 +332,14 @@ class MessageStreamHandler:
         finish_reason = getattr(message_chunk, 'response_metadata', {}).get('finish_reason', '')
         if finish_reason == 'tool_calls':
             if self.current_bot_message:
-                _log(f'Early finalize: finish_reason=tool_calls, content_len={len(self._accumulated_content)}')
-                self.current_bot_message.finalize()
+                _log(f'Early finalize: finish_reason=tool_calls, content_len={self._content_buffer.raw_length}')
+                await self._finalize_current_bot()
                 self.current_bot_message = None  # 防止后续 content 错误追加到旧 widget
-            # 同时 finalize 当前 thinking widget，下次 thinking 到来时创建新的
-            if self._thinking_widget:
-                if not getattr(self._thinking_widget, '_is_finalized', False):
-                    self._thinking_widget.finalize()
-                    if self.on_thinking_finalized:
-                        self.on_thinking_finalized(self._thinking_widget)
-                self._thinking_widget = None
+            # Drain the shared frame before releasing this round's thinking owner.
+            await self._finalize_current_thinking()
             self._expecting_new_message = True
 
-        if self._accumulated_ai_message.tool_calls:
+        if self._accumulated_ai_message is not None and self._accumulated_ai_message.tool_calls:
             self._update_tool_calls_from_accumulated()
 
     def _update_tool_calls_from_accumulated(self):
@@ -398,9 +457,10 @@ class MessageStreamHandler:
         # Gemini fix: non-OpenAI models don't trigger finish_reason == 'tool_calls',
         # so the bot widget is never finalized/cleared. Do it here.
         if self.current_bot_message:
-            _log(f'Early finalize via tool_result: content_len={len(self._accumulated_content)}')
-            self.current_bot_message.finalize()
+            _log(f"Early finalize via tool_result: content_len={self._content_buffer.raw_length}")
+            await self._finalize_current_bot()
             self.current_bot_message = None
+        await self._finalize_current_thinking()
 
         self._expecting_new_message = True
         self._need_new_bot_widget = True
@@ -497,7 +557,7 @@ class MessageStreamHandler:
         """
         # --- 处理 content：创建/更新 BotMessageWidget（优先，保证顺序）---
         if content:
-            if self.current_bot_message is None or self._expecting_new_message or self._need_new_bot_widget:
+            if self.current_bot_message is None or self._need_new_bot_widget:
                 # 新一轮回复开始
                 # thinking widget 由 _handle_ai_content 和 finish_reason 分支独立管理，
                 # 此处不再 finalize，避免误杀同一轮尚在流式输出的 thinking widget
@@ -510,40 +570,46 @@ class MessageStreamHandler:
                 )
                 # Finalize old bot widget if starting a new round (Gemini fix)
                 if self.current_bot_message and self._need_new_bot_widget:
-                    self.current_bot_message.finalize()
+                    await self._finalize_current_bot()
+                # tool 循环后的新正文属于新 widget，不复用上一轮显示内容。
+                if self._content_buffer.raw_length:
+                    self._content_buffer.clear()
                 self.current_bot_message = BotMessageWidget(msg)
                 self.on_bot_created(self.current_bot_message)
-                self._expecting_new_message = False
                 self._need_new_bot_widget = False
-                self._last_update_time = time.time()
                 _log("Created new BotMessageWidget")
 
-            self.current_bot_message.append_content(content)
-            self._accumulated_content += content
+            started = time.perf_counter()
+            before_display = self._content_buffer.display_length
+            self._content_buffer.append(content)
+            self._metric_observe("stream.sanitize", time.perf_counter() - started)
+            self._metric_increment("stream.raw_chars", len(content))
+            self._metric_increment("stream.display_chars", self._content_buffer.display_length - before_display)
+            await self._render_scheduler.mark_dirty()
 
         # --- 处理 thinking：创建/更新 ThinkingWidget ---
         if thinking:
-            # 如果是新一轮（工具调用刚结束），finalize 旧的 thinking widget
-            if self._expecting_new_message and self._thinking_widget is not None:
-                if not getattr(self._thinking_widget, '_is_finalized', False):
-                    self._thinking_widget.finalize()
-                    if self.on_thinking_finalized:
-                        self.on_thinking_finalized(self._thinking_widget)
-                self._thinking_widget = None
-                _log("Finalized old ThinkingWidget for new round")
-
             if self._thinking_widget is None:
-                self._thinking_widget = ThinkingWidget()
+                profile = get_terminal_render_profile()
+                self._thinking_buffer = IncrementalDisplayBuffer(
+                    sanitize_display_text,
+                    tail_chars=profile.tail_chars,
+                    tail_lines=profile.tail_lines,
+                )
+                round_buffer = self._thinking_buffer
+                self._thinking_widget = ThinkingWidget(
+                    snapshot_provider=lambda buffer=round_buffer: buffer.display_text()
+                )
                 if self.on_thinking_created:
                     self.on_thinking_created(self._thinking_widget)
                 _log("Created new ThinkingWidget")
-                # thinking 标志着新一轮已经开始，清除期待标记
-                # 避免后续同一轮的 thinking chunk 被误判为新轮次
-                self._expecting_new_message = False
-            self._thinking_widget.append_thinking(thinking)
-            self._accumulated_thinking += thinking
-            if self.on_thinking_updated:
-                self.on_thinking_updated(self._thinking_widget)
+            started = time.perf_counter()
+            before_display = self._thinking_buffer.display_length
+            self._thinking_buffer.append(thinking)
+            self._metric_observe("stream.sanitize", time.perf_counter() - started)
+            self._metric_increment("stream.raw_chars", len(thinking))
+            self._metric_increment("stream.display_chars", self._thinking_buffer.display_length - before_display)
+            await self._render_scheduler.mark_dirty()
 
         # 如果只有 thinking 没有 content，也要确保 BotMessageWidget 在流继续时会创建
         # 这里不需要额外处理，因为 content 到达时自然会创建
@@ -551,18 +617,28 @@ class MessageStreamHandler:
             # 纯 tool_calls 场景，不创建空 widget
             return
 
-        current_time = time.time()
-        if current_time - self._last_update_time > self.UPDATE_INTERVAL:
-            await self._flush_update()
-        else:
-            self._pending_update = True
-
-    async def _flush_update(self):
-        """刷新 UI 更新 — 仅在存在待更新组件时才触发回调"""
+    async def _flush_stream_snapshots(self):
+        """Apply body and thinking snapshots in one scheduler-owned frame."""
         if self.current_bot_message:
+            self.current_bot_message.apply_stream_snapshot(
+                self._content_buffer.display_text(),
+                None,
+            )
+            # MessageList compatibility callback; text is already sanitized.
             self.on_bot_updated(self.current_bot_message)
-        self._pending_update = False
-        self._last_update_time = time.time()
+        if self._thinking_widget:
+            display_tail = (
+                None
+                if self._thinking_widget.is_collapsed
+                else self._thinking_buffer.display_text()
+            )
+            self._thinking_widget.apply_snapshot(
+                self._thinking_buffer.raw_length,
+                display_tail,
+            )
+            # MessageList compatibility callback is frame-paced here only.
+            if self.on_thinking_updated:
+                self.on_thinking_updated(self._thinking_widget)
         # 实时回调当前 token 估算，按 TOKEN_UPDATE_INTERVAL 节流避免过于频繁
         if self.on_stream_progress:
             now = time.time()
@@ -572,6 +648,63 @@ class MessageStreamHandler:
                     self.on_stream_progress(estimated)
                     self._last_token_update_time = now
         # 让出事件循环，确保 UI 能立即渲染
+        await asyncio.sleep(0)
+
+    async def _begin_new_ai_round(self) -> None:
+        """Rotate both component owners before consuming a new-round chunk."""
+        if self.current_bot_message:
+            await self._finalize_current_bot()
+            self.current_bot_message = None
+        await self._finalize_current_thinking()
+        self._expecting_new_message = False
+        self._need_new_bot_widget = False
+
+    async def _finalize_current_thinking(self, clear_reference: bool = True) -> None:
+        """Drain, finalize and notify exactly once before releasing a thinking round."""
+        widget = self._thinking_widget
+        if widget is None:
+            return
+
+        scheduler = self._render_scheduler
+        if scheduler is not None and not getattr(scheduler, "_closed", False):
+            await scheduler.flush_final()
+
+        widget._snapshot_provider = (
+            lambda buffer=self._thinking_buffer: buffer.authoritative_display_text(tail_only=True)
+        )
+        widget.apply_snapshot(
+            self._thinking_buffer.raw_length,
+            None if widget.is_collapsed else self._thinking_buffer.authoritative_display_text(tail_only=True),
+        )
+        if self.on_thinking_updated:
+            self.on_thinking_updated(widget)
+
+        widget_key = id(widget)
+        was_finalized = getattr(widget, "_is_finalized", False)
+        try:
+            if widget_key not in self._finalized_thinking_widgets and not was_finalized:
+                widget.finalize()
+                self._finalized_thinking_widgets.add(widget_key)
+                if self.on_thinking_finalized:
+                    self.on_thinking_finalized(widget)
+            else:
+                self._finalized_thinking_widgets.add(widget_key)
+        finally:
+            if clear_reference and self._thinking_widget is widget:
+                self._thinking_widget = None
+
+    async def _finalize_current_bot(self, *, flush_snapshot: bool = True):
+        """Force the latest snapshot, then finalize with complete sanitized text."""
+        if not self.current_bot_message:
+            return
+        if flush_snapshot:
+            await self._render_scheduler.flush_final()
+        final_raw = self._content_buffer.raw_text()
+        final_display = sanitize_display_text(final_raw)
+        set_raw_text = getattr(self.current_bot_message, "set_raw_text", None)
+        if callable(set_raw_text):
+            set_raw_text(final_raw)
+        self.current_bot_message.finalize(final_display)
         await asyncio.sleep(0)
 
     def _extract_thinking(self, msg) -> str:
@@ -643,18 +776,21 @@ class MessageStreamHandler:
 
     def _estimate_total_tokens(self) -> int:
         """估算当前所有累积内容（content + thinking + tool_calls）的 token 总数"""
-        parts = []
-        if self._accumulated_content:
-            parts.append(self._accumulated_content)
-        if self._accumulated_thinking:
-            parts.append(self._accumulated_thinking)
-        if getattr(self, '_accumulated_tool_calls_text', ''):
-            parts.append(self._accumulated_tool_calls_text)
-        if not parts:
-            return 0
-        # 合并计算，比分别计算再相加更准确（避免重复计算边界开销）
-        combined = "\n".join(parts)
-        return self._estimate_text_tokens(combined)
+        total_chars = self._content_buffer.raw_length + self._thinking_buffer.raw_length
+        total_chars += len(getattr(self, "_accumulated_tool_calls_text", ""))
+        return int(total_chars * 0.4)
+
+    def _metric_increment(self, name: str, value: int = 1) -> None:
+        try:
+            self._metrics.increment(name, value)
+        except Exception:
+            pass
+
+    def _metric_observe(self, name: str, value: float) -> None:
+        try:
+            self._metrics.observe(name, value)
+        except Exception:
+            pass
 
     def _gen_id(self) -> str:
         """生成唯一 ID"""

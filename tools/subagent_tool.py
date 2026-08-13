@@ -46,6 +46,20 @@ def set_subagent_stream_callback(cb: Optional[Callable[[dict], Awaitable[None]]]
     _subagent_stream_callback = cb
 
 
+def get_subagent_stream_callback():
+    """Return the callback for lifecycle-safe comparison."""
+    return _subagent_stream_callback
+
+
+def compare_and_clear_subagent_stream_callback(expected) -> bool:
+    """Clear only if a newer MessageList has not replaced the callback."""
+    global _subagent_stream_callback
+    if _subagent_stream_callback != expected:
+        return False
+    _subagent_stream_callback = None
+    return True
+
+
 # ============================================================
 # Subagent 专用 System Prompt（从 system_prompt.py 加载）
 # ============================================================

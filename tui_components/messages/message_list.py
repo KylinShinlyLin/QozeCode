@@ -3,6 +3,7 @@ from textual.containers import ScrollableContainer
 from textual.widgets import Static
 import asyncio
 import uuid
+import weakref
 import time
 import sys
 import os
@@ -14,6 +15,7 @@ from .bot_widget import BotMessageWidget
 from .thinking_widget import ThinkingWidget
 from .subagent_widget import SubagentWidget
 from .stream_handler import MessageStreamHandler
+from ..terminal_compat import get_terminal_render_profile
 
 # 日志文件路径
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
@@ -193,6 +195,11 @@ class MessageList(ScrollableContainer):
         self._pending_tools: dict = {}
         self._tool_placeholders: dict = {}
         self._auto_scroll = True  # 是否自动跟随流式滚动
+        self._stream_render_paused = False
+        self._pending_stream_snapshots: dict = {}
+        self._stream_snapshot_gates: dict = {}
+        self._structure_layout_pending = False
+        self._scroll_pending = False
         _log(f"init: tool_status_panel={tool_status_panel is not None}")
 
         self._stream_handler = MessageStreamHandler(
@@ -211,16 +218,41 @@ class MessageList(ScrollableContainer):
         # --- Subagent 流式回调 ---
         self._subagent_widgets: dict = {}  # agent_id -> SubagentWidget
         self._subagent_labels: dict = {}  # agent_id -> str (显示标签)
+        self._subagent_last_ui_update: dict = {}
+        self._subagent_trailing_handles: dict = {}
+        self._pending_subagent_paints: set[str] = set()
+        self._pending_subagent_finalizes: set[str] = set()
+        self._registered_subagent_callback = None
+        self._subagent_profile = get_terminal_render_profile()
+        self._subagent_clock = time.monotonic
+
+    def on_mount(self):
+        """Register global routing only while this MessageList is mounted."""
         self._register_subagent_callback()
 
     def _register_subagent_callback(self):
         """注册 subagent 流式回调到 subagent_tool 模块"""
         try:
             from tools.subagent_tool import set_subagent_stream_callback
-            set_subagent_stream_callback(self._on_subagent_event)
+            callback = self._on_subagent_event
+            set_subagent_stream_callback(callback)
+            self._registered_subagent_callback = callback
             _log("subagent stream callback registered")
         except Exception as e:
             _log(f"Failed to register subagent callback: {e}")
+
+    def _unregister_subagent_callback(self):
+        """Compare-and-clear so an older unmount cannot detach a newer list."""
+        callback = getattr(self, "_registered_subagent_callback", None)
+        if callback is None:
+            return
+        try:
+            from tools.subagent_tool import compare_and_clear_subagent_stream_callback
+            compare_and_clear_subagent_stream_callback(callback)
+        except Exception as e:
+            _log(f"Failed to unregister subagent callback: {e}")
+        finally:
+            self._registered_subagent_callback = None
 
     # ---------- Thinking Widget 回调 ----------
 
@@ -238,51 +270,127 @@ class MessageList(ScrollableContainer):
 
     # ---------- Subagent 回调 ----------
 
+    def _cancel_subagent_trailing(self, agent_id: str):
+        """Cancel the one trailing repaint owned by an agent, if any."""
+        handle = self._subagent_trailing_handles.pop(agent_id, None)
+        if handle is not None:
+            cancel = getattr(handle, "cancel", None) or getattr(handle, "stop", None)
+            if cancel is not None:
+                cancel()
+
+    def _clear_subagent_render_state(self, agent_id: str):
+        self._cancel_subagent_trailing(agent_id)
+        self._subagent_last_ui_update.pop(agent_id, None)
+
+    def _clear_all_subagent_state(self):
+        for agent_id in tuple(self._subagent_trailing_handles):
+            self._cancel_subagent_trailing(agent_id)
+        self._subagent_last_ui_update.clear()
+        self._subagent_widgets.clear()
+        self._subagent_labels.clear()
+        getattr(self, "_pending_subagent_paints", set()).clear()
+        getattr(self, "_pending_subagent_finalizes", set()).clear()
+
+    def _schedule_subagent_trailing(self, delay: float, callback):
+        """Scheduling seam kept injectable for deterministic interaction tests."""
+        return asyncio.get_running_loop().call_later(delay, callback)
+
+    def _paint_subagent(self, agent_id: str, widget):
+        if self._stream_render_paused:
+            pending = getattr(self, "_pending_subagent_paints", None)
+            if pending is None:
+                pending = self._pending_subagent_paints = set()
+            pending.add(agent_id)
+            return
+        self._subagent_last_ui_update[agent_id] = self._subagent_clock()
+        widget._update_content_display()
+        self._update_widget(widget)
+
+    def _flush_subagent_trailing(self, agent_id: str):
+        self._subagent_trailing_handles.pop(agent_id, None)
+        widget = self._subagent_widgets.get(agent_id)
+        if self._stream_render_paused:
+            if widget is not None and not widget.is_collapsed:
+                self._pending_subagent_paints.add(agent_id)
+            return
+        if widget is None or widget.is_collapsed:
+            self._subagent_last_ui_update.pop(agent_id, None)
+            return
+        self._paint_subagent(agent_id, widget)
+
+    def _on_subagent_collapsed_change(self, agent_id: str, collapsed: bool):
+        """Keep click-driven visibility changes under the same frame ownership."""
+        if collapsed:
+            self._clear_subagent_render_state(agent_id)
+        else:
+            self._clear_subagent_render_state(agent_id)
+            self._maybe_render_subagent(agent_id)
+
+    def _maybe_render_subagent(self, agent_id: str):
+        """Paint a leading frame and guarantee one latest-wins trailing frame."""
+        widget = self._subagent_widgets.get(agent_id)
+        if widget is None or widget.is_collapsed:
+            self._clear_subagent_render_state(agent_id)
+            return
+        now = self._subagent_clock()
+        last = self._subagent_last_ui_update.get(agent_id)
+        interval = self._subagent_profile.frame_interval
+        if last is not None and now - last < interval:
+            if agent_id not in self._subagent_trailing_handles:
+                delay = interval - (now - last)
+                self._subagent_trailing_handles[agent_id] = self._schedule_subagent_trailing(
+                    delay, lambda: self._flush_subagent_trailing(agent_id)
+                )
+            return
+        self._cancel_subagent_trailing(agent_id)
+        self._paint_subagent(agent_id, widget)
+
     async def _on_subagent_event(self, event: dict):
-        """处理 subagent 事件，使用 SubagentWidget 流式展示"""
+        """Handle subagent events while keeping collapsed bodies completely cold."""
         try:
             etype = event["type"]
             agent_id = event["agent_id"]
 
             if etype == "subagent_start":
+                self._clear_subagent_render_state(agent_id)
                 label = event.get("label", "Subagent")
                 self._subagent_labels[agent_id] = label
-                widget = SubagentWidget(agent_id=agent_id, label=label)
+                widget = SubagentWidget(
+                    agent_id=agent_id,
+                    label=label,
+                    on_collapsed_change=lambda collapsed, aid=agent_id: (
+                        self._on_subagent_collapsed_change(aid, collapsed)
+                    ),
+                )
                 self._subagent_widgets[agent_id] = widget
                 self._add_widget(widget)
-                _log(f"subagent_start: {agent_id} '{label}'")
+                _log(f"subagent_start: {agent_id} {label!r}")
 
             elif etype == "subagent_stream":
-                text = event.get("content", "")
-                if agent_id in self._subagent_widgets:
-                    self._subagent_widgets[agent_id].append_content(text)
-                    # 节流 UI 更新：避免每个 subagent chunk 都触发 refresh(layout=True)
-                    now = time.time()
-                    if not hasattr(self, '_subagent_last_ui_update'):
-                        self._subagent_last_ui_update = {}
-                    last = self._subagent_last_ui_update.get(agent_id, 0)
-                    if now - last >= 0.05:
-                        self._subagent_last_ui_update[agent_id] = now
-                        self._update_widget(self._subagent_widgets[agent_id])
+                widget = self._subagent_widgets.get(agent_id)
+                if widget is not None:
+                    widget.append_content(event.get("content", ""))
+                    self._maybe_render_subagent(agent_id)
 
             elif etype == "subagent_tool":
-                tool_name = event.get("tool_name", "")
-                tool_args = event.get("tool_args", "")
-                status = event.get("status", "")
-                if agent_id in self._subagent_widgets:
-                    self._subagent_widgets[agent_id].append_tool(tool_name, tool_args, status)
-                    now = time.time()
-                    if not hasattr(self, '_subagent_last_ui_update'):
-                        self._subagent_last_ui_update = {}
-                    last = self._subagent_last_ui_update.get(agent_id, 0)
-                    if now - last >= 0.05:
-                        self._subagent_last_ui_update[agent_id] = now
-                        self._update_widget(self._subagent_widgets[agent_id])
+                widget = self._subagent_widgets.get(agent_id)
+                if widget is not None:
+                    widget.append_tool(
+                        event.get("tool_name", ""),
+                        event.get("tool_args", ""),
+                        event.get("status", ""),
+                    )
+                    self._maybe_render_subagent(agent_id)
 
             elif etype == "subagent_done":
-                if agent_id in self._subagent_widgets:
-                    self._subagent_widgets[agent_id].finalize()
-                    self._update_widget(self._subagent_widgets[agent_id])
+                widget = self._subagent_widgets.get(agent_id)
+                if widget is not None:
+                    self._clear_subagent_render_state(agent_id)
+                    if self._stream_render_paused:
+                        self._pending_subagent_finalizes.add(agent_id)
+                    else:
+                        widget.finalize()
+                        self._update_widget(widget)
                     _log(f"subagent_done: {agent_id}")
 
         except Exception as e:
@@ -311,7 +419,8 @@ class MessageList(ScrollableContainer):
                 content=user_message,
                 is_command=is_command
             )
-        self._auto_scroll = True  # 用户发送消息时恢复自动跟随
+        # A new request is an explicit intent to follow current output again.
+        self.resume_stream_render()
         return UserMessageWidget(user_message)
 
     def add_user_message(self, user_message, is_command: bool = False):
@@ -331,15 +440,15 @@ class MessageList(ScrollableContainer):
 
             def finish_render():
                 try:
-                    if self._auto_scroll:
+                    if self._auto_scroll and not self._stream_render_paused:
                         self.scroll_end(animate=False)
                 finally:
                     if not render_complete.done():
                         render_complete.set_result(None)
 
-            # 先注册回调，再请求刷新，确保本次刷新完成后才继续请求链路。
+            # 用户消息挂载属于结构变化；通过单槽请求合并 layout。
+            self.request_structure_layout()
             self.call_after_refresh(finish_render)
-            self.refresh(layout=True)
             await render_complete
         except Exception as exc:
             # UI 展示异常不应阻塞 Agent 请求，保留当前容错语义。
@@ -352,69 +461,222 @@ class MessageList(ScrollableContainer):
         widget = Static(text)
         self._add_widget(widget)
 
-    def _add_widget(self, widget):
-        """挂载组件，仅在 auto_scroll 时滚动到底部
+    @property
+    def is_stream_render_paused(self) -> bool:
+        """Whether stream snapshots are being held while the user reads history."""
+        return self._stream_render_paused
 
-        优化：高频挂载场景下合并滚动请求，避免 call_after_refresh 队列堆积。
-        """
-        self.mount(widget)
-        if self._auto_scroll and not getattr(self, '_scroll_pending', False):
-            self._scroll_pending = True
-            self.call_after_refresh(self._deferred_scroll_end)
+    def _install_stream_snapshot_gate(self, widget):
+        """Gate Bot/Thinking snapshots and terminal transitions before widget apply."""
+        gates = getattr(self, "_stream_snapshot_gates", None)
+        if gates is None:
+            gates = self._stream_snapshot_gates = {}
+        if widget in gates:
+            return
 
-    def _update_widget(self, widget):
-        """刷新组件 — 仅更新内容显示，不强制 layout 重算。
-        
-        Static.update() 会触发必要的重绘，layout 只在 widget 尺寸变化时才需要，
-        流式期间内容增长不改变 widget 尺寸（height: auto），省略 layout 大幅减少开销。
-        """
+        snapshot_method = None
+        for candidate in ("apply_stream_snapshot", "apply_snapshot"):
+            if callable(getattr(widget, candidate, None)):
+                snapshot_method = candidate
+                break
+        if snapshot_method is None:
+            return
 
-        """刷新组件（更新内容显示 + 重新计算布局）"""
+        method_names = [snapshot_method]
+        if callable(getattr(widget, "finalize", None)):
+            method_names.append("finalize")
+        gate = {
+            "methods": {name: getattr(widget, name) for name in method_names},
+            "snapshot_method": snapshot_method,
+            "terminal_received": False,
+        }
+        gates[widget] = gate
+
+        owner_ref = weakref.ref(self)
+        widget_ref = weakref.ref(widget)
+
+        def make_wrapper(method_name):
+            def gated_method(*args, **kwargs):
+                owner = owner_ref()
+                target = widget_ref()
+                if owner is None or target is None:
+                    return None
+                return owner._gate_stream_widget_call(
+                    target, method_name, args, kwargs
+                )
+            return gated_method
+
+        for method_name in method_names:
+            setattr(widget, method_name, make_wrapper(method_name))
+
+    def _gate_stream_widget_call(self, widget, method_name, args, kwargs):
+        """Retain latest snapshot plus optional finalize while rendering is paused."""
+        gate = self._stream_snapshot_gates.get(widget)
+        if gate is None:
+            return None
+        original = gate["methods"][method_name]
+        is_finalize = method_name == "finalize"
+
+        if is_finalize:
+            if gate["terminal_received"]:
+                return None
+            gate["terminal_received"] = True
+            if not self._stream_render_paused:
+                return original(*args, **kwargs)
+        elif gate["terminal_received"]:
+            # A terminal state owns the widget from the moment it arrives.
+            return None
+        elif not self._stream_render_paused:
+            return original(*args, **kwargs)
+
+        pending = self._pending_stream_snapshots.setdefault(
+            widget, {"snapshot": None, "finalize": None}
+        )
+        action = (original, args, kwargs)
+        if is_finalize:
+            pending["finalize"] = action
+        else:
+            pending["snapshot"] = action
+        return None
+
+    def _restore_stream_snapshot_gates(self):
+        """Restore original bound methods and release all gate/pending references."""
+        gates = getattr(self, "_stream_snapshot_gates", {})
+        for widget, gate in list(gates.items()):
+            for method_name, original in gate["methods"].items():
+                try:
+                    setattr(widget, method_name, original)
+                except Exception:
+                    pass
+        gates.clear()
+        self._pending_stream_snapshots.clear()
+
+    def apply_stream_snapshot(self, widget):
+        """Compatibility callback; widget mutation already passed through its gate."""
+        return None
+
+    def pause_stream_render(self):
+        """Pause body snapshot painting and automatic following."""
+        self._stream_render_paused = True
+        self._auto_scroll = False
+
+    def resume_stream_render(self):
+        """Replay each widget latest snapshot, then its finalize, at most once each."""
+        pending = list(self._pending_stream_snapshots.values())
+        self._pending_stream_snapshots.clear()
+        self._stream_render_paused = False
+        self._auto_scroll = True
+
+        for state in pending:
+            for action_name in ("snapshot", "finalize"):
+                action = state[action_name]
+                if action is None:
+                    continue
+                original, args, kwargs = action
+                try:
+                    original(*args, **kwargs)
+                except Exception:
+                    pass
+
+        pending_finalizes = tuple(getattr(self, "_pending_subagent_finalizes", set()))
+        getattr(self, "_pending_subagent_finalizes", set()).clear()
+        for agent_id in pending_finalizes:
+            widget = getattr(self, "_subagent_widgets", {}).get(agent_id)
+            if widget is not None:
+                widget.finalize()
+                self._update_widget(widget)
+
+        pending_paints = tuple(getattr(self, "_pending_subagent_paints", set()))
+        getattr(self, "_pending_subagent_paints", set()).clear()
+        for agent_id in pending_paints:
+            widget = getattr(self, "_subagent_widgets", {}).get(agent_id)
+            if widget is not None and not widget.is_collapsed and agent_id not in pending_finalizes:
+                self._paint_subagent(agent_id, widget)
+
+        self._safe_scroll_to_bottom()
+
+    def request_structure_layout(self):
+        """Coalesce structural changes into a single deferred layout refresh."""
+        if self._structure_layout_pending:
+            return
+        self._structure_layout_pending = True
         try:
-            # 先更新内容显示（将 buffer 写入 Static），再刷新布局
-            if hasattr(widget, '_update_content_display'):
-                widget._update_content_display()
-            widget.refresh(layout=True)
+            self.call_after_refresh(self._flush_structure_layout)
+        except Exception:
+            self._structure_layout_pending = False
+            raise
+
+    def _flush_structure_layout(self):
+        """Run the one pending structural layout request."""
+        self._structure_layout_pending = False
+        try:
+            self.refresh(layout=True)
         except Exception:
             pass
 
+    def _add_widget(self, widget):
+        """Mount a structural child and coalesce layout and auto-follow requests."""
+        self._install_stream_snapshot_gate(widget)
+        self.mount(widget)
+        self.request_structure_layout()
+        if (
+            self._auto_scroll
+            and not self._stream_render_paused
+            and not self._scroll_pending
+        ):
+            self._scroll_pending = True
+            try:
+                self.call_after_refresh(self._deferred_scroll_end)
+            except Exception:
+                self._scroll_pending = False
+                raise
+
+    def _update_widget(self, widget):
+        """Accept one effective frame and request single-slot auto-follow."""
+        self.apply_stream_snapshot(widget)
+        self._safe_scroll_to_bottom()
+
     def _deferred_scroll_end(self):
-        """滚动到底部并清除 pending 标记，允许多 widget 挂载合并为一次滚动"""
+        """Scroll once after refresh unless reading history has paused following."""
         self._scroll_pending = False
+        if self._stream_render_paused or not self._auto_scroll:
+            return
         try:
             self.scroll_end(animate=False)
         except Exception:
             pass
 
     def _safe_scroll_to_bottom(self):
-        """流式期间自动滚动（仅当 auto_scroll 为 True）"""
-        if not self._auto_scroll:
+        """Schedule stream auto-follow only while rendering and following are active."""
+        if self._stream_render_paused or not self._auto_scroll:
             return
         try:
-            self.call_after_refresh(self.scroll_end, animate=False)
+            if not self._scroll_pending:
+                self._scroll_pending = True
+                self.call_after_refresh(self._deferred_scroll_end)
         except Exception:
-            pass
+            self._scroll_pending = False
 
     def user_scrolled_up(self):
-        """用户手动向上滚动，停止自动跟随"""
-        self._auto_scroll = False
+        """Pause stream painting and auto-follow while the user reads history."""
+        self.pause_stream_render()
 
     def check_scroll_bottom_and_resume(self):
-        """检查是否已滚回底部，如果是则恢复自动跟随"""
+        """Resume stream painting once the viewport returns to the bottom."""
         try:
             if self.scroll_y >= self.max_scroll_y - 3:
-                self._auto_scroll = True
+                self.resume_stream_render()
         except Exception:
             pass
 
     def on_key(self, event):
-        """键盘滚动也能控制 auto_scroll"""
+        """Keyboard scrolling shares the same pause/resume state transitions."""
         if event.key in ("up", "pageup"):
-            self._auto_scroll = False
+            self.user_scrolled_up()
         elif event.key in ("down", "pagedown"):
             self.call_after_refresh(self.check_scroll_bottom_and_resume)
         elif event.key == "end":
-            self._auto_scroll = True
+            self.resume_stream_render()
 
     def _on_tool_started(self, tool_id: str, display_name: str):
         """工具开始执行回调"""
@@ -452,6 +714,7 @@ class MessageList(ScrollableContainer):
         if placeholder:
             try:
                 placeholder.remove()
+                self.request_structure_layout()
             except Exception:
                 pass
 
@@ -483,9 +746,22 @@ class MessageList(ScrollableContainer):
         except Exception as e:
             _log(f"Failed to mount error widget: {e}")
 
+    def on_unmount(self):
+        """Detach instance gates before Textual releases this message list."""
+        self._unregister_subagent_callback()
+        self._restore_stream_snapshot_gates()
+        self._clear_all_subagent_state()
+        self._structure_layout_pending = False
+        self._scroll_pending = False
+
     def clear_messages(self):
         """清除所有消息"""
+        self._restore_stream_snapshot_gates()
+        self._clear_all_subagent_state()
+        self._structure_layout_pending = False
+        self._scroll_pending = False
         for child in self.children[:]:
             child.remove()
         self._pending_tools.clear()
         self._tool_placeholders.clear()
+        self.request_structure_layout()

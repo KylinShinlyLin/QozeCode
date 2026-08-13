@@ -90,13 +90,15 @@ class SubagentWidget(Static):
 
     content: reactive[str] = reactive("")
 
-    def __init__(self, agent_id: str, label: str, **kwargs):
+    def __init__(self, agent_id: str, label: str, on_collapsed_change=None, **kwargs):
         super().__init__(**kwargs)
         self.agent_id = agent_id
         self.label = label
         self._content_buffer = ""
         self._mounted = False
-        self._is_done = False
+        self._done_received = False
+        self._final_view_applied = False
+        self._on_collapsed_change = on_collapsed_change
         self._collapsed = True  # 默认收起，与 ThinkingWidget 一致
         self._spinner_frame = 0
         self._timer = None
@@ -116,8 +118,14 @@ class SubagentWidget(Static):
     def on_mount(self) -> None:
         self._mounted = True
         self._start_timer()
-        if self._content_buffer:
+        if self._done_received:
+            self._apply_final_view_once()
+        elif self._content_buffer:
             self._update_content_display()
+
+    def on_unmount(self) -> None:
+        self._mounted = False
+        self._stop_timer()
 
     # ---------- Spinner / Header ----------
 
@@ -135,7 +143,7 @@ class SubagentWidget(Static):
         if len(clean) > self._MAX_LABEL_CHARS:
             clean = clean[:self._MAX_LABEL_CHARS] + "…"
         arrow = "▾" if not self._collapsed else "▸"
-        if self._is_done:
+        if self._done_received:
             return f"✓ {arrow} Subagent · {clean}"
         else:
             frame = SPINNER_FRAMES[self._spinner_frame % len(SPINNER_FRAMES)]
@@ -149,14 +157,14 @@ class SubagentWidget(Static):
             pass
 
     def _on_tick(self):
-        if self._is_done:
+        if self._done_received:
             return
         self._spinner_frame = (self._spinner_frame + 1) % len(SPINNER_FRAMES)
         self._update_header()
 
     def _start_timer(self):
-        if self._timer is None and self._mounted and not self._is_done:
-            self._timer = self.set_interval(0.1, self._on_tick)
+        if self._timer is None and self._mounted and not self._done_received:
+            self._timer = self.set_interval(0.25, self._on_tick)
 
     def _stop_timer(self):
         if self._timer is not None:
@@ -180,7 +188,7 @@ class SubagentWidget(Static):
 
     def _show_content(self):
         """显示当前应可见的内容区域（static 或 md，取决于是否已完成）"""
-        if self._is_done:
+        if self._done_received:
             try:
                 md = self.query_one("#subagent-content-md", AutoCopyMarkdown)
                 md.remove_class("hidden")
@@ -205,8 +213,14 @@ class SubagentWidget(Static):
 
     # ---------- 内容更新 ----------
 
+    @property
+    def is_collapsed(self) -> bool:
+        return self._collapsed
+
     def _update_content_display(self):
-        """刷新内容区域，折叠状态下仅更新 buffer 不显示"""
+        """Paint the streaming Static only while it is visible."""
+        if self._collapsed or self._done_received:
+            return
         try:
             static = self.query_one("#subagent-content-static", Static)
             static.update(self._content_buffer if self._content_buffer else " ")
@@ -240,20 +254,21 @@ class SubagentWidget(Static):
 
     def finalize(self):
         """流式结束：停 spinner、切 ✅、Static → Markdown，保持折叠状态"""
-        self._is_done = True
-        self._stop_timer()
-        self._update_header()
+        if not self._done_received:
+            self._done_received = True
+            self._stop_timer()
+            self._update_header()
+        self._apply_final_view_once()
 
-        if not self._mounted:
+    def _apply_final_view_once(self):
+        """Apply terminal Markdown once; pre-mount/query failures remain retryable."""
+        if self._final_view_applied or not self._done_received or not self._mounted:
             return
         try:
             content_static = self.query_one("#subagent-content-static", Static)
             content_md = self.query_one("#subagent-content-md", AutoCopyMarkdown)
-
-            # 始终更新 Markdown 内容
             content_md.update(self._content_buffer if self._content_buffer else " ")
 
-            # 根据折叠状态决定显示哪个以及是否隐藏
             if self._collapsed:
                 content_static.add_class("hidden")
                 content_md.add_class("hidden")
@@ -262,6 +277,7 @@ class SubagentWidget(Static):
                 content_md.remove_class("hidden")
 
             self.refresh(layout=True)
+            self._final_view_applied = True
         except Exception:
             pass
 
@@ -276,6 +292,12 @@ class SubagentWidget(Static):
         if self._collapsed:
             self._hide_content()
         else:
+            # Expansion lazily paints the complete buffer accumulated while hidden.
+            if not self._done_received:
+                self._update_content_display()
             self._show_content()
+
+        if self._on_collapsed_change is not None:
+            self._on_collapsed_change(self._collapsed)
 
         self.refresh(layout=True)

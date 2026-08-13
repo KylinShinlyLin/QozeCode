@@ -2,14 +2,12 @@
 from textual.app import ComposeResult
 from textual.widgets import Static
 from .auto_copy_widgets import AutoCopyStatic, AutoCopyMarkdown
-from textual.reactive import reactive
 from textual.containers import Vertical
 import sys
 import os
 from datetime import datetime
 
 from .types import BotMessage
-from ..terminal_compat import sanitize_display_text
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".qoze", "stream_debug.log")
 
@@ -30,10 +28,10 @@ def _log(msg):
 
 
 class BotMessageWidget(Static):
-    """AI 回复组件 - 流式期间用 Static，结束后切 Markdown
+    """AI 回复组件 - 流式期间用 Static，结束后切 Markdown。
 
-    注意：thinking 内容已独立为 ThinkingWidget，本组件只展示 content。
-    优化：缓存 child widget 引用避免每次更新的 DOM 查询。
+    正文净化和增量累积由 MessageStreamHandler 的 display buffer 负责；
+    widget 只应用已净化的显示快照，并在结束时渲染完整 Markdown。
     """
 
     DEFAULT_CSS = """
@@ -81,93 +79,88 @@ class BotMessageWidget(Static):
     }
     """
 
-    content: reactive[str] = reactive("")
-
     def __init__(self, message: BotMessage, **kwargs):
         super().__init__(**kwargs)
         self.message = message
-        self._content_buffer = message.content or ""
-        self._last_update = 0
+        self._display_text = ""
+        self._raw_text = message.content or ""
         self._mounted = False
-        # 缓存的 child widget 引用，避免流式期间反复 query_one
+        self._terminal_received = False
+        self._final_view_applied = False
+        # 缓存 child widget 引用，避免流式期间反复 query_one
         self._content_static = None
         self._content_md = None
-        _log(f"init: content_len={len(self._content_buffer)}")
+        _log(f"init: content_len={len(self._raw_text)}")
 
     def compose(self) -> ComposeResult:
-        _log(f"compose: content_len={len(self._content_buffer)}")
+        _log(f"compose: content_len={len(self._raw_text)}")
         with Vertical():
-            # 流式期间显示 Static，结束后隐藏
-            yield AutoCopyStatic(self._content_buffer or "", id="content-static")
-            # Markdown 初始隐藏，流式结束后显示
-            yield AutoCopyMarkdown(self._content_buffer or "", id="content-md", classes="hidden")
+            yield AutoCopyStatic(self._display_text or "", id="content-static")
+            yield AutoCopyMarkdown(self._display_text or "", id="content-md", classes="hidden")
 
     def on_mount(self) -> None:
         self._mounted = True
-        # 缓存 child widget 引用
         try:
             self._content_static = self.query_one("#content-static", Static)
             self._content_md = self.query_one("#content-md", AutoCopyMarkdown)
         except Exception:
             pass
-        _log(f"on_mount: content_len={len(self._content_buffer)}")
-        if self._content_buffer:
+        _log(f"on_mount: content_len={len(self._raw_text)}")
+        if self._terminal_received:
+            self._apply_final_view_once()
+        elif self._display_text:
             self._update_content_display()
-        # 检测是否为错误消息，应用红色样式
         self._apply_error_style()
 
-    def _update_content_display(self):
-        """流式期间更新 Static 显示 — 直接使用缓存的引用，无 DOM 查询开销"""
+    def _update_content_display(self) -> None:
+        """Render the already-sanitized stream snapshot without re-sanitizing it."""
         try:
             if self._content_static is not None:
-                text = sanitize_display_text(self._content_buffer) if self._content_buffer else " "
-                self._content_static.update(text)
+                self._content_static.update(self._display_text or " ")
         except Exception as e:
             _log(f"_update_content_display: ERROR - {e}")
 
-    def watch_content(self, new_content: str):
-        # 保护：reactive 挂载时初始值为空字符串，不应覆盖流式期间已设置的内容
-        if not new_content and self._content_buffer:
-            return
-        self._content_buffer = new_content
+    def apply_stream_snapshot(
+        self, display_text: str, raw_text: str | None = None
+    ) -> None:
+        """Apply one scheduler-owned, already-sanitized stream snapshot."""
+        self._display_text = display_text
+        if raw_text is not None:
+            self._raw_text = raw_text
         if self._mounted:
             self._update_content_display()
 
-    def append_content(self, text: str):
-        """流式追加内容 — 仅累积到 buffer，不立即更新显示。
+    def set_raw_text(self, raw_text: str) -> None:
+        """Store authoritative raw text for terminal styling without rendering."""
+        self._raw_text = raw_text
 
-        显示更新由 _update_widget() 在 _flush_update 节流周期内统一处理，
-        避免每个 chunk 都触发 Static.update() 导致渲染队列积压。
-        """
-        self._content_buffer += text
+    def finalize(self, final_text: str) -> None:
+        """Record terminal state and apply complete Markdown when mounted."""
+        self._display_text = final_text
+        self._terminal_received = True
+        _log(f"finalize: content_len={len(final_text)}")
+        self._apply_final_view_once()
 
-    def finalize(self):
-        """流式结束，从 Static 切换到 Markdown 渲染
-        
-        优化：不再手动 refresh(layout=True)，update() + class toggle 已足够触发重排。
-        """
-        _log(f"finalize: content_len={len(self._content_buffer)}")
-        if not self._mounted:
+    def _apply_final_view_once(self) -> None:
+        """Apply terminal Markdown once; pre-mount state remains retryable."""
+        if self._final_view_applied or not self._terminal_received or not self._mounted:
             return
         try:
-            # 使用缓存引用
             if self._content_static is None or self._content_md is None:
                 self._content_static = self.query_one("#content-static", Static)
                 self._content_md = self.query_one("#content-md", AutoCopyMarkdown)
 
-            text = sanitize_display_text(self._content_buffer) if self._content_buffer else " "
-            # 先更新 Markdown 内容，再切换显隐，减少中间帧的布局抖动
-            self._content_md.update(text)
+            self._content_md.update(self._display_text or " ")
             self._content_static.add_class("hidden")
             self._content_md.remove_class("hidden")
-
-            # 检测是否为错误消息，应用红色样式
             self._apply_error_style()
+            self._final_view_applied = True
         except Exception as e:
             _log(f"finalize: ERROR - {e}")
 
-    def _apply_error_style(self):
+    def _apply_error_style(self) -> None:
         """检测内容是否为错误消息（以 ❌ 开头），应用红色错误样式"""
-        if self._content_buffer and self._content_buffer.strip().startswith("❌"):
+        content = self._raw_text or self._display_text
+        if content and content.strip().startswith("❌"):
             self.add_class("error")
             _log("_apply_error_style: error class added")

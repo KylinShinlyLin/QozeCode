@@ -6,19 +6,14 @@ import SwiftUI
 
 struct PopoverView: View {
     @ObservedObject private var store = SessionStore.shared
-    /// 双保险: 即使 @Published 更新在 MenuBarExtra 内容窗口失效,
-    /// 1s tick 也强制 body 重新求值, 保证会话列表/耗时显示新鲜
-    @State private var tick = 0
     /// 页签: 会话 / 用量
     @State private var selectedTab: PopoverTab = .sessions
-    private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     enum PopoverTab {
         case sessions, usage
     }
 
     var body: some View {
-        let _ = tick  // 建立刷新依赖
         VStack(alignment: .leading, spacing: 0) {
             Picker("", selection: $selectedTab) {
                 Text("会话").tag(PopoverTab.sessions)
@@ -43,7 +38,12 @@ struct PopoverView: View {
             footer
         }
         .frame(width: 360)
-        .onReceive(refreshTimer) { _ in tick &+= 1 }
+        .onAppear {
+            IslandPerf.nextFrame("PopoverFirstFrame")
+        }
+        .onChange(of: selectedTab) {
+            IslandPerf.nextFrame("TabFirstFrame")
+        }
     }
 
     // MARK: - 空态
@@ -114,12 +114,12 @@ struct PopoverView: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
-                tick &+= 1  // 手动强制刷新 (自动 tick 失效时的逃生舱)
+                Task { await TokenUsageStore.shared.reloadFromDisk() }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
-            .help("刷新会话列表")
+            .help("刷新用量数据")
             // TODO(M4): 设置入口
             Button("退出") {
                 NSApplication.shared.terminate(nil)

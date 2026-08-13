@@ -1,5 +1,5 @@
 // NotificationService.swift — 系统通知 (UNUserNotificationCenter)
-// 触发点: SessionStore 状态迁移到 waiting_approval / done / error
+// 触发点: SessionStore 状态迁移到 waiting_approval / done / error / interrupted
 
 import Foundation
 import UserNotifications
@@ -9,6 +9,8 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     private let center = UNUserNotificationCenter.current()
     private var authorized = false
+    /// notify() 限定 MainActor，附件缓存无需额外锁；临时文件丢失时会重建附件。
+    private var attachmentCache: [String: UNNotificationAttachment] = [:]
 
     private override init() {
         super.init()
@@ -41,7 +43,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             title = "QozeCode 已中断"
             body = session.taskSummary.isEmpty ? session.projectName : session.taskSummary
         default:
-            return  // 其他状态不发通知
+            return
         }
 
         let content = UNMutableNotificationContent()
@@ -49,26 +51,43 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         content.sound = state == .waitingApproval ? .default : nil
         content.categoryIdentifier = "session.\(session.id)"
-        // 状态图标附件: 横幅右侧缩略图 (done 绿勾 / error 红叉 / waiting 橙三角)
-        if let iconURL = StateIconRenderer.notificationIconURL(for: state),
-           let attachment = try? UNNotificationAttachment(
-               identifier: "state-icon", url: iconURL,
-               options: [UNNotificationAttachmentOptionsTypeHintKey: "public.png"]) {
+        if let attachment = notificationAttachment(for: state) {
             content.attachments = [attachment]
         }
 
         let request = UNNotificationRequest(
             identifier: "\(session.id).\(state.rawValue).\(Date().timeIntervalSince1970)",
             content: content,
-            trigger: nil  // 立即发送
+            trigger: nil
         )
         center.add(request)
     }
 
-    // 前台时也显示横幅 (菜单栏 App 没有前台窗口概念, 但仍需此代理方法)
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    @MainActor
+    private func notificationAttachment(for state: AgentState) -> UNNotificationAttachment? {
+        let key = state.rawValue
+        if let cached = attachmentCache[key], FileManager.default.fileExists(atPath: cached.url.path) {
+            IslandPerf.event("NotificationAttachmentCache", detail: "hit \(key)")
+            return cached
+        }
+        attachmentCache.removeValue(forKey: key)
+
+        guard let iconURL = StateIconRenderer.notificationIconURL(for: state),
+              let attachment = try? UNNotificationAttachment(
+                identifier: "state-icon-\(key)",
+                url: iconURL,
+                options: [UNNotificationAttachmentOptionsTypeHintKey: "public.png"]
+              ) else { return nil }
+        attachmentCache[key] = attachment
+        IslandPerf.event("NotificationAttachmentCache", detail: "miss \(key)")
+        return attachment
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
         completionHandler([.banner, .sound])
     }
 }

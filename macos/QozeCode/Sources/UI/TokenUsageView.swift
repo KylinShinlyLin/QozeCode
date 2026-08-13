@@ -24,7 +24,7 @@ struct TokenUsageView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .onAppear { store.reloadFromDisk() }
+        .onAppear { Task { await store.reloadFromDisk() } }
     }
 
     // MARK: - 空态

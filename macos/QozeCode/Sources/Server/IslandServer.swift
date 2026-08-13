@@ -127,7 +127,10 @@ final class IslandServer {
     }
 
     private func dispatch(line: Data, fd: Int32) {
-        guard let message = IncomingMessage.decode(line: line) else { return }
+        let decodeInterval = IslandPerf.begin("MessageDecode")
+        let message = IncomingMessage.decode(line: line)
+        IslandPerf.end(decodeInterval, message == nil ? "invalid" : "decoded")
+        guard let message else { return }
 
         // register 时建立 session_id <-> fd 映射
         if case .register(let msg) = message {
