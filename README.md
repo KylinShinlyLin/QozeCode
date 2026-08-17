@@ -38,7 +38,7 @@ QozeCode 深度集成了全球领先的 AI 模型厂商，为不同场景提供�
 | 厂商 (Provider)     | 支持模型 (Supported Models)                               | 视觉支持 (Vision) | 特性描述                               |
 |:------------------|:------------------------------------------------------|:-------------:|:-----------------------------------|
 | **DeepSeek**      | `DeepSeek V4 Pro` (think) / `DeepSeek V4 Flash`       |       ❌       | 最新 DeepSeek V4 系列，卓越推理性能与高性价比      |
-| **Google**        | `Gemini 3.6 Flash` (think) / `Gemini 3.5 Flash` (think) / `Gemini 3.1 Pro` (think) |       ✅       | 谷歌最新多模态模型，支持原生深度思考，通过 Vertex AI 接入 |
+| **Google**        | `Gemini 3.7 Flash` (think) / `Gemini 3.6 Flash` (think) / `Gemini 3.5 Flash` (think) / `Gemini 3.1 Pro` (think) |       ✅       | 谷歌最新多模态模型，支持原生深度思考，通过 Vertex AI 接入 |
 | **Zhipu AI**      | `GLM-5.2` / `GLM-5V Turbo`                              |    ❌<br>✅     | 优秀的中文理解能力，GLM-5V 专为多模态视觉与交互设计      |
 | **Alibaba Cloud** | `Qwen3.6 Plus` (think)                                |       ✅       | 通义千问最新旗舰，支持原生深度思考与多模态输入            |
 | **Moonshot**      | `Kimi for Coding`                                     |       ✅       | 月之暗面系列，专为编程与长上下文优化                 |

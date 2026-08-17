@@ -154,10 +154,12 @@ def patch_langchain_deepseek():
 def get_gemini_model_name(model_type: ModelType):
     # if model_type == ModelType.GEMINI_3_PRO:
     #     return "gemini-3-pro-preview"
-    if model_type == ModelType.GEMINI_3_FLASH:
-        return "gemini-3-flash-preview"
+    if model_type == ModelType.GEMINI_3_7_FLASH:
+        return "gemini-3.7-flash"
     elif model_type == ModelType.GEMINI_3_6_FLASH:
         return "gemini-3.6-flash"
+    elif model_type == ModelType.GEMINI_3_FLASH:
+        return "gemini-3-flash-preview"
     elif model_type == ModelType.GEMINI_3_5_FLASH:
         return "gemini-3.5-flash"
     elif model_type == ModelType.GEMINI_3_1_PRO:
