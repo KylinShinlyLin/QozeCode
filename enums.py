@@ -42,6 +42,7 @@ class ModelType(Enum):
     QWEN_3_6_PLUS = "qwen3.6-plus"
     DEEPSEEK_REASONER = "deepseek-v4-pro"
     DEEPSEEK_CHAT = "deepseek-v4-flash"
+    DEEPSEEK_V4_FLASH_VISION = "deepseek-v4-flash-vision-exp"
     GLM_4_6 = "glm-4.6"
     GLM_5_2 = "glm-5.2"
     GLM_5V_TURBO = "glm-5v-turbo"
@@ -74,6 +75,7 @@ MODEL_VISION_SUPPORT = {
     ModelType.QWEN_3_6_PLUS: True,        # Qwen 支持多模态
     ModelType.DEEPSEEK_REASONER: False,   # DeepSeek 不支持图片输入
     ModelType.DEEPSEEK_CHAT: False,       # DeepSeek 不支持图片输入
+    ModelType.DEEPSEEK_V4_FLASH_VISION: True,  # DeepSeek vision 实验模型，支持图片输入
     ModelType.GLM_4_6: False,             # GLM-4.6 纯文本模型
     ModelType.GLM_5_2: False,               # GLM-5 纯文本模型
     ModelType.GLM_5V_TURBO: True,         # GLM-5V-Turbo 多模态模型 (V=Vision)
@@ -115,6 +117,7 @@ MODEL_PROVIDER_MAP = {
     ModelType.QWEN_3_6_PLUS: ModelProvider.ALIBABA_CLOUD,
     ModelType.DEEPSEEK_REASONER: ModelProvider.DEEPSEEK,
     ModelType.DEEPSEEK_CHAT: ModelProvider.DEEPSEEK,
+    ModelType.DEEPSEEK_V4_FLASH_VISION: ModelProvider.DEEPSEEK,
     ModelType.GLM_4_6: ModelProvider.ZHIPU,
     ModelType.MIMO_V2_5_PRO: ModelProvider.XIAOMI,
     ModelType.DEEPSEEK_V4_PRO_AZURE: ModelProvider.AZURE,

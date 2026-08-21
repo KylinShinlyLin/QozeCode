@@ -67,6 +67,7 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
         "gpt-5.5                        OpenAI",
         "deepseek-v4-pro    (think)     DeepSeek",
         "deepseek-v4-flash  (think)     DeepSeek",
+        "deepseek-v4-flash-vision-exp (vision) DeepSeek",
         "k3                 (think)     MoonShot",
         "k3-256k            (think)     MoonShot",
         "kimi-for-coding    (think)     MoonShot",
@@ -184,6 +185,8 @@ def get_model_choice() -> Optional[Tuple[ModelProvider, ModelType]]:
             model_type = ModelType.DEEPSEEK_V4_PRO_AZURE
         elif "deepseek-v4-pro" in selected:
             model_type = ModelType.DEEPSEEK_REASONER
+        elif "deepseek-v4-flash-vision-exp" in selected:
+            model_type = ModelType.DEEPSEEK_V4_FLASH_VISION
         elif "deepseek-v4-flash" in selected:
             model_type = ModelType.DEEPSEEK_CHAT
         elif "mimo-v2.5-pro" in selected:

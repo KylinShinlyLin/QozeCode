@@ -233,7 +233,7 @@ def ensure_model_credentials(model_identifier: Union[str, ModelProvider]) -> Dic
         required_keys = ["api_key"]
 
     # 4. DeepSeek
-    elif model_identifier in ("deepseek-v4-pro", "deepseek-v4-flash", "DeepSeek"):
+    elif model_identifier in ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "DeepSeek"):
         section = "DeepSeek"
         required_keys = ["api_key"]
 

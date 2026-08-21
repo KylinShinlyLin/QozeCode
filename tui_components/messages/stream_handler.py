@@ -492,10 +492,15 @@ class MessageStreamHandler:
         """格式化工具显示名称"""
         if tool_name == "execute_command":
             cmd = tool_args.get("command", "")
-            if cmd:
-                short_cmd = cmd[:120] + ("..." if len(cmd) > 120 else "")
-                return f"command: {short_cmd}"
-            return "command: (empty)"
+            if not cmd:
+                return "command: (empty)"
+            # 将换行符、回车、制表符统一替换为空格，保证单行展示且保留可读性
+            # 例如 python -c "多行脚本" 替换后仍能看清前 50 字符差异
+            collapsed = cmd.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+            # 超过 50 字符时截断并用省略号表示
+            if len(collapsed) > 50:
+                return f"command: {collapsed[:50]}....."
+            return f"command: {collapsed}"
         elif tool_name == "read_file":
             path = tool_args.get("path", "")
             return f"read_file: {path}" if path else "read_file: (empty)"
